@@ -1,0 +1,316 @@
+/* Google Fonts removed - using system fonts instead */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 25 95% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 98%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 25 90% 95%;
+    --accent-foreground: 25 95% 40%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 25 95% 53%;
+
+    --radius: 0.5rem;
+
+    /* Custom tokens */
+    --sidebar-width: 60px;
+    --sidebar-bg: 25 95% 53%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-active: 0 0% 100%;
+    --sidebar-hover: 25 95% 48%;
+
+    --panel-bg: 0 0% 100%;
+    --panel-border: 0 0% 90%;
+
+    --column-minimized: 0 0% 97%;
+    --column-active: 0 0% 100%;
+    --column-header: 0 0% 10%;
+
+    --item-hover: 25 90% 97%;
+    --item-selected: 25 85% 95%;
+    --item-86: 0 72% 95%;
+
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 210 100% 52%;
+
+    /* POS Preview specific */
+    --pos-bg: 0 0% 100%;
+    --pos-card: 0 0% 100%;
+    --pos-card-hover: 0 0% 96%;
+    --pos-text: 0 0% 10%;
+    --pos-text-muted: 0 0% 45%;
+    --pos-accent: 25 95% 53%;
+    --pos-accent-hover: 25 95% 48%;
+  }
+
+  .dark {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 25 95% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 25 85% 92%;
+    --accent-foreground: 25 95% 40%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 25 95% 55%;
+
+    --sidebar-bg: 25 95% 50%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-active: 0 0% 100%;
+    --sidebar-hover: 25 95% 45%;
+
+    --panel-bg: 0 0% 100%;
+    --panel-border: 0 0% 88%;
+
+    --column-minimized: 0 0% 96%;
+    --column-active: 0 0% 100%;
+    --column-header: 0 0% 10%;
+
+    --item-hover: 25 85% 95%;
+    --item-selected: 25 80% 93%;
+    --item-86: 0 72% 95%;
+
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 210 100% 52%;
+
+    /* POS Preview specific */
+    --pos-bg: 0 0% 100%;
+    --pos-card: 0 0% 100%;
+    --pos-card-hover: 0 0% 96%;
+    --pos-text: 0 0% 10%;
+    --pos-text-muted: 0 0% 45%;
+    --pos-accent: 25 95% 53%;
+    --pos-accent-hover: 25 95% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .sidebar-nav {
+    @apply flex flex-col items-center py-4 gap-1;
+  }
+
+  .sidebar-tab {
+    @apply flex flex-col items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all duration-200;
+    @apply text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-hover))];
+  }
+
+  .sidebar-tab.active {
+    @apply bg-[hsl(var(--sidebar-hover))] text-[hsl(var(--sidebar-active))];
+  }
+
+  .sidebar-tab-icon {
+    @apply w-5 h-5;
+  }
+
+  .sidebar-tab-label {
+    @apply text-[9px] mt-1 font-medium tracking-wide uppercase;
+  }
+
+  .panel {
+    @apply bg-[hsl(var(--panel-bg))] border-[hsl(var(--panel-border))];
+  }
+
+  .category-column {
+    @apply flex flex-col h-full border-r border-[hsl(var(--panel-border))] transition-all duration-200 ease-out;
+  }
+
+  .category-column.minimized {
+    @apply w-28 flex-shrink-0 bg-[hsl(var(--column-minimized))] cursor-pointer hover:bg-[hsl(var(--item-hover))];
+  }
+
+  .category-column.expanded {
+    @apply w-80 flex-shrink-0 bg-[hsl(var(--column-active))];
+    border-left: 2px solid hsl(var(--primary));
+    border-right: 2px solid hsl(var(--primary));
+  }
+
+  .category-header {
+    @apply px-3 py-3 font-semibold text-sm border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
+  }
+
+  .item-row {
+    @apply px-3 py-2.5 cursor-pointer transition-all duration-150 text-sm border-b border-[hsl(var(--panel-border))] border-opacity-50;
+    @apply hover:bg-[hsl(var(--item-hover))];
+  }
+
+  .item-row.selected {
+    @apply bg-[hsl(var(--item-selected))] border-l-2 border-l-[hsl(var(--primary))];
+  }
+
+  .item-row.is-86 {
+    @apply bg-[hsl(var(--item-86))] line-through opacity-60;
+  }
+
+  .right-sidebar {
+    @apply w-80 border-l border-[hsl(var(--panel-border))] bg-[hsl(var(--panel-bg))] overflow-hidden;
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .right-sidebar.closed {
+    @apply w-0 opacity-0;
+  }
+
+  .section-header {
+    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2;
+  }
+
+  .btn-add {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
+    @apply bg-primary/10 text-primary hover:bg-primary/20;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 text-sm rounded-md border border-input bg-background;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1;
+    @apply placeholder:text-muted-foreground;
+  }
+
+  .toggle-button {
+    @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150;
+    @apply bg-secondary text-secondary-foreground;
+  }
+
+  .toggle-button.active {
+    @apply bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .pos-button {
+    @apply flex flex-col items-center justify-center p-3 rounded-lg border border-border bg-card;
+    @apply hover:border-primary hover:shadow-md transition-all duration-150 cursor-pointer;
+    @apply min-h-[80px];
+  }
+
+  .pos-button.category {
+    @apply bg-secondary/50 hover:bg-secondary;
+  }
+
+  .pos-button.item {
+    @apply hover:bg-accent/50;
+  }
+
+  .pos-button.is-86 {
+    @apply opacity-50 bg-destructive/10 border-destructive/30;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted));
+    border-radius: 3px;
+  }
+
+  .animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}

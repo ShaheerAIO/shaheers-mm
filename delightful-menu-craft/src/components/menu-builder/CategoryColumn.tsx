@@ -1,0 +1,419 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useMenuStore } from '@/store/menuStore';
+import { Plus, GripVertical, Pencil, Search, X, Library, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { Category, Item } from '@/types/menu';
+import { AddItemsModal } from './AddItemsModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+interface CategoryColumnProps {
+  category: Category;
+  subcategories: Category[];
+  items: Item[];
+  isExpanded: boolean;
+  onExpand: () => void;
+}
+
+export function CategoryColumn({
+  category,
+  subcategories,
+  items,
+  isExpanded,
+  onExpand,
+}: CategoryColumnProps) {
+  const { 
+    selectedItemId, 
+    setSelectedItem, 
+    addItem, 
+    addCategoryItem,
+    removeCategoryItem,
+    deleteCategory,
+    getNextId,
+    categoryItems,
+    updateCategory,
+  } = useMenuStore();
+  const [activeSubcat, setActiveSubcat] = useState<number | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(category.categoryName);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddItemsModal, setShowAddItemsModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number } | null>(null);
+
+  // Reset temp name when category changes
+  useEffect(() => {
+    setTempName(category.categoryName);
+    setIsEditingName(false);
+  }, [category.id, category.categoryName]);
+
+  const handleNameSubmit = () => {
+    if (tempName.trim() && tempName !== category.categoryName) {
+      updateCategory(category.id, { 
+        categoryName: tempName.trim(),
+        posDisplayName: tempName.trim(),
+      });
+    }
+    setIsEditingName(false);
+  };
+
+  // Get categoryItem mappings for this category
+  const categoryCategoryItems = useMemo(() => {
+    const targetCategoryId = activeSubcat || category.id;
+    return categoryItems.filter(ci => ci.categoryId === targetCategoryId);
+  }, [categoryItems, activeSubcat, category.id]);
+
+  // Filter items by active subcategory and search query
+  const displayItems = useMemo(() => {
+    let filtered = activeSubcat 
+      ? items.filter(item => {
+          // Check if item belongs to this subcategory via categoryItems
+          return categoryItems.some(ci => 
+            ci.categoryId === activeSubcat && ci.itemId === item.id
+          );
+        })
+      : items;
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.itemName.toLowerCase().includes(query) ||
+        item.posDisplayName.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [items, activeSubcat, categoryItems, searchQuery]);
+
+  const handleItemClick = (itemId: number) => {
+    setSelectedItem(itemId);
+  };
+
+  const handleAddItem = () => {
+    const targetCategoryId = activeSubcat || category.id;
+    
+    // Create new item
+    const newItemId = getNextId('items');
+    const newItem: Item = {
+      id: newItemId,
+      itemName: 'New Item',
+      posDisplayName: 'New Item',
+      kdsName: 'New Item',
+      itemDescription: '',
+      itemPicture: '',
+      onlineImage: '',
+      landscapeImage: '',
+      thirdPartyImage: '',
+      kioskItemImage: '',
+      itemPrice: 0,
+      taxLinkedWithParentSetting: true,
+      calculatePricesWithTaxIncluded: false,
+      takeoutException: false,
+      stockStatus: 'inStock',
+      stockValue: 0,
+      orderQuantityLimit: false,
+      minLimit: 0,
+      maxLimit: 0,
+      noMaxLimit: true,
+      stationIds: '',
+      preparationTime: 0,
+      calories: 0,
+      tagIds: '',
+      inheritTagsFromCategory: true,
+      saleCategory: '',
+      allergenIds: '',
+      inheritModifiersFromCategory: true,
+      addonIds: '',
+      isSpecialRequest: false,
+    };
+    
+    // Add the item
+    addItem(newItem);
+    
+    // Add to category via join table
+    const currentCategoryItems = categoryItems.filter(ci => ci.categoryId === targetCategoryId);
+    addCategoryItem({
+      id: getNextId('items'), // Using items for ID generation (could be separate)
+      categoryId: targetCategoryId,
+      itemId: newItemId,
+      sortOrder: currentCategoryItems.length,
+    });
+    
+    // Select the new item
+    setSelectedItem(newItemId);
+  };
+
+  const handleRemoveItemFromCategory = (itemId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetCategoryId = activeSubcat || category.id;
+    const categoryItem = categoryItems.find(
+      ci => ci.categoryId === targetCategoryId && ci.itemId === itemId
+    );
+    if (categoryItem) {
+      setItemToRemove({ itemId, categoryItemId: categoryItem.id });
+    }
+  };
+
+  const confirmRemoveItem = () => {
+    if (itemToRemove) {
+      removeCategoryItem(itemToRemove.categoryItemId);
+      setItemToRemove(null);
+    }
+  };
+
+  const handleDeleteCategory = () => {
+    deleteCategory(category.id);
+    setShowDeleteConfirm(false);
+  };
+
+  if (!isExpanded) {
+    return (
+      <div 
+        className="category-column minimized"
+        onClick={onExpand}
+      >
+        <div className="category-header text-center truncate">
+          <span className="writing-mode-vertical text-xs">{category.categoryName}</span>
+        </div>
+        <div className="flex-1 p-1.5 space-y-1 overflow-hidden">
+          {items.slice(0, 8).map((item) => (
+            <div 
+              key={item.id} 
+              className={cn(
+                "text-[10px] truncate px-1.5 py-1 rounded text-muted-foreground",
+                item.stockStatus === 'outOfStock' && "line-through opacity-50"
+              )}
+            >
+              {item.itemName}
+            </div>
+          ))}
+          {items.length > 8 && (
+            <div className="text-[10px] text-muted-foreground text-center">
+              +{items.length - 8} more
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="category-column expanded">
+        <div className="category-header flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
+            {isEditingName ? (
+              <input
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                onBlur={handleNameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNameSubmit();
+                  if (e.key === 'Escape') {
+                    setTempName(category.categoryName);
+                    setIsEditingName(false);
+                  }
+                }}
+                className="flex-1 bg-transparent border-b border-primary outline-none text-sm font-medium"
+                autoFocus
+              />
+            ) : (
+              <span 
+                onClick={() => setIsEditingName(true)}
+                className="truncate cursor-pointer hover:text-primary transition-colors"
+                title="Click to edit"
+              >
+                {category.categoryName}
+              </span>
+            )}
+            {!isEditingName && (
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+            <span className="text-xs text-muted-foreground">{items.length}</span>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete category"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Subcategory Tabs */}
+        {subcategories.length > 0 && (
+          <div className="flex gap-1 px-3 py-2 border-b border-panel-border overflow-x-auto">
+            <button
+              onClick={() => setActiveSubcat(null)}
+              className={cn(
+                "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap",
+                !activeSubcat 
+                  ? "bg-primary text-primary-foreground" 
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              All
+            </button>
+            {subcategories.map((subcat) => (
+              <button
+                key={subcat.id}
+                onClick={() => setActiveSubcat(subcat.id)}
+                className={cn(
+                  "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap",
+                  activeSubcat === subcat.id 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                )}
+              >
+                {subcat.categoryName}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="px-3 py-2 border-b border-panel-border">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Items List */}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+          {displayItems.length === 0 && searchQuery ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No items match "{searchQuery}"
+            </div>
+          ) : null}
+          {displayItems.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => handleItemClick(item.id)}
+              className={cn(
+                "item-row flex items-center justify-between group",
+                selectedItemId === item.id && "selected",
+                item.stockStatus === 'outOfStock' && "is-86"
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <GripVertical className="w-3.5 h-3.5 text-muted-foreground cursor-grab flex-shrink-0" />
+                <span className="truncate">{item.itemName}</span>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-muted-foreground">
+                  ${item.itemPrice.toFixed(2)}
+                </span>
+                <button
+                  onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                  title="Remove from category"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Item Buttons */}
+        <div className="p-3 border-t border-panel-border space-y-2">
+          <button 
+            className="btn-add w-full justify-center"
+            onClick={handleAddItem}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Item
+          </button>
+          <button 
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+            onClick={() => setShowAddItemsModal(true)}
+          >
+            <Library className="w-3.5 h-3.5" />
+            Add Existing Items
+          </button>
+        </div>
+      </div>
+
+      {/* Add Items Modal */}
+      <AddItemsModal
+        isOpen={showAddItemsModal}
+        onClose={() => setShowAddItemsModal(false)}
+        categoryId={activeSubcat || category.id}
+        categoryName={activeSubcat 
+          ? subcategories.find(s => s.id === activeSubcat)?.categoryName || category.categoryName
+          : category.categoryName
+        }
+      />
+
+      {/* Remove Item Confirmation */}
+      <AlertDialog open={!!itemToRemove} onOpenChange={() => setItemToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Item from Category</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the item from this category. The item itself will not be deleted and can be added to other categories.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveItem}>Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Category Confirmation */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{category.categoryName}"? This will remove the category and all item assignments. The items themselves will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteCategory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
