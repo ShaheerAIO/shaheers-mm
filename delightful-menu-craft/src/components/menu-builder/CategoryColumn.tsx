@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { Plus, GripVertical, Pencil, Search, X, Library, Trash2 } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Search, X, Library, Trash2, FolderPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Category, Item } from '@/types/menu';
 import { AddItemsModal } from './AddItemsModal';
@@ -37,6 +37,7 @@ export function CategoryColumn({
     addCategoryItem,
     removeCategoryItem,
     deleteCategory,
+    addCategory,
     getNextId,
     categoryItems,
     updateCategory,
@@ -48,6 +49,7 @@ export function CategoryColumn({
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number } | null>(null);
+  const [subcatToDelete, setSubcatToDelete] = useState<Category | null>(null);
 
   // Reset temp name when category changes
   useEffect(() => {
@@ -175,6 +177,37 @@ export function CategoryColumn({
     setShowDeleteConfirm(false);
   };
 
+  const handleAddSubcategory = () => {
+    const newSubcat: Category = {
+      id: getNextId('categories'),
+      categoryName: 'New Subcategory',
+      posDisplayName: 'New Subcategory',
+      kdsDisplayName: 'New Subcategory',
+      color: category.color,
+      image: '',
+      kioskImage: '',
+      parentCategoryId: category.id,
+      tagIds: '',
+      menuIds: category.menuIds,
+      sortOrder: subcategories.length,
+    };
+    addCategory(newSubcat);
+    setActiveSubcat(newSubcat.id);
+  };
+
+  const handleDeleteSubcategory = (subcat: Category, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSubcatToDelete(subcat);
+  };
+
+  const confirmDeleteSubcategory = () => {
+    if (subcatToDelete) {
+      if (activeSubcat === subcatToDelete.id) setActiveSubcat(null);
+      deleteCategory(subcatToDelete.id);
+      setSubcatToDelete(null);
+    }
+  };
+
   if (!isExpanded) {
     return (
       <div 
@@ -259,12 +292,12 @@ export function CategoryColumn({
         </div>
 
         {/* Subcategory Tabs */}
-        {subcategories.length > 0 && (
-          <div className="flex gap-1 px-3 py-2 border-b border-panel-border overflow-x-auto">
+        <div className="flex gap-1 px-3 py-2 border-b border-panel-border overflow-x-auto items-center">
+          {subcategories.length > 0 && (
             <button
               onClick={() => setActiveSubcat(null)}
               className={cn(
-                "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap",
+                "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0",
                 !activeSubcat 
                   ? "bg-primary text-primary-foreground" 
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -272,22 +305,46 @@ export function CategoryColumn({
             >
               All
             </button>
-            {subcategories.map((subcat) => (
+          )}
+          {subcategories.map((subcat) => (
+            <div
+              key={subcat.id}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 group/tab",
+                activeSubcat === subcat.id 
+                  ? "bg-primary text-primary-foreground" 
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
               <button
-                key={subcat.id}
                 onClick={() => setActiveSubcat(subcat.id)}
-                className={cn(
-                  "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap",
-                  activeSubcat === subcat.id 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                )}
+                className="leading-none"
               >
                 {subcat.categoryName}
               </button>
-            ))}
-          </div>
-        )}
+              <button
+                onClick={(e) => handleDeleteSubcategory(subcat, e)}
+                className={cn(
+                  "leading-none transition-opacity",
+                  activeSubcat === subcat.id
+                    ? "text-primary-foreground/70 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
+                    : "text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/tab:opacity-100"
+                )}
+                title="Delete subcategory"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={handleAddSubcategory}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+            title="Add subcategory"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+            <span>Add</span>
+          </button>
+        </div>
 
         {/* Search */}
         <div className="px-3 py-2 border-b border-panel-border">
@@ -407,6 +464,27 @@ export function CategoryColumn({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDeleteCategory}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Subcategory Confirmation */}
+      <AlertDialog open={!!subcatToDelete} onOpenChange={() => setSubcatToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Subcategory</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{subcatToDelete?.categoryName}"? This will remove the subcategory and all its item assignments. The items themselves will not be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteSubcategory}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete

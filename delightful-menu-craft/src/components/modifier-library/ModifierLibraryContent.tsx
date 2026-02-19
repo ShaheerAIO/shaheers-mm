@@ -202,6 +202,7 @@ interface ModifierDraft {
 function ModifierDetail({ modifier }: ModifierDetailProps) {
   const { 
     updateModifier,
+    modifiers,
     modifierOptions,
     modifierModifierOptions,
     addModifierOption,
@@ -361,6 +362,62 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
   const handleRemoveOption = (optionId: number) => {
     removeModifierModifierOption(modifier.id, optionId);
+  };
+
+  // --- Nested Modifiers ---
+
+  // Parse child modifier IDs from comma-separated string
+  const childModifierIds = useMemo(() => {
+    if (!modifier.modifierIds) return [];
+    return modifier.modifierIds
+      .split(',')
+      .map(id => parseInt(id.trim()))
+      .filter(id => !isNaN(id) && id > 0);
+  }, [modifier.modifierIds]);
+
+  const childModifiers = useMemo(() => {
+    return childModifierIds
+      .map(id => modifiers.find(m => m.id === id))
+      .filter((m): m is Modifier => m !== undefined);
+  }, [childModifierIds, modifiers]);
+
+  // Modifiers eligible to be added as children:
+  // - not self
+  // - not already a child
+  // - not already a parent (parentModifierId > 0), unless it's THIS modifier's child
+  const availableNestedModifiers = useMemo(() => {
+    return modifiers.filter(m =>
+      m.id !== modifier.id &&
+      !childModifierIds.includes(m.id) &&
+      (m.parentModifierId === 0 || m.parentModifierId === modifier.id)
+    );
+  }, [modifiers, modifier.id, childModifierIds]);
+
+  const handleAddNestedModifier = (childIdStr: string) => {
+    const childId = parseInt(childIdStr);
+    if (isNaN(childId)) return;
+
+    const updatedIds = [...childModifierIds, childId].join(',');
+    updateModifier(modifier.id, {
+      modifierIds: updatedIds,
+      addNested: true,
+    });
+    updateModifier(childId, {
+      parentModifierId: modifier.id,
+      isNested: true,
+    });
+  };
+
+  const handleRemoveNestedModifier = (childId: number) => {
+    const updatedIds = childModifierIds.filter(id => id !== childId);
+    updateModifier(modifier.id, {
+      modifierIds: updatedIds.join(','),
+      addNested: updatedIds.length > 0,
+    });
+    updateModifier(childId, {
+      parentModifierId: 0,
+      isNested: false,
+    });
   };
 
   return (
@@ -568,6 +625,70 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               {modifierOptionAssignments.length === 0 && !optionSearch && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No options added yet. Click "New Option" to create one.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Nested Modifiers */}
+          <div className="space-y-3 pt-4 border-t border-border">
+            <div className="flex items-center justify-between">
+              <Label className="section-header">
+                Nested Modifiers ({childModifiers.length})
+              </Label>
+              {availableNestedModifiers.length > 0 && (
+                <Select onValueChange={handleAddNestedModifier}>
+                  <SelectTrigger className="w-40">
+                    <span className="text-xs flex items-center gap-1">
+                      <Plus className="w-3 h-3" />
+                      Add Nested
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableNestedModifiers.map((mod) => (
+                      <SelectItem key={mod.id} value={mod.id.toString()}>
+                        {mod.modifierName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Nested modifiers appear after the guest selects an option from this modifier.
+            </p>
+            <div className="space-y-2">
+              {childModifiers.map((child) => (
+                <div
+                  key={child.id}
+                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{child.modifierName}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span>
+                        {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
+                      </span>
+                      {child.onPrem && (
+                        <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>
+                      )}
+                      {child.offPrem && (
+                        <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveNestedModifier(child.id)}
+                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove nested modifier"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {childModifiers.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No nested modifiers. Use the dropdown above to add one.
                 </p>
               )}
             </div>
