@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "DoorDash Menu Scraper",
+  "version": "1.0.0",
+  "description": "Scrape DoorDash store menus and import them into Menu Manager",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://www.doordash.com/*",
+    "https://shaheers-mm.vercel.app/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.doordash.com/store/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://shaheers-mm.vercel.app/*", "http://127.0.0.1:3000/*", "http://localhost:3000/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

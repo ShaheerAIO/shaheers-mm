@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .header svg { flex-shrink: 0; }
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .status {
+      font-size: 12px;
+      color: #a3a3a3;
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+    .status.error { color: #ef4444; }
+    .status.success { color: #22c55e; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: #f97316;
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #262626;
+      color: #a3a3a3;
+      border: 1px solid #333;
+      margin-top: 8px;
+    }
+
+    .summary {
+      background: #262626;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .summary h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .summary p {
+      font-size: 12px;
+      color: #a3a3a3;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <rect width="20" height="20" rx="4" fill="#f97316"/>
+      <path d="M5 7h10M5 10h10M5 13h7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <h1>DoorDash Menu Scraper</h1>
+  </div>
+
+  <!-- Not on DoorDash -->
+  <div id="state-wrong-page">
+    <p class="status">Navigate to a DoorDash store page first, then open this popup.</p>
+    <button class="btn btn-secondary" disabled>Scrape & Import</button>
+  </div>
+
+  <!-- Ready to scrape -->
+  <div id="state-ready" class="hidden">
+    <p class="status">Ready to scrape this store's menu.</p>
+    <button id="btn-scrape" class="btn btn-primary">Scrape & Import</button>
+  </div>
+
+  <!-- Scraping -->
+  <div id="state-loading" class="hidden">
+    <p class="status">Extracting menu data…</p>
+    <button class="btn btn-primary" disabled><span class="spinner"></span> Scraping…</button>
+  </div>
+
+  <!-- Preview -->
+  <div id="state-preview" class="hidden">
+    <div class="summary">
+      <h2 id="preview-name"></h2>
+      <p id="preview-stats"></p>
+    </div>
+    <button id="btn-import" class="btn btn-primary">Open in Menu Manager</button>
+    <button id="btn-retry" class="btn btn-secondary">Scrape Again</button>
+  </div>
+
+  <!-- Error -->
+  <div id="state-error" class="hidden">
+    <p class="status error" id="error-msg"></p>
+    <button id="btn-error-retry" class="btn btn-primary">Try Again</button>
+  </div>
+
+  <script src="mapper.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

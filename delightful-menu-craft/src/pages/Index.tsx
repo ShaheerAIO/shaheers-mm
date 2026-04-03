@@ -2,9 +2,11 @@ import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { MainContent } from '@/components/layout/MainContent';
 import { RightSidebar } from '@/components/layout/RightSidebar';
 import { useMenuStore } from '@/store/menuStore';
+import { useExtensionImport } from '@/hooks/useExtensionImport';
 
 const Index = () => {
   const { activeTab } = useMenuStore();
+  useExtensionImport();
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
