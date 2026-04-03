@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, Store } from 'lucide-react';
+import { Upload, Download, FilePlus } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -11,8 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DoorDashImportModal } from './DoorDashImportModal';
-import type { ExcelMenuData } from '@/types/menu';
 
 export function TopBar() {
   const { 
@@ -28,11 +26,6 @@ export function TopBar() {
   } = useMenuStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [doorDashModalOpen, setDoorDashModalOpen] = useState(false);
-
-  const handleDoorDashImport = (data: ExcelMenuData) => {
-    importData(data);
-  };
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -90,13 +83,6 @@ export function TopBar() {
             Import
           </button>
           <button
-            onClick={() => setDoorDashModalOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-orange-400/60 text-orange-600 hover:bg-orange-500/10 transition-colors"
-          >
-            <Store className="w-4 h-4" />
-            DoorDash
-          </button>
-          <button
             onClick={handleExport}
             disabled={!isDataLoaded}
             className={cn(
@@ -150,12 +136,6 @@ export function TopBar() {
           </SelectContent>
         </Select>
       </div>
-
-      <DoorDashImportModal
-        open={doorDashModalOpen}
-        onOpenChange={setDoorDashModalOpen}
-        onImport={handleDoorDashImport}
-      />
     </div>
   );
 }
