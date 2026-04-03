@@ -57,7 +57,7 @@
     --warning: 38 92% 50%;
     --info: 210 100% 52%;
 
-    /* POS Preview specific */
+    /* POS Preview — light fallback; dark tokens used via .pos-preview-dark */
     --pos-bg: 0 0% 100%;
     --pos-card: 0 0% 100%;
     --pos-card-hover: 0 0% 96%;
@@ -65,6 +65,13 @@
     --pos-text-muted: 0 0% 45%;
     --pos-accent: 25 95% 53%;
     --pos-accent-hover: 25 95% 48%;
+    --pos-shell: 0 0% 4%;
+    --pos-shell-elevated: 0 0% 7%;
+    --pos-shell-border: 0 0% 18%;
+    --pos-ticket-bg: 0 0% 6%;
+    --pos-menu-tile: 0 0% 14%;
+    --pos-pay: 263 70% 50%;
+    --pos-pay-hover: 263 70% 45%;
   }
 
   .dark {
@@ -116,7 +123,7 @@
     --warning: 38 92% 50%;
     --info: 210 100% 52%;
 
-    /* POS Preview specific */
+    /* POS Preview */
     --pos-bg: 0 0% 100%;
     --pos-card: 0 0% 100%;
     --pos-card-hover: 0 0% 96%;
@@ -124,7 +131,25 @@
     --pos-text-muted: 0 0% 45%;
     --pos-accent: 25 95% 53%;
     --pos-accent-hover: 25 95% 48%;
+    --pos-shell: 0 0% 4%;
+    --pos-shell-elevated: 0 0% 7%;
+    --pos-shell-border: 0 0% 18%;
+    --pos-ticket-bg: 0 0% 6%;
+    --pos-menu-tile: 0 0% 14%;
+    --pos-pay: 263 70% 50%;
+    --pos-pay-hover: 263 70% 45%;
   }
+}
+
+/* POS Preview uses a fixed dark shell (matches real POS / Figma) */
+.pos-preview-dark {
+  --pos-bg: 0 0% 4%;
+  --pos-card: 0 0% 14%;
+  --pos-card-hover: 0 0% 18%;
+  --pos-text: 0 0% 98%;
+  --pos-text-muted: 0 0% 60%;
+  --pos-accent: 25 95% 53%;
+  --pos-accent-hover: 25 95% 48%;
 }
 
 @layer base {
