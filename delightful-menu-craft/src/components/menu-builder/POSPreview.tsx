@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
+import { shortenName } from '@/lib/shortenName';
 import { Upload, Plus } from 'lucide-react';
 import {
   Select,
@@ -234,7 +235,7 @@ export function POSPreview() {
                 "text-sm font-medium text-center text-[hsl(var(--pos-text))]",
                 item.stockStatus !== 'inStock' && "line-through"
               )}>
-                {item.posDisplayName || item.itemName}
+                {shortenName(item.posDisplayName || item.itemName)}
               </span>
               <span className="text-xs text-[hsl(var(--pos-accent))] mt-1 font-semibold">
                 ${item.itemPrice.toFixed(2)}
