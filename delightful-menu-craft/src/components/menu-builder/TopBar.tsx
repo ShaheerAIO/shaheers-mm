@@ -1,9 +1,9 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus } from 'lucide-react';
+import { Upload, Download, FilePlus, Sparkles } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { AiEnhanceModal } from './AiEnhanceModal';
 
 export function TopBar() {
   const { 
@@ -25,6 +26,7 @@ export function TopBar() {
     startFresh,
   } = useMenuStore();
 
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportClick = () => {
@@ -95,7 +97,25 @@ export function TopBar() {
             <Download className="w-4 h-4" />
             Export
           </button>
+
+          {/* AI Enhance */}
+          <button
+            onClick={() => setAiModalOpen(true)}
+            disabled={!isDataLoaded}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
+              isDataLoaded
+                ? "border-orange-500/60 text-orange-400 hover:bg-orange-500/10 hover:border-orange-400"
+                : "border-border/50 text-muted-foreground cursor-not-allowed"
+            )}
+            title="Enhance menu with AI: suggest stations, short names, and descriptions"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI Enhance
+          </button>
         </div>
+
+        <AiEnhanceModal open={aiModalOpen} onOpenChange={setAiModalOpen} />
 
         <div className="w-px h-6 bg-border mx-2" />
 

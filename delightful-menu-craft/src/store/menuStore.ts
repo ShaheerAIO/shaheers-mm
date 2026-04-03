@@ -17,7 +17,8 @@ import type {
   Tag,
   ExcelMenuData,
   TabType, 
-  ViewMode 
+  ViewMode,
+  AiPatch,
 } from '@/types/menu';
 
 interface MenuState {
@@ -39,6 +40,7 @@ interface MenuState {
   } | null;
   
   // Data (matches Excel sheets)
+  // Excel sheets
   menus: Menu[];
   categories: Category[];
   items: Item[];
@@ -53,6 +55,9 @@ interface MenuState {
   modifierModifierOptions: ModifierModifierOption[];
   allergens: Allergen[];
   tags: Tag[];
+
+  // Derived / helper data (not part of Excel schema)
+  stations: string[]; // unique list of station IDs used across items
   
   // Actions - UI
   setActiveTab: (tab: TabType) => void;
@@ -119,6 +124,17 @@ interface MenuState {
   updateTag: (id: number, updates: Partial<Tag>) => void;
   deleteTag: (id: number) => void;
   
+  // Actions - Stations
+  addStation: (id: string) => void;
+  renameStation: (oldId: string, newId: string) => void;
+  deleteStation: (id: string) => void;
+  assignItemToStation: (itemId: number, stationId: string) => void;
+  unassignItemFromStation: (itemId: number, stationId: string) => void;
+  bulkSetItemsForStation: (stationId: string, itemIds: number[]) => void;
+
+  // Actions - AI Enhancement
+  applyAiPatches: (patches: AiPatch[], newStations: string[]) => void;
+
   // Helper - Get next ID
   getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'allergens' | 'tags'>) => number;
 }
@@ -159,6 +175,7 @@ export const useMenuStore = create<MenuState>()(
       modifierModifierOptions: [],
       allergens: [],
       tags: [],
+      stations: [],
       
       // UI Actions
       setActiveTab: (tab) => set({ activeTab: tab, selectedItemId: null }),
@@ -204,24 +221,38 @@ export const useMenuStore = create<MenuState>()(
       }),
       
       // Import/Export Actions
-      importData: (data) => set({
-        menus: data.menus,
-        categories: data.categories,
-        items: data.items,
-        itemModifiers: data.itemModifiers,
-        categoryModifierGroups: data.categoryModifierGroups,
-        categoryModifiers: data.categoryModifiers,
-        categoryItems: data.categoryItems,
-        itemModifierGroups: data.itemModifierGroups,
-        modifierGroups: data.modifierGroups,
-        modifiers: data.modifiers,
-        modifierOptions: data.modifierOptions,
-        modifierModifierOptions: data.modifierModifierOptions,
-        allergens: data.allergens,
-        tags: data.tags,
-        isDataLoaded: true,
-        selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
-      }),
+      importData: (data) => {
+        // Derive stations from imported items
+        const stationSet = new Set<string>();
+        data.items.forEach(item => {
+          if (item.stationIds) {
+            item.stationIds.split(',').forEach(rawId => {
+              const trimmed = rawId.trim();
+              if (trimmed) stationSet.add(trimmed);
+            });
+          }
+        });
+
+        set({
+          menus: data.menus,
+          categories: data.categories,
+          items: data.items,
+          itemModifiers: data.itemModifiers,
+          categoryModifierGroups: data.categoryModifierGroups,
+          categoryModifiers: data.categoryModifiers,
+          categoryItems: data.categoryItems,
+          itemModifierGroups: data.itemModifierGroups,
+          modifierGroups: data.modifierGroups,
+          modifiers: data.modifiers,
+          modifierOptions: data.modifierOptions,
+          modifierModifierOptions: data.modifierModifierOptions,
+          allergens: data.allergens,
+          tags: data.tags,
+          stations: Array.from(stationSet).sort(),
+          isDataLoaded: true,
+          selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
+        });
+      },
       
       exportData: () => {
         const state = get();
@@ -258,6 +289,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        stations: [],
         isDataLoaded: false,
         selectedMenuId: null,
         selectedCategoryId: null,
@@ -287,6 +319,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        stations: [],
         isDataLoaded: true,
         selectedMenuId: 1,
         selectedCategoryId: null,
@@ -409,6 +442,202 @@ export const useMenuStore = create<MenuState>()(
       deleteTag: (id) => set((state) => ({
         tags: state.tags.filter((t) => t.id !== id),
       })),
+
+      // Station Actions
+      addStation: (id) => set((state) => {
+        const trimmed = id.trim();
+        if (!trimmed) return state;
+        if (state.stations.includes(trimmed)) return state;
+        return {
+          ...state,
+          stations: [...state.stations, trimmed].sort(),
+        };
+      }),
+
+      renameStation: (oldId, newId) => set((state) => {
+        const from = oldId.trim();
+        const to = newId.trim();
+        if (!from || !to || from === to) return state;
+
+        // Update stations list
+        const stations = state.stations
+          .map(s => (s === from ? to : s))
+          .filter((s, idx, arr) => arr.indexOf(s) === idx)
+          .sort();
+
+        // Helper to replace in stationIds CSV
+        const replaceInCsv = (csv: string | undefined): string => {
+          if (!csv) return '';
+          const parts = csv.split(',').map(p => p.trim()).filter(Boolean);
+          const updated = parts.map(p => (p === from ? to : p));
+          return Array.from(new Set(updated)).join(',');
+        };
+
+        const items = state.items.map(item => ({
+          ...item,
+          stationIds: replaceInCsv(item.stationIds),
+        }));
+
+        return { ...state, stations, items };
+      }),
+
+      deleteStation: (id) => set((state) => {
+        const target = id.trim();
+        if (!target) return state;
+
+        const stations = state.stations.filter(s => s !== target);
+
+        const items = state.items.map(item => {
+          if (!item.stationIds) return item;
+          const remaining = item.stationIds
+            .split(',')
+            .map(p => p.trim())
+            .filter(p => p && p !== target);
+          return {
+            ...item,
+            stationIds: remaining.join(','),
+          };
+        });
+
+        return { ...state, stations, items };
+      }),
+
+      assignItemToStation: (itemId, stationId) => set((state) => {
+        const target = stationId.trim();
+        if (!target) return state;
+
+        const items = state.items.map(item => {
+          if (item.id !== itemId) return item;
+          const existing = item.stationIds
+            ? item.stationIds.split(',').map(p => p.trim()).filter(Boolean)
+            : [];
+          if (existing.includes(target)) return item;
+          const updated = [...existing, target];
+          return {
+            ...item,
+            stationIds: updated.join(','),
+          };
+        });
+
+        const stations = state.stations.includes(target)
+          ? state.stations
+          : [...state.stations, target].sort();
+
+        return { ...state, items, stations };
+      }),
+
+      unassignItemFromStation: (itemId, stationId) => set((state) => {
+        const target = stationId.trim();
+        if (!target) return state;
+
+        const items = state.items.map(item => {
+          if (item.id !== itemId || !item.stationIds) return item;
+          const remaining = item.stationIds
+            .split(',')
+            .map(p => p.trim())
+            .filter(p => p && p !== target);
+          return {
+            ...item,
+            stationIds: remaining.join(','),
+          };
+        });
+
+        return { ...state, items };
+      }),
+
+      applyAiPatches: (patches, newStations) => set((state) => {
+        let items = [...state.items];
+        let categories = [...state.categories];
+        let stations = [...state.stations];
+
+        // Register any new stations the AI proposed
+        for (const s of newStations) {
+          const trimmed = s.trim();
+          if (trimmed && !stations.includes(trimmed)) {
+            stations = [...stations, trimmed].sort();
+          }
+        }
+
+        for (const patch of patches) {
+          switch (patch.kind) {
+            case 'item_rename':
+              items = items.map((i) =>
+                i.id === patch.entityId ? { ...i, posDisplayName: patch.to } : i,
+              );
+              break;
+            case 'item_station': {
+              const stationName = patch.to.trim();
+              // Auto-register station if it doesn't exist yet
+              if (stationName && !stations.includes(stationName)) {
+                stations = [...stations, stationName].sort();
+              }
+              items = items.map((i) =>
+                i.id === patch.entityId ? { ...i, stationIds: stationName } : i,
+              );
+              break;
+            }
+            case 'item_description':
+              items = items.map((i) =>
+                i.id === patch.entityId ? { ...i, itemDescription: patch.to } : i,
+              );
+              break;
+            case 'category_rename':
+              categories = categories.map((c) =>
+                c.id === patch.entityId ? { ...c, posDisplayName: patch.to } : c,
+              );
+              break;
+          }
+        }
+
+        return { items, categories, stations };
+      }),
+
+      bulkSetItemsForStation: (stationId, itemIds) => set((state) => {
+        const target = stationId.trim();
+        if (!target) return state;
+
+        const idSet = new Set(itemIds);
+
+        const items = state.items.map(item => {
+          const current = item.stationIds
+            ? item.stationIds.split(',').map(p => p.trim()).filter(Boolean)
+            : [];
+
+          const has = current.includes(target);
+          const shouldHave = idSet.has(item.id);
+
+          // If already correct, skip
+          if (has === shouldHave) return item;
+
+          let updated = current;
+          if (shouldHave && !has) {
+            updated = [...current, target];
+          } else if (!shouldHave && has) {
+            updated = current.filter(p => p !== target);
+          }
+
+          return {
+            ...item,
+            stationIds: updated.join(','),
+          };
+        });
+
+        const anyHasStation = items.some(item =>
+          item.stationIds
+            ?.split(',')
+            .map(p => p.trim())
+            .filter(Boolean)
+            .includes(target)
+        );
+
+        const stations = anyHasStation
+          ? (state.stations.includes(target)
+            ? state.stations
+            : [...state.stations, target].sort())
+          : state.stations.filter(s => s !== target);
+
+        return { ...state, items, stations };
+      }),
     }),
     {
       name: 'menu-manager-storage',

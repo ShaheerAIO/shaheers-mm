@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { Plus, GripVertical, Trash2, Upload, Search, X, Save, RotateCcw, Package } from 'lucide-react';
+import { Plus, GripVertical, Trash2, Upload, Search, X, Save, RotateCcw, Package, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -154,6 +154,15 @@ export function ModifierLibraryContent() {
                   <div className="font-medium text-sm">{modifier.modifierName}</div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                     <span>{optionCount} options</span>
+                    {modifier.addNested && (
+                      <span className="flex items-center gap-0.5 text-primary">
+                        <GitBranch className="w-3 h-3" />
+                        nested
+                      </span>
+                    )}
+                    {modifier.isNested && (
+                      <span className="bg-primary/10 text-primary px-1 rounded">child</span>
+                    )}
                     {modifier.onPrem && <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>}
                     {modifier.offPrem && <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>}
                   </div>
@@ -447,6 +456,81 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             />
           </div>
 
+          {/* Nested status badge — shown when this modifier is a child */}
+          {modifier.isNested && modifier.parentModifierId > 0 && (() => {
+            const parent = modifiers.find(m => m.id === modifier.parentModifierId);
+            return parent ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-xs">
+                <span className="text-primary font-medium">Nested under:</span>
+                <span className="text-foreground font-semibold">{parent.modifierName}</span>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Nested Modifiers */}
+          <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+            <div className="flex items-center justify-between">
+              <Label className="section-header">
+                Nested Modifiers ({childModifiers.length})
+              </Label>
+              {availableNestedModifiers.length > 0 && (
+                <Select onValueChange={handleAddNestedModifier}>
+                  <SelectTrigger className="w-40">
+                    <span className="text-xs flex items-center gap-1">
+                      <Plus className="w-3 h-3" />
+                      Add Nested
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableNestedModifiers.map((mod) => (
+                      <SelectItem key={mod.id} value={mod.id.toString()}>
+                        {mod.modifierName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sub-modifiers that follow this modifier when it's selected by a guest.
+            </p>
+            <div className="space-y-2">
+              {childModifiers.map((child) => (
+                <div
+                  key={child.id}
+                  className="flex items-center gap-3 p-2.5 bg-background rounded-lg border border-border group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{child.modifierName}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span>
+                        {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
+                      </span>
+                      {child.onPrem && (
+                        <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>
+                      )}
+                      {child.offPrem && (
+                        <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveNestedModifier(child.id)}
+                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove nested modifier"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {childModifiers.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  No nested modifiers. Use the dropdown above to add one.
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Channel Availability (onPrem/offPrem) */}
           <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
             <Label className="section-header">Channel Availability</Label>
@@ -630,69 +714,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </div>
           </div>
 
-          {/* Nested Modifiers */}
-          <div className="space-y-3 pt-4 border-t border-border">
-            <div className="flex items-center justify-between">
-              <Label className="section-header">
-                Nested Modifiers ({childModifiers.length})
-              </Label>
-              {availableNestedModifiers.length > 0 && (
-                <Select onValueChange={handleAddNestedModifier}>
-                  <SelectTrigger className="w-40">
-                    <span className="text-xs flex items-center gap-1">
-                      <Plus className="w-3 h-3" />
-                      Add Nested
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableNestedModifiers.map((mod) => (
-                      <SelectItem key={mod.id} value={mod.id.toString()}>
-                        {mod.modifierName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Nested modifiers appear after the guest selects an option from this modifier.
-            </p>
-            <div className="space-y-2">
-              {childModifiers.map((child) => (
-                <div
-                  key={child.id}
-                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium">{child.modifierName}</span>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                      <span>
-                        {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
-                      </span>
-                      {child.onPrem && (
-                        <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>
-                      )}
-                      {child.offPrem && (
-                        <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveNestedModifier(child.id)}
-                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                    title="Remove nested modifier"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              {childModifiers.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No nested modifiers. Use the dropdown above to add one.
-                </p>
-              )}
-            </div>
-          </div>
         </div>
         
         {/* Save/Discard buttons */}

@@ -212,7 +212,7 @@ export function POSPreview() {
 
       <div className="flex flex-1 min-h-0">
         {/* Left: ticket */}
-        <aside className="w-[min(100%,420px)] sm:w-[38%] flex flex-col min-w-0 border-r border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-ticket-bg))]">
+        <aside className="w-[min(100%,320px)] sm:w-[26%] flex flex-col min-w-0 border-r border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-ticket-bg))]">
           <div className="p-3 border-b border-[hsl(var(--pos-shell-border))] flex items-start justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-zinc-100">Ticket 1</h2>

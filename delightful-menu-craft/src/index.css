@@ -74,61 +74,63 @@
     --pos-pay-hover: 263 70% 45%;
   }
 
+  /* App shell + shadcn tokens aligned with POS Preview (dark zinc shell, orange primary) */
   .dark {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 10%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 25 95% 55%;
+    --primary: 25 95% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 20%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 92%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 55%;
 
-    --accent: 25 85% 92%;
-    --accent-foreground: 25 95% 40%;
+    --accent: 25 35% 18%;
+    --accent-foreground: 25 90% 78%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
-    --ring: 25 95% 55%;
+    --border: 0 0% 20%;
+    --input: 0 0% 18%;
+    --ring: 25 95% 53%;
 
-    --sidebar-bg: 25 95% 50%;
+    /* Match Tailwind orange-500 / POS category default #f97316 */
+    --sidebar-bg: 25 95% 53%;
     --sidebar-foreground: 0 0% 100%;
     --sidebar-active: 0 0% 100%;
-    --sidebar-hover: 25 95% 45%;
+    --sidebar-hover: 25 95% 44%;
 
-    --panel-bg: 0 0% 100%;
-    --panel-border: 0 0% 88%;
+    --panel-bg: 0 0% 8%;
+    --panel-border: 0 0% 20%;
 
-    --column-minimized: 0 0% 96%;
-    --column-active: 0 0% 100%;
-    --column-header: 0 0% 10%;
+    --column-minimized: 0 0% 11%;
+    --column-active: 0 0% 9%;
+    --column-header: 0 0% 94%;
 
-    --item-hover: 25 85% 95%;
-    --item-selected: 25 80% 93%;
-    --item-86: 0 72% 95%;
+    --item-hover: 0 0% 16%;
+    --item-selected: 25 38% 22%;
+    --item-86: 0 45% 18%;
 
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
     --info: 210 100% 52%;
 
-    /* POS Preview */
-    --pos-bg: 0 0% 100%;
-    --pos-card: 0 0% 100%;
-    --pos-card-hover: 0 0% 96%;
-    --pos-text: 0 0% 10%;
-    --pos-text-muted: 0 0% 45%;
+    /* POS Preview (same palette as shell) */
+    --pos-bg: 0 0% 4%;
+    --pos-card: 0 0% 14%;
+    --pos-card-hover: 0 0% 18%;
+    --pos-text: 0 0% 98%;
+    --pos-text-muted: 0 0% 60%;
     --pos-accent: 25 95% 53%;
     --pos-accent-hover: 25 95% 48%;
     --pos-shell: 0 0% 4%;
@@ -294,6 +296,14 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--muted));
     border-radius: 3px;
+  }
+
+  .dark .scrollbar-thin {
+    scrollbar-color: hsl(0 0% 32%) transparent;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(0 0% 32%);
   }
 
   .animate-slide-in-right {

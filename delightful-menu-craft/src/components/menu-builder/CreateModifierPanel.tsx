@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -35,9 +35,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setIsCreatingOption,
     pendingOption,
     setPendingOption,
+    modifiers,
     modifierOptions,
+    modifierModifierOptions,
     itemModifiers,
     addModifier,
+    updateModifier,
     addModifierOption,
     addModifierModifierOption,
     addItemModifier,
@@ -57,6 +60,23 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
+
+  // Nested modifier IDs selected during creation
+  const [nestedModifierIds, setNestedModifierIds] = useState<number[]>([]);
+
+  // Modifiers available to nest (not already parented elsewhere)
+  const availableNestedModifiers = useMemo(() => {
+    return modifiers.filter(m =>
+      !nestedModifierIds.includes(m.id) &&
+      (m.parentModifierId === 0)
+    );
+  }, [modifiers, nestedModifierIds]);
+
+  const nestedModifiersList = useMemo(() => {
+    return nestedModifierIds
+      .map(id => modifiers.find(m => m.id === id))
+      .filter((m): m is Modifier => m !== undefined);
+  }, [nestedModifierIds, modifiers]);
 
   // Watch for pending option from CreateOptionPanel
   useEffect(() => {
@@ -226,14 +246,31 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       });
     });
 
-    // 3. Add modifier to the item
+    // 3. Set up nested modifiers
+    if (nestedModifierIds.length > 0) {
+      // We already added the modifier above, now update it with nested info
+      // Need to use setTimeout to ensure the modifier exists in store first
+      const modifierIdsStr = nestedModifierIds.join(',');
+      updateModifier(newModifierId, {
+        modifierIds: modifierIdsStr,
+        addNested: true,
+      });
+      nestedModifierIds.forEach(childId => {
+        updateModifier(childId, {
+          parentModifierId: newModifierId,
+          isNested: true,
+        });
+      });
+    }
+
+    // 4. Add modifier to the item
     addItemModifier({
       modifierId: newModifierId,
       itemId: itemId,
       sortOrder: itemModifiersCount,
     });
 
-    // 4. Show save notification
+    // 5. Show save notification
     setShowSaveNotification(true);
     setTimeout(() => {
       setShowSaveNotification(false);
@@ -258,6 +295,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setOnPrem(true);
     setOffPrem(true);
     setOptions([]);
+    setNestedModifierIds([]);
   };
 
   const isValid = modifierName.trim().length > 0 && options.length > 0;
@@ -457,6 +495,69 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Nested Modifiers */}
+        <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <Label className="section-header flex items-center gap-1.5">
+              <GitBranch className="w-3.5 h-3.5" />
+              Nested Modifiers ({nestedModifierIds.length})
+            </Label>
+            {availableNestedModifiers.length > 0 && (
+              <Select onValueChange={(val) => {
+                const id = parseInt(val);
+                if (!isNaN(id) && !nestedModifierIds.includes(id)) {
+                  setNestedModifierIds([...nestedModifierIds, id]);
+                }
+              }}>
+                <SelectTrigger className="w-36">
+                  <span className="text-xs flex items-center gap-1">
+                    <Plus className="w-3 h-3" />
+                    Add Nested
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableNestedModifiers.map((mod) => (
+                    <SelectItem key={mod.id} value={mod.id.toString()}>
+                      {mod.modifierName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Sub-modifiers that follow this one when a guest makes a selection.
+          </p>
+          <div className="space-y-2">
+            {nestedModifiersList.map((child) => (
+              <div
+                key={child.id}
+                className="flex items-center gap-3 p-2.5 bg-background rounded-lg border border-border group"
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{child.modifierName}</span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <span>
+                      {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setNestedModifierIds(nestedModifierIds.filter(id => id !== child.id))}
+                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            {nestedModifiersList.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                No nested modifiers added.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

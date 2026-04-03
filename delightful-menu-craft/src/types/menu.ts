@@ -59,6 +59,14 @@ export interface Item {
   inheritModifiersFromCategory: boolean;
   addonIds: string; // comma-separated IDs
   isSpecialRequest: boolean;
+  // Visibility & scheduling
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityOnline: boolean;
+  visibilityThirdParty: boolean;
+  availableDays: string; // comma-separated e.g. "Mon,Tue,Wed,Thu,Fri,Sat,Sun" (empty = all days)
+  availableTimeStart: string; // "HH:MM" format (empty = no restriction)
+  availableTimeEnd: string; // "HH:MM" format (empty = no restriction)
 }
 
 // Sheet 4: Item Modifiers (join table)
@@ -195,3 +203,30 @@ export interface ExcelMenuData {
 
 // Helper type for creating new entities with auto-generated IDs
 export type NewEntity<T> = Omit<T, 'id'>;
+
+// =============================================================================
+// AI Enhancement Types
+// =============================================================================
+
+export type AiPatchKind = 'item_station' | 'item_rename' | 'item_description' | 'category_rename';
+
+export interface AiPatch {
+  id: string;
+  kind: AiPatchKind;
+  entityId: number;
+  /** Human-readable summary shown in the review table */
+  label: string;
+  /** Name of the model field being changed */
+  field: string;
+  from: string;
+  to: string;
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+}
+
+export interface AiEnhanceResult {
+  patches: AiPatch[];
+  /** New station names the AI inferred (may not exist in store yet) */
+  newStations: string[];
+  summary: string;
+}
