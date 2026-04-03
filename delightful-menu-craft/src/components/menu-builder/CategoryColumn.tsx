@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { Plus, GripVertical, Pencil, Search, X, Library, Trash2, FolderPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
 import { AddItemsModal } from './AddItemsModal';
 import {
@@ -136,6 +137,13 @@ export function CategoryColumn({
       inheritModifiersFromCategory: true,
       addonIds: '',
       isSpecialRequest: false,
+      visibilityPos: true,
+      visibilityKiosk: true,
+      visibilityOnline: true,
+      visibilityThirdParty: true,
+      availableDays: '',
+      availableTimeStart: '',
+      availableTimeEnd: '',
     };
     
     // Add the item
@@ -226,7 +234,7 @@ export function CategoryColumn({
                 item.stockStatus === 'outOfStock' && "line-through opacity-50"
               )}
             >
-              {item.itemName}
+              {shortenName(item.itemName)}
             </div>
           ))}
           {items.length > 8 && (
@@ -387,7 +395,7 @@ export function CategoryColumn({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <GripVertical className="w-3.5 h-3.5 text-muted-foreground cursor-grab flex-shrink-0" />
-                <span className="truncate">{item.itemName}</span>
+                <span className="truncate">{shortenName(item.itemName)}</span>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="text-xs text-muted-foreground">
