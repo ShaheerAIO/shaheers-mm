@@ -353,7 +353,7 @@ function ItemTileButton({
       >
         {shortenName(item.posDisplayName || item.itemName)}
       </span>
-      <span className="text-xs font-semibold text-orange-400 tabular-nums shrink-0">
+      <span className="text-xs font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums shrink-0">
         ${item.itemPrice.toFixed(2)}
       </span>
     </button>

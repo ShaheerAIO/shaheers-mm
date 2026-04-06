@@ -57,21 +57,24 @@
     --warning: 38 92% 50%;
     --info: 210 100% 52%;
 
-    /* POS Preview — light fallback; dark tokens used via .pos-preview-dark */
+    /* POS Preview — light fallback; dark purple + orange via .pos-preview-dark / .dark */
     --pos-bg: 0 0% 100%;
     --pos-card: 0 0% 100%;
     --pos-card-hover: 0 0% 96%;
     --pos-text: 0 0% 10%;
     --pos-text-muted: 0 0% 45%;
+    --pos-primary: 262 83% 58%;
+    --pos-primary-hover: 262 83% 52%;
     --pos-accent: 25 95% 53%;
     --pos-accent-hover: 25 95% 48%;
+    --pos-accent-muted: 28 95% 68%;
     --pos-shell: 0 0% 4%;
     --pos-shell-elevated: 0 0% 7%;
     --pos-shell-border: 0 0% 18%;
     --pos-ticket-bg: 0 0% 6%;
     --pos-menu-tile: 0 0% 14%;
-    --pos-pay: 263 70% 50%;
-    --pos-pay-hover: 263 70% 45%;
+    --pos-pay: 262 83% 58%;
+    --pos-pay-hover: 262 83% 52%;
   }
 
   /* App shell + shadcn tokens aligned with POS Preview (dark zinc shell, orange primary) */
@@ -125,33 +128,49 @@
     --warning: 38 92% 50%;
     --info: 210 100% 52%;
 
-    /* POS Preview (same palette as shell) */
-    --pos-bg: 0 0% 4%;
-    --pos-card: 0 0% 14%;
-    --pos-card-hover: 0 0% 18%;
+    /* POS tokens — purple shell + orange accent (aligned with .pos-preview-dark) */
+    --pos-bg: 265 24% 8%;
+    --pos-card: 265 22% 14%;
+    --pos-card-hover: 265 20% 18%;
     --pos-text: 0 0% 98%;
     --pos-text-muted: 0 0% 60%;
+    --pos-primary: 262 83% 58%;
+    --pos-primary-hover: 262 83% 52%;
     --pos-accent: 25 95% 53%;
     --pos-accent-hover: 25 95% 48%;
-    --pos-shell: 0 0% 4%;
-    --pos-shell-elevated: 0 0% 7%;
-    --pos-shell-border: 0 0% 18%;
-    --pos-ticket-bg: 0 0% 6%;
-    --pos-menu-tile: 0 0% 14%;
-    --pos-pay: 263 70% 50%;
-    --pos-pay-hover: 263 70% 45%;
+    --pos-accent-muted: 28 95% 68%;
+    --pos-shell: 265 26% 7%;
+    --pos-shell-elevated: 265 28% 10%;
+    --pos-shell-border: 265 18% 22%;
+    --pos-ticket-bg: 265 24% 7%;
+    --pos-menu-tile: 265 22% 13%;
+    --pos-pay: 262 83% 58%;
+    --pos-pay-hover: 262 83% 52%;
   }
 }
 
-/* POS Preview uses a fixed dark shell (matches real POS / Figma) */
+/* POS Preview — purple main chrome, orange accents (category strips, prices, modifier picks) */
 .pos-preview-dark {
-  --pos-bg: 0 0% 4%;
-  --pos-card: 0 0% 14%;
-  --pos-card-hover: 0 0% 18%;
+  --pos-bg: 265 24% 8%;
+  --pos-card: 265 22% 14%;
+  --pos-card-hover: 265 20% 18%;
   --pos-text: 0 0% 98%;
   --pos-text-muted: 0 0% 60%;
+  /* Primary actions / chrome (violet) */
+  --pos-primary: 262 83% 58%;
+  --pos-primary-hover: 262 83% 52%;
+  --pos-pay: 262 83% 58%;
+  --pos-pay-hover: 262 83% 52%;
+  /* Orange accent — category colors, item price, modifier highlights */
   --pos-accent: 25 95% 53%;
   --pos-accent-hover: 25 95% 48%;
+  --pos-accent-muted: 28 95% 68%;
+  /* Purple-tinted shell (matches reference POS) */
+  --pos-shell: 265 26% 7%;
+  --pos-shell-elevated: 265 28% 10%;
+  --pos-shell-border: 265 18% 22%;
+  --pos-ticket-bg: 265 24% 7%;
+  --pos-menu-tile: 265 22% 13%;
 }
 
 @layer base {

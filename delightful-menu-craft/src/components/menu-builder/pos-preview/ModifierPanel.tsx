@@ -109,7 +109,7 @@ export function ModifierPanel({ item, categoryColor, onDone, onCancel }: Modifie
           <button
             type="button"
             onClick={() => onDone(item, selectedOptions, qty)}
-            className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-orange-500 hover:bg-orange-400 transition-colors"
+            className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[hsl(var(--pos-primary))] hover:bg-[hsl(var(--pos-primary-hover))] transition-colors"
           >
             Done
           </button>
@@ -139,7 +139,7 @@ export function ModifierPanel({ item, categoryColor, onDone, onCancel }: Modifie
                 className={cn(
                   'px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors',
                   idx === activeModifierIdx
-                    ? 'border-orange-500 text-zinc-100 bg-white/[0.03]'
+                    ? 'border-[hsl(var(--pos-accent))] text-zinc-100 bg-white/[0.03]'
                     : 'border-transparent text-zinc-500 hover:text-zinc-300',
                 )}
               >
@@ -178,7 +178,7 @@ export function ModifierPanel({ item, categoryColor, onDone, onCancel }: Modifie
                         className={cn(
                           `${POS_TILE_FRAME} flex items-center justify-center px-2.5 text-xs font-semibold text-center transition-all border`,
                           isSelected
-                            ? 'bg-orange-500/20 border-orange-500 text-orange-300'
+                            ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
                             : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
                         )}
                         style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}

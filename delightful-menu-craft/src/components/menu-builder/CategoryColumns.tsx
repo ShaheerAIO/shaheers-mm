@@ -15,7 +15,15 @@ export function CategoryColumns() {
     isDataLoaded,
     addCategory,
     getNextId,
+    selectedItemId,
+    isCreatingModifier,
+    isCreatingOption,
   } = useMenuStore();
+
+  const panelWidth =
+    (selectedItemId ? 320 : 0) +
+    (isCreatingModifier ? 320 : 0) +
+    (isCreatingOption ? 320 : 0);
 
   // Get categories for the selected menu
   // Categories are linked to menus via the menuIds field (comma-separated)
@@ -116,7 +124,10 @@ export function CategoryColumns() {
   }
 
   return (
-    <div className="flex h-full overflow-x-auto scrollbar-thin">
+    <div
+      className="flex h-full flex-row overflow-x-auto overflow-y-hidden scrollbar-thin transition-[padding] duration-300"
+      style={{ paddingRight: panelWidth }}
+    >
       {/* All categories in their natural order */}
       {menuCategories.map((category) => (
         <CategoryColumn

@@ -11,7 +11,7 @@ const Index = () => {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <LeftSidebar />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
         <MainContent />
         {activeTab === 'menu-builder' && <RightSidebar />}
       </div>

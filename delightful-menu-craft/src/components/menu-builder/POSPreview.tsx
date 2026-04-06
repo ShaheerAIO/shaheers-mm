@@ -140,7 +140,7 @@ export function POSPreview() {
             <Menu className="w-5 h-5" />
           </button>
           <div
-            className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-emerald-400 via-teal-500 to-violet-600"
+            className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-violet-500 via-purple-600 to-violet-800"
             aria-hidden
           />
           <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
@@ -158,7 +158,7 @@ export function POSPreview() {
           </button>
           <button
             type="button"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[hsl(var(--pos-primary))] text-white text-xs font-medium hover:bg-[hsl(var(--pos-primary-hover))]"
           >
             <Clock className="w-3.5 h-3.5" />
             <span className="hidden xs:inline">Take break</span>
@@ -319,7 +319,7 @@ export function POSPreview() {
                 value={selectedMenuId?.toString() ?? ''}
                 onValueChange={(v) => setSelectedMenu(v ? parseInt(v, 10) : null)}
               >
-                <SelectTrigger className="w-[min(180px,40vw)] h-9 bg-[hsl(var(--pos-menu-tile))] border-zinc-700 text-zinc-100 text-sm">
+                <SelectTrigger className="w-[min(180px,40vw)] h-9 bg-[hsl(var(--pos-menu-tile))] border-[hsl(var(--pos-shell-border))] text-zinc-100 text-sm">
                   <SelectValue placeholder="Menu" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700">
@@ -332,14 +332,14 @@ export function POSPreview() {
               </Select>
 
               {/* QSR / TSR toggle */}
-              <div className="flex rounded-lg border border-zinc-700 overflow-hidden shrink-0">
+              <div className="flex rounded-lg border border-[hsl(var(--pos-shell-border))] overflow-hidden shrink-0">
                 <button
                   type="button"
                   onClick={() => setPosMode('qsr')}
                   className={cn(
                     'px-3 py-1.5 text-xs font-semibold transition-colors',
                     posMode === 'qsr'
-                      ? 'bg-orange-500 text-white'
+                      ? 'bg-[hsl(var(--pos-primary))] text-white'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
                   )}
                 >
@@ -349,9 +349,9 @@ export function POSPreview() {
                   type="button"
                   onClick={() => setPosMode('tsr')}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-semibold transition-colors border-l border-zinc-700',
+                    'px-3 py-1.5 text-xs font-semibold transition-colors border-l border-[hsl(var(--pos-shell-border))]',
                     posMode === 'tsr'
-                      ? 'bg-orange-500 text-white'
+                      ? 'bg-[hsl(var(--pos-primary))] text-white'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
                   )}
                 >
