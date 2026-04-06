@@ -145,6 +145,22 @@ const getMaxId = (items: { id: number }[]): number => {
   return Math.max(...items.map(item => item.id));
 };
 
+/** When a category is removed, subcategories that pointed at it must go too. */
+const expandCategoryDescendants = (rootIds: number[], categories: Category[]): Set<number> => {
+  const set = new Set(rootIds);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of categories) {
+      if (c.parentCategoryId != null && set.has(c.parentCategoryId) && !set.has(c.id)) {
+        set.add(c.id);
+        changed = true;
+      }
+    }
+  }
+  return set;
+};
+
 export const useMenuStore = create<MenuState>()(
   persist(
     (set, get) => ({
@@ -179,7 +195,18 @@ export const useMenuStore = create<MenuState>()(
       
       // UI Actions
       setActiveTab: (tab) => set({ activeTab: tab, selectedItemId: null }),
-      setViewMode: (mode) => set({ viewMode: mode }),
+      setViewMode: (mode) =>
+        set(
+          mode === 'pos-preview'
+            ? {
+                viewMode: mode,
+                selectedItemId: null,
+                selectedModifierId: null,
+                isCreatingModifier: false,
+                isCreatingOption: false,
+              }
+            : { viewMode: mode },
+        ),
       setSelectedMenu: (id) => set({ selectedMenuId: id, selectedCategoryId: null, selectedItemId: null }),
       setSelectedCategory: (id) => set({ selectedCategoryId: id }),
       setSelectedItem: (id) => set({ selectedItemId: id }),
@@ -334,13 +361,63 @@ export const useMenuStore = create<MenuState>()(
       },
       
       // Menu Actions
-      addMenu: (menu) => set((state) => ({ menus: [...state.menus, menu] })),
+      addMenu: (menu) =>
+        set((state) => ({
+          menus: [...state.menus, menu],
+          isDataLoaded: true,
+        })),
       updateMenu: (id, updates) => set((state) => ({
         menus: state.menus.map((m) => (m.id === id ? { ...m, ...updates } : m)),
       })),
-      deleteMenu: (id) => set((state) => ({
-        menus: state.menus.filter((m) => m.id !== id),
-      })),
+      deleteMenu: (menuId) =>
+        set((state) => {
+          const parseMenuIds = (csv: string | undefined) =>
+            csv?.split(',').map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) ?? [];
+
+          const deletedCategoryIds: number[] = [];
+          const categoriesResult: Category[] = [];
+
+          for (const c of state.categories) {
+            const ids = parseMenuIds(c.menuIds);
+            if (!ids.includes(menuId)) {
+              categoriesResult.push(c);
+              continue;
+            }
+            const remaining = ids.filter((id) => id !== menuId);
+            if (remaining.length === 0) {
+              deletedCategoryIds.push(c.id);
+            } else {
+              categoriesResult.push({ ...c, menuIds: remaining.join(',') });
+            }
+          }
+
+          const deletedSet = expandCategoryDescendants(deletedCategoryIds, state.categories);
+          const categoriesFinal = categoriesResult.filter((c) => !deletedSet.has(c.id));
+
+          const nextMenus = state.menus.filter((m) => m.id !== menuId);
+
+          let selectedMenuId = state.selectedMenuId;
+          if (selectedMenuId === menuId) {
+            selectedMenuId = nextMenus.length > 0 ? nextMenus[0].id : null;
+          }
+
+          let selectedCategoryId = state.selectedCategoryId;
+          if (selectedCategoryId != null && deletedSet.has(selectedCategoryId)) {
+            selectedCategoryId = null;
+          }
+
+          return {
+            menus: nextMenus,
+            categories: categoriesFinal,
+            categoryItems: state.categoryItems.filter((ci) => !deletedSet.has(ci.categoryId)),
+            categoryModifierGroups: state.categoryModifierGroups.filter(
+              (g) => !deletedSet.has(g.categoryId),
+            ),
+            selectedMenuId,
+            selectedCategoryId,
+            selectedItemId: state.selectedItemId,
+          };
+        }),
       
       // Category Actions
       addCategory: (category) => set((state) => ({ 

@@ -51,12 +51,24 @@ export function CategoryColumn({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number } | null>(null);
   const [subcatToDelete, setSubcatToDelete] = useState<Category | null>(null);
+  const [editingSubcatId, setEditingSubcatId] = useState<number | null>(null);
+  const [subcatDraftName, setSubcatDraftName] = useState('');
 
   // Reset temp name when category changes
   useEffect(() => {
     setTempName(category.categoryName);
     setIsEditingName(false);
   }, [category.id, category.categoryName]);
+
+  useEffect(() => {
+    if (
+      editingSubcatId != null &&
+      !subcategories.some((s) => s.id === editingSubcatId)
+    ) {
+      setEditingSubcatId(null);
+      setSubcatDraftName('');
+    }
+  }, [subcategories, editingSubcatId]);
 
   const handleNameSubmit = () => {
     if (tempName.trim() && tempName !== category.categoryName) {
@@ -216,6 +228,35 @@ export function CategoryColumn({
     }
   };
 
+  const startSubcategoryRename = (subcat: Category, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveSubcat(subcat.id);
+    setEditingSubcatId(subcat.id);
+    setSubcatDraftName(subcat.categoryName);
+  };
+
+  const cancelSubcategoryRename = (subcat: Category) => {
+    setSubcatDraftName(subcat.categoryName);
+    setEditingSubcatId(null);
+  };
+
+  const submitSubcategoryRename = (subcat: Category) => {
+    const trimmed = subcatDraftName.trim();
+    if (!trimmed) {
+      cancelSubcategoryRename(subcat);
+      return;
+    }
+    if (trimmed !== subcat.categoryName) {
+      updateCategory(subcat.id, {
+        categoryName: trimmed,
+        posDisplayName: trimmed,
+        kdsDisplayName: trimmed,
+      });
+    }
+    setEditingSubcatId(null);
+    setSubcatDraftName('');
+  };
+
   if (!isExpanded) {
     return (
       <div 
@@ -253,6 +294,14 @@ export function CategoryColumn({
         <div className="category-header flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
+            <input
+              type="color"
+              value={category.color?.trim() || '#f97316'}
+              onChange={(e) => updateCategory(category.id, { color: e.target.value })}
+              className="h-5 w-5 flex-shrink-0 cursor-pointer rounded border border-border/50 bg-transparent p-0 [appearance:none] [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-0"
+              title="Category color"
+              aria-label="Category color"
+            />
             {isEditingName ? (
               <input
                 type="text"
@@ -318,30 +367,77 @@ export function CategoryColumn({
             <div
               key={subcat.id}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 group/tab",
+                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 group/tab min-w-0 max-w-[200px]",
                 activeSubcat === subcat.id 
                   ? "bg-primary text-primary-foreground" 
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              <button
-                onClick={() => setActiveSubcat(subcat.id)}
-                className="leading-none"
-              >
-                {subcat.categoryName}
-              </button>
-              <button
-                onClick={(e) => handleDeleteSubcategory(subcat, e)}
-                className={cn(
-                  "leading-none transition-opacity",
-                  activeSubcat === subcat.id
-                    ? "text-primary-foreground/70 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
-                    : "text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/tab:opacity-100"
-                )}
-                title="Delete subcategory"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              {editingSubcatId === subcat.id ? (
+                <input
+                  type="text"
+                  value={subcatDraftName}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setSubcatDraftName(e.target.value)}
+                  onBlur={() => submitSubcategoryRename(subcat)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelSubcategoryRename(subcat);
+                    }
+                  }}
+                  className={cn(
+                    "min-w-0 flex-1 bg-background/90 text-foreground border border-border rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring",
+                    activeSubcat === subcat.id && "bg-background text-foreground"
+                  )}
+                  autoFocus
+                  aria-label="Subcategory name"
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubcat(subcat.id)}
+                    onDoubleClick={(e) => startSubcategoryRename(subcat, e)}
+                    className="leading-none truncate min-w-0 text-left"
+                    title="Double-click to rename"
+                  >
+                    {subcat.categoryName}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => startSubcategoryRename(subcat, e)}
+                    className={cn(
+                      "flex-shrink-0 p-0.5 rounded transition-opacity",
+                      activeSubcat === subcat.id
+                        ? "text-primary-foreground/80 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
+                        : "text-muted-foreground/80 hover:text-foreground opacity-0 group-hover/tab:opacity-100"
+                    )}
+                    title="Rename subcategory"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </>
+              )}
+              {editingSubcatId !== subcat.id && (
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteSubcategory(subcat, e)}
+                  className={cn(
+                    "leading-none transition-opacity flex-shrink-0",
+                    activeSubcat === subcat.id
+                      ? "text-primary-foreground/70 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
+                      : "text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/tab:opacity-100"
+                  )}
+                  title="Delete subcategory"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ))}
           <button

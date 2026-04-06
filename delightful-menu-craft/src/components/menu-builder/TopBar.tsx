@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, Sparkles, Pencil, Check, X } from 'lucide-react';
+import { Upload, Download, FilePlus, Sparkles, Pencil, Check, X, Plus, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -35,10 +35,14 @@ export function TopBar() {
     isDataLoaded,
     startFresh,
     updateMenu,
+    addMenu,
+    deleteMenu,
+    getNextId,
   } = useMenuStore();
 
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
+  const [confirmDeleteMenuOpen, setConfirmDeleteMenuOpen] = useState(false);
   const [renamingMenu, setRenamingMenu] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +69,30 @@ export function TopBar() {
     setRenameValue(current?.menuName ?? '');
     setRenamingMenu(true);
     setTimeout(() => renameInputRef.current?.select(), 0);
+  };
+
+  const handleAddMenu = () => {
+    const id = getNextId('menus');
+    const n = menus.length + 1;
+    const label = `Menu ${n}`;
+    const sortOrder =
+      menus.length > 0 ? Math.max(...menus.map((m) => m.sortOrder), 0) + 1 : 1;
+    addMenu({
+      id,
+      menuName: label,
+      posDisplayName: label,
+      posButtonColor: '#f97316',
+      picture: '',
+      sortOrder,
+    });
+    setSelectedMenu(id);
+  };
+
+  const handleConfirmDeleteMenu = () => {
+    if (selectedMenuId != null) {
+      deleteMenu(selectedMenuId);
+    }
+    setConfirmDeleteMenuOpen(false);
   };
 
   const handleImportClick = () => {
@@ -226,8 +254,19 @@ export function TopBar() {
               </SelectContent>
             </Select>
 
+            <button
+              type="button"
+              onClick={handleAddMenu}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+              title="Add another menu"
+            >
+              <Plus className="w-4 h-4" />
+              Add menu
+            </button>
+
             {selectedMenuId != null && isDataLoaded && (
               <button
+                type="button"
                 onClick={startRename}
                 className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
                 title="Rename menu"
@@ -235,9 +274,42 @@ export function TopBar() {
                 <Pencil className="w-3.5 h-3.5" />
               </button>
             )}
+
+            {selectedMenuId != null && isDataLoaded && menus.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteMenuOpen(true)}
+                className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-white/5 transition-colors"
+                title="Delete this menu"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </>
         )}
       </div>
+
+      {/* Delete current menu */}
+      <AlertDialog open={confirmDeleteMenuOpen} onOpenChange={setConfirmDeleteMenuOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this menu?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Categories that belong only to this menu will be removed. Categories shared with other
+              menus will stay, with this menu unlinked. Items are not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteMenu}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete menu
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Confirm clear dialog */}
       <AlertDialog open={confirmNewOpen} onOpenChange={setConfirmNewOpen}>

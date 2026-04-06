@@ -1,10 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
-import { shortenName } from '@/lib/shortenName';
 import {
   Upload,
-  Plus,
   Menu,
   ChevronRight,
   Lock,
@@ -12,9 +10,10 @@ import {
   User,
   Search,
   Filter,
-  MoreVertical,
   UtensilsCrossed,
   ShoppingBag,
+  MoreVertical,
+  Trash2,
 } from 'lucide-react';
 import {
   Select,
@@ -23,126 +22,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import type { Category, Item } from '@/types/menu';
+import type { Item } from '@/types/menu';
+import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
+import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 
-const CATEGORY_COLORS = [
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#06b6d4',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ec4899',
-  '#ef4444',
-];
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface TicketLine {
+  /** Unique key per line so the same item can appear multiple times */
+  lineId: string;
+  item: Item;
+  qty: number;
+  /** modifierId -> selected optionIds */
+  selectedOptions: Record<number, number[]>;
+}
+
+type PosMode = 'qsr' | 'tsr';
 
 const TAX_RATE = 0.05;
 
-export function POSPreview() {
-  const {
-    categories,
-    items,
-    categoryItems,
-    menus,
-    selectedMenuId,
-    setSelectedMenu,
-    selectedItemId,
-    setSelectedItem,
-    isDataLoaded,
-    addCategory,
-    getNextId,
-  } = useMenuStore();
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
+export function POSPreview() {
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded } = useMenuStore();
+
+  // Clock
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
-
   const timeStr = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-  const [showAddCategory, setShowAddCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryColor, setNewCategoryColor] = useState(CATEGORY_COLORS[0]);
+  // POS mode toggle
+  const [posMode, setPosMode] = useState<PosMode>('tsr');
 
-  const rootCategories = useMemo(() => {
-    if (!selectedMenuId) return [];
-    return categories
-      .filter((c) => {
-        const menuIdList =
-          c.menuIds?.split(',').map((id) => parseInt(id.trim())).filter((id) => !isNaN(id)) || [];
-        return menuIdList.includes(selectedMenuId) && !c.parentCategoryId;
-      })
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [categories, selectedMenuId]);
+  // Local ticket state
+  const [ticketLines, setTicketLines] = useState<TicketLine[]>([]);
 
-  /** One column per root category: items in that category + subcategories */
-  const menuColumns = useMemo(() => {
-    if (!selectedMenuId) return [] as { category: Category; items: Item[] }[];
-    return rootCategories.map((cat) => {
-      const subcats = categories.filter((c) => c.parentCategoryId === cat.id);
-      const catIds = [cat.id, ...subcats.map((s) => s.id)];
-      const rows = categoryItems
-        .filter((ci) => catIds.includes(ci.categoryId))
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      const seen = new Set<number>();
-      const ordered: Item[] = [];
-      for (const ci of rows) {
-        if (seen.has(ci.itemId)) continue;
-        seen.add(ci.itemId);
-        const item = items.find((i) => i.id === ci.itemId);
-        if (item) ordered.push(item);
-      }
-      return { category: cat, items: ordered };
-    });
-  }, [selectedMenuId, rootCategories, categories, categoryItems, items]);
+  const addToTicket = (
+    item: Item,
+    selectedOptions: Record<number, number[]> = {},
+    qty = 1,
+  ) => {
+    setTicketLines((prev) => [
+      ...prev,
+      {
+        lineId: `${item.id}-${Date.now()}-${Math.random()}`,
+        item,
+        qty,
+        selectedOptions,
+      },
+    ]);
+  };
 
-  /** Demo ticket: first few items from the menu (preview only — no cart in app) */
-  const ticketLines = useMemo(() => {
-    const flat: Item[] = [];
-    for (const col of menuColumns) flat.push(...col.items);
-    return flat.slice(0, 4);
-  }, [menuColumns]);
+  const removeFromTicket = (lineId: string) => {
+    setTicketLines((prev) => prev.filter((l) => l.lineId !== lineId));
+  };
 
+  const clearTicket = () => setTicketLines([]);
+
+  // Financials
   const subtotal = useMemo(
-    () => ticketLines.reduce((s, i) => s + i.itemPrice, 0),
+    () => ticketLines.reduce((s, l) => s + l.item.itemPrice * l.qty, 0),
     [ticketLines],
   );
   const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
 
-  const handleAddCategory = () => {
-    if (!newCategoryName.trim() || !selectedMenuId) return;
-
-    const newCategoryId = getNextId('categories');
-    const name = newCategoryName.trim();
-    const newCategory: Category = {
-      id: newCategoryId,
-      categoryName: name,
-      posDisplayName: name,
-      kdsDisplayName: name,
-      menuIds: selectedMenuId.toString(),
-      parentCategoryId: null,
-      sortOrder: rootCategories.length,
-      color: newCategoryColor,
-      image: '',
-      kioskImage: '',
-      tagIds: '',
-    };
-
-    addCategory(newCategory);
-    setNewCategoryName('');
-    setNewCategoryColor(CATEGORY_COLORS[Math.floor(Math.random() * CATEGORY_COLORS.length)]);
-    setShowAddCategory(false);
-  };
+  // ---------------------------------------------------------------------------
+  // Guard states
+  // ---------------------------------------------------------------------------
 
   if (!isDataLoaded) {
     return (
@@ -164,6 +118,10 @@ export function POSPreview() {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   return (
     <div
       className={cn(
@@ -171,7 +129,7 @@ export function POSPreview() {
         'border border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-shell))] text-[hsl(var(--pos-text))]',
       )}
     >
-      {/* Top bar — matches POS shell */}
+      {/* ── Top bar ── */}
       <header className="flex items-center justify-between gap-4 px-3 py-2.5 shrink-0 border-b border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-shell-elevated))]">
         <div className="flex items-center gap-2 min-w-0">
           <button
@@ -187,7 +145,9 @@ export function POSPreview() {
           />
           <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
         </div>
+
         <div className="text-sm font-medium tabular-nums text-zinc-200">{timeStr}</div>
+
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <button
             type="button"
@@ -210,15 +170,15 @@ export function POSPreview() {
         </div>
       </header>
 
+      {/* ── Body ── */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: ticket */}
+        {/* ── Left: ticket ── */}
         <aside className="w-[min(100%,320px)] sm:w-[26%] flex flex-col min-w-0 border-r border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-ticket-bg))]">
+          {/* Ticket header */}
           <div className="p-3 border-b border-[hsl(var(--pos-shell-border))] flex items-start justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-zinc-100">Ticket 1</h2>
-              <button type="button" className="text-xs text-violet-400 hover:underline mt-0.5">
-                Add Guest
-              </button>
+              <p className="text-xs text-zinc-500 mt-0.5">Table 1 | John Doe</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded bg-red-600 text-white">
@@ -236,6 +196,7 @@ export function POSPreview() {
             </div>
           </div>
 
+          {/* Ticket lines */}
           <div className="flex-1 overflow-y-auto px-3 py-2">
             <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-1 text-[11px] text-zinc-500 border-b border-zinc-800 pb-1 mb-2 font-medium uppercase tracking-wide">
               <span>Item Name</span>
@@ -243,28 +204,53 @@ export function POSPreview() {
               <span className="text-right">Price</span>
               <span className="text-right">Total</span>
             </div>
+
             {ticketLines.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-8 text-center">No items in menu to preview</p>
+              <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-600">
+                <UtensilsCrossed className="w-8 h-8 opacity-40" />
+                <p className="text-xs text-center">
+                  {posMode === 'tsr'
+                    ? 'Select an item from the menu to add it here'
+                    : 'Tap an item tile to add it'}
+                </p>
+              </div>
             ) : (
               ticketLines.map((line) => (
                 <div
-                  key={line.id}
-                  className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0.5 py-2 border-b border-zinc-800/80 text-sm"
+                  key={line.lineId}
+                  className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0.5 py-2 border-b border-zinc-800/80 text-sm group"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-zinc-100 truncate">{line.posDisplayName || line.itemName}</p>
-                    {line.itemDescription ? (
-                      <p className="text-[11px] text-zinc-500 line-clamp-2 mt-0.5">{line.itemDescription}</p>
-                    ) : null}
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="font-medium text-zinc-100 truncate text-xs leading-snug">
+                        {line.item.posDisplayName || line.item.itemName}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => removeFromTicket(line.lineId)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-opacity"
+                        aria-label="Remove"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {Object.entries(line.selectedOptions).length > 0 && (
+                      <TicketLineOptions line={line} />
+                    )}
                   </div>
-                  <span className="text-zinc-400 tabular-nums text-right">1</span>
-                  <span className="text-zinc-400 tabular-nums text-right">${line.itemPrice.toFixed(2)}</span>
-                  <span className="text-zinc-200 font-medium tabular-nums text-right">${line.itemPrice.toFixed(2)}</span>
+                  <span className="text-zinc-400 tabular-nums text-right text-xs">{line.qty}</span>
+                  <span className="text-zinc-400 tabular-nums text-right text-xs">
+                    ${line.item.itemPrice.toFixed(2)}
+                  </span>
+                  <span className="text-zinc-200 font-medium tabular-nums text-right text-xs">
+                    ${(line.item.itemPrice * line.qty).toFixed(2)}
+                  </span>
                 </div>
               ))
             )}
           </div>
 
+          {/* Ticket footer */}
           <div className="p-3 border-t border-[hsl(var(--pos-shell-border))] space-y-2 bg-[hsl(var(--pos-shell))]">
             <div className="flex justify-between text-xs text-zinc-500">
               <span>Service charges (0%)</span>
@@ -272,19 +258,38 @@ export function POSPreview() {
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               <div className="space-y-1 text-zinc-500">
-                <div className="flex justify-between"><span>Credits</span><span className="tabular-nums">$0.00</span></div>
-                <div className="flex justify-between"><span>Discounts</span><span className="tabular-nums">$0.00</span></div>
-                <div className="flex justify-between"><span>Tips</span><span className="tabular-nums">$0.00</span></div>
+                <div className="flex justify-between">
+                  <span>Credits</span>
+                  <span className="tabular-nums">$0.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Discounts</span>
+                  <span className="tabular-nums">$0.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tips</span>
+                  <span className="tabular-nums">$0.00</span>
+                </div>
               </div>
               <div className="space-y-1 text-zinc-300">
-                <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">${subtotal.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Tax</span><span className="tabular-nums">${tax.toFixed(2)}</span></div>
-                <div className="flex justify-between font-semibold text-zinc-100"><span>Total</span><span className="tabular-nums">${total.toFixed(2)}</span></div>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span className="tabular-nums">${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax</span>
+                  <span className="tabular-nums">${tax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-zinc-100">
+                  <span>Total</span>
+                  <span className="tabular-nums">${total.toFixed(2)}</span>
+                </div>
               </div>
             </div>
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
+                onClick={clearTicket}
                 className="flex-1 py-2.5 rounded-lg border border-zinc-600 text-sm text-zinc-300 hover:bg-white/5"
               >
                 Cancel
@@ -305,24 +310,56 @@ export function POSPreview() {
           </div>
         </aside>
 
-        {/* Right: menu — category columns */}
+        {/* ── Right: menu panel ── */}
         <section className="flex-1 flex flex-col min-w-0 bg-[hsl(var(--pos-shell))]">
+          {/* Menu bar */}
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[hsl(var(--pos-shell-border))] shrink-0">
-            <Select
-              value={selectedMenuId?.toString() ?? ''}
-              onValueChange={(v) => setSelectedMenu(v ? parseInt(v, 10) : null)}
-            >
-              <SelectTrigger className="w-[min(220px,45vw)] h-9 bg-[hsl(var(--pos-menu-tile))] border-zinc-700 text-zinc-100 text-sm">
-                <SelectValue placeholder="Menu" />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-700">
-                {menus.map((m) => (
-                  <SelectItem key={m.id} value={m.id.toString()} className="text-zinc-100">
-                    {m.menuName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2 min-w-0">
+              <Select
+                value={selectedMenuId?.toString() ?? ''}
+                onValueChange={(v) => setSelectedMenu(v ? parseInt(v, 10) : null)}
+              >
+                <SelectTrigger className="w-[min(180px,40vw)] h-9 bg-[hsl(var(--pos-menu-tile))] border-zinc-700 text-zinc-100 text-sm">
+                  <SelectValue placeholder="Menu" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  {menus.map((m) => (
+                    <SelectItem key={m.id} value={m.id.toString()} className="text-zinc-100">
+                      {m.menuName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* QSR / TSR toggle */}
+              <div className="flex rounded-lg border border-zinc-700 overflow-hidden shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPosMode('qsr')}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold transition-colors',
+                    posMode === 'qsr'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                  )}
+                >
+                  QSR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosMode('tsr')}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold transition-colors border-l border-zinc-700',
+                    posMode === 'tsr'
+                      ? 'bg-orange-500 text-white'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                  )}
+                >
+                  TSR
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -341,137 +378,56 @@ export function POSPreview() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-x-auto overflow-y-hidden min-h-0 p-3">
-            <div className="flex gap-3 h-full min-h-[200px]">
-              {menuColumns.map(({ category, items: colItems }) => {
-                const accent = category.color || '#f97316';
-                return (
-                  <div
-                    key={category.id}
-                    className="flex flex-col gap-2 w-[148px] sm:w-[160px] shrink-0 h-full min-h-0"
-                  >
-                    <div
-                      className="rounded-md px-2 py-2.5 text-center text-xs font-semibold text-white shadow-sm shrink-0 leading-tight"
-                      style={{ backgroundColor: accent }}
-                    >
-                      {category.categoryName}
-                    </div>
-                    <div className="flex flex-col gap-2 overflow-y-auto flex-1 pr-0.5">
-                      {colItems.map((item) => {
-                        const selected = selectedItemId === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setSelectedItem(item.id)}
-                            className={cn(
-                              'flex flex-col items-stretch rounded-md px-2.5 py-2.5 text-left transition-colors',
-                              'bg-[hsl(var(--pos-menu-tile))] border border-zinc-700/80',
-                              'hover:border-zinc-500 hover:bg-zinc-800/80',
-                              selected && 'ring-2 ring-orange-500 border-orange-500/60 bg-zinc-800',
-                              item.stockStatus !== 'inStock' && 'opacity-45 border-red-900/50',
-                            )}
-                            style={{ borderLeftWidth: 4, borderLeftColor: accent }}
-                          >
-                            <span
-                              className={cn(
-                                'text-[12px] font-medium leading-snug text-zinc-100 line-clamp-3',
-                                item.stockStatus !== 'inStock' && 'line-through',
-                              )}
-                            >
-                              {shortenName(item.posDisplayName || item.itemName)}
-                            </span>
-                            <span className="text-[11px] font-semibold text-orange-400 mt-1 tabular-nums">
-                              ${item.itemPrice.toFixed(2)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                      {colItems.length === 0 && (
-                        <p className="text-[10px] text-zinc-600 text-center py-4">Empty</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setShowAddCategory(true)}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1 w-[100px] shrink-0 rounded-lg border-2 border-dashed border-zinc-700',
-                  'text-zinc-500 hover:border-orange-500/50 hover:text-zinc-400 hover:bg-white/[0.02]',
-                )}
-                title="Add category"
-              >
-                <Plus className="w-6 h-6" />
-                <span className="text-[10px]">Add</span>
-              </button>
-            </div>
+          {/* Menu content */}
+          <div
+            className={cn(
+              'flex-1 min-h-0',
+              posMode === 'qsr' && 'overflow-x-auto overflow-y-hidden p-3',
+            )}
+          >
+            {posMode === 'qsr' ? (
+              <QSRMenuPanel onAddToTicket={(item) => addToTicket(item, {}, 1)} />
+            ) : (
+              <TSRMenuPanel onAddToTicket={addToTicket} />
+            )}
           </div>
         </section>
       </div>
+    </div>
+  );
+}
 
-      <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add New Category</DialogTitle>
-            <DialogDescription>Create a new category for this menu</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Category Name</Label>
-              <input
-                type="text"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                placeholder="e.g., Appetizers"
-                className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Category Color</Label>
-              <div className="flex gap-2 flex-wrap">
-                {CATEGORY_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setNewCategoryColor(color)}
-                    className={cn(
-                      'w-8 h-8 rounded-full transition-all',
-                      newCategoryColor === color && 'ring-2 ring-offset-2 ring-primary',
-                    )}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={() => setShowAddCategory(false)}
-                className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleAddCategory}
-                disabled={!newCategoryName.trim()}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-                  newCategoryName.trim()
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    : 'bg-muted text-muted-foreground cursor-not-allowed',
-                )}
-              >
-                Add Category
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+// ---------------------------------------------------------------------------
+// Sub-component: display selected modifier option names on a ticket line
+// ---------------------------------------------------------------------------
+
+function TicketLineOptions({ line }: { line: TicketLine }) {
+  const { modifiers, modifierOptions } = useMenuStore();
+
+  const labels: string[] = [];
+  for (const [modifierIdStr, optionIds] of Object.entries(line.selectedOptions)) {
+    const modifierId = parseInt(modifierIdStr, 10);
+    const modifier = modifiers.find((m) => m.id === modifierId);
+    for (const optionId of optionIds) {
+      const option = modifierOptions.find((o) => o.id === optionId);
+      if (option) {
+        const label = modifier
+          ? `${modifier.posDisplayName || modifier.modifierName}: ${option.posDisplayName || option.optionName}`
+          : option.posDisplayName || option.optionName;
+        labels.push(label);
+      }
+    }
+  }
+
+  if (labels.length === 0) return null;
+
+  return (
+    <div className="mt-0.5 space-y-px">
+      {labels.map((label, i) => (
+        <p key={i} className="text-[10px] text-zinc-500 truncate">
+          {label}
+        </p>
+      ))}
     </div>
   );
 }

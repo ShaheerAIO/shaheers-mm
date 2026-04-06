@@ -29,6 +29,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 interface DraftState {
   itemName: string;
   posDisplayName: string;
+  kdsName: string;
   itemPrice: number;
   itemDescription: string;
   stockStatus: string;
@@ -43,6 +44,8 @@ interface DraftState {
   availableTimeStart: string;
   availableTimeEnd: string;
 }
+
+type DisplayNameMode = 'same_as_item' | 'custom_pos' | 'custom_kds' | 'custom_both';
 
 function buildAvailabilitySummary(draft: DraftState): string {
   const channels = [
@@ -104,6 +107,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [draft, setDraft] = useState<DraftState>({
     itemName: item.itemName,
     posDisplayName: item.posDisplayName,
+    kdsName: item.kdsName ?? item.itemName,
     itemPrice: item.itemPrice,
     itemDescription: item.itemDescription,
     stockStatus: item.stockStatus,
@@ -120,6 +124,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   });
 
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [displayNameMode, setDisplayNameMode] = useState<DisplayNameMode>('same_as_item');
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
   const [pendingModifierIds, setPendingModifierIds] = useState<number[]>([]);
@@ -137,6 +142,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setDraft({
       itemName: item.itemName,
       posDisplayName: item.posDisplayName,
+      kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
       itemDescription: item.itemDescription,
       stockStatus: item.stockStatus,
@@ -163,6 +169,15 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setNewStationName('');
   }, [item.id]);
 
+  useEffect(() => {
+    const posMatches = draft.posDisplayName === draft.itemName;
+    const kdsMatches = draft.kdsName === draft.itemName;
+    if (posMatches && kdsMatches) setDisplayNameMode('same_as_item');
+    else if (!posMatches && kdsMatches) setDisplayNameMode('custom_pos');
+    else if (posMatches && !kdsMatches) setDisplayNameMode('custom_kds');
+    else setDisplayNameMode('custom_both');
+  }, [draft.itemName, draft.posDisplayName, draft.kdsName]);
+
   const originalStationIds = useMemo(
     () =>
       item.stationIds
@@ -182,6 +197,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     return (
       draft.itemName !== item.itemName ||
       draft.posDisplayName !== item.posDisplayName ||
+      draft.kdsName !== (item.kdsName ?? item.itemName) ||
       draft.itemPrice !== item.itemPrice ||
       draft.itemDescription !== item.itemDescription ||
       draft.stockStatus !== item.stockStatus ||
@@ -206,6 +222,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     updateItem(item.id, {
       itemName: draft.itemName,
       posDisplayName: draft.posDisplayName,
+      kdsName: draft.kdsName,
       itemPrice: draft.itemPrice,
       itemDescription: draft.itemDescription,
       stockStatus: draft.stockStatus,
@@ -256,6 +273,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setDraft({
       itemName: item.itemName,
       posDisplayName: item.posDisplayName,
+      kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
       itemDescription: item.itemDescription,
       stockStatus: item.stockStatus,
@@ -384,18 +402,73 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
         {/* Item Name */}
         <div className="space-y-2">
-          <Label className="section-header">Item Name</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="section-header">Item Name</Label>
+            <Select
+              value={displayNameMode}
+              onValueChange={(value: DisplayNameMode) => {
+                setDisplayNameMode(value);
+                setDraft(d => {
+                  if (value === 'same_as_item') {
+                    return { ...d, posDisplayName: d.itemName, kdsName: d.itemName };
+                  }
+                  if (value === 'custom_pos') {
+                    return { ...d, kdsName: d.itemName };
+                  }
+                  if (value === 'custom_kds') {
+                    return { ...d, posDisplayName: d.itemName };
+                  }
+                  return d;
+                });
+              }}
+            >
+              <SelectTrigger className="h-7 w-[128px] px-2 text-[11px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectOption value="same_as_item">Match item</SelectOption>
+                <SelectOption value="custom_pos">Custom POS</SelectOption>
+                <SelectOption value="custom_kds">Custom KDS</SelectOption>
+                <SelectOption value="custom_both">Custom both</SelectOption>
+              </SelectContent>
+            </Select>
+          </div>
           <input
             type="text"
             value={draft.itemName}
             onChange={(e) => setDraft(d => ({ 
               ...d, 
               itemName: e.target.value,
-              posDisplayName: e.target.value 
+              posDisplayName:
+                displayNameMode === 'custom_pos' || displayNameMode === 'custom_both'
+                  ? d.posDisplayName
+                  : e.target.value,
+              kdsName:
+                displayNameMode === 'custom_kds' || displayNameMode === 'custom_both'
+                  ? d.kdsName
+                  : e.target.value,
             }))}
             className="input-field text-lg font-semibold w-full"
             placeholder="Item name"
           />
+          {(displayNameMode === 'custom_pos' || displayNameMode === 'custom_both') && (
+            <input
+              type="text"
+              value={draft.posDisplayName}
+              onChange={(e) => setDraft(d => ({ ...d, posDisplayName: e.target.value }))}
+              className="input-field w-full text-sm"
+              placeholder="POS display name"
+            />
+          )}
+          {(displayNameMode === 'custom_kds' || displayNameMode === 'custom_both') && (
+            <input
+              type="text"
+              value={draft.kdsName}
+              onChange={(e) => setDraft(d => ({ ...d, kdsName: e.target.value }))}
+              className="input-field w-full text-sm"
+              placeholder="KDS display name"
+            />
+          )}
         </div>
 
         {/* Description */}
