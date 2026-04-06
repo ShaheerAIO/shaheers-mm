@@ -38,7 +38,15 @@ export function TopBar() {
     addMenu,
     deleteMenu,
     getNextId,
+    selectedItemId,
+    isCreatingModifier,
+    isCreatingOption,
   } = useMenuStore();
+
+  const panelWidth =
+    (selectedItemId ? 320 : 0) +
+    (isCreatingModifier ? 320 : 0) +
+    (isCreatingOption ? 320 : 0);
 
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
@@ -125,8 +133,11 @@ export function TopBar() {
   };
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-panel-border bg-panel-bg">
-      <div className="flex items-center gap-3">
+    <div
+      className="flex items-center justify-between px-4 py-3 border-b border-panel-border bg-panel-bg transition-[padding] duration-300"
+      style={{ paddingRight: `calc(1rem + ${panelWidth}px)` }}
+    >
+      <div className="flex items-center gap-3 flex-shrink-0">
         {/* New/Import/Export Buttons */}
         <div className="flex items-center gap-2">
           <input
@@ -203,7 +214,7 @@ export function TopBar() {
       </div>
 
       {/* Menu Selector */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <span className="text-sm text-muted-foreground">Menu:</span>
 
         {renamingMenu ? (
@@ -242,7 +253,7 @@ export function TopBar() {
               onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
               disabled={!isDataLoaded}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="min-w-0 w-32 max-w-[192px] flex-1">
                 <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
               </SelectTrigger>
               <SelectContent>
