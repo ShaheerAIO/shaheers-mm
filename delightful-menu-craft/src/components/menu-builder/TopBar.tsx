@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, Sparkles } from 'lucide-react';
+import { Upload, Download, FilePlus, Sparkles, Pencil, Check, X } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -11,6 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { AiEnhanceModal } from './AiEnhanceModal';
 
 export function TopBar() {
@@ -24,10 +34,38 @@ export function TopBar() {
     exportData,
     isDataLoaded,
     startFresh,
+    updateMenu,
   } = useMenuStore();
 
   const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [confirmNewOpen, setConfirmNewOpen] = useState(false);
+  const [renamingMenu, setRenamingMenu] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleNewClick = () => {
+    if (isDataLoaded) {
+      setConfirmNewOpen(true);
+    } else {
+      startFresh();
+    }
+  };
+
+  const commitRename = () => {
+    const trimmed = renameValue.trim();
+    if (trimmed && selectedMenuId != null) {
+      updateMenu(selectedMenuId, { menuName: trimmed, posDisplayName: trimmed });
+    }
+    setRenamingMenu(false);
+  };
+
+  const startRename = () => {
+    const current = menus.find((m) => m.id === selectedMenuId);
+    setRenameValue(current?.menuName ?? '');
+    setRenamingMenu(true);
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  };
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -71,7 +109,7 @@ export function TopBar() {
             className="hidden"
           />
           <button
-            onClick={startFresh}
+            onClick={handleNewClick}
             className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <FilePlus className="w-4 h-4" />
@@ -139,23 +177,89 @@ export function TopBar() {
       {/* Menu Selector */}
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Menu:</span>
-        <Select 
-          value={selectedMenuId?.toString() || ''} 
-          onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
-          disabled={!isDataLoaded}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
-          </SelectTrigger>
-          <SelectContent>
-            {menus.map((menu) => (
-              <SelectItem key={menu.id} value={menu.id.toString()}>
-                {menu.menuName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        {renamingMenu ? (
+          <div className="flex items-center gap-1">
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') setRenamingMenu(false);
+              }}
+              className="w-40 px-2 py-1 text-sm rounded-md border border-ring bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              autoFocus
+            />
+            <button
+              onMouseDown={(e) => { e.preventDefault(); commitRename(); }}
+              className="p-1 text-emerald-400 hover:text-emerald-300"
+              title="Save"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+            <button
+              onMouseDown={(e) => { e.preventDefault(); setRenamingMenu(false); }}
+              className="p-1 text-zinc-500 hover:text-zinc-300"
+              title="Cancel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <Select
+              value={selectedMenuId?.toString() || ''}
+              onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
+              disabled={!isDataLoaded}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
+              </SelectTrigger>
+              <SelectContent>
+                {menus.map((menu) => (
+                  <SelectItem key={menu.id} value={menu.id.toString()}>
+                    {menu.menuName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {selectedMenuId != null && isDataLoaded && (
+              <button
+                onClick={startRename}
+                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
+                title="Rename menu"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </>
+        )}
       </div>
+
+      {/* Confirm clear dialog */}
+      <AlertDialog open={confirmNewOpen} onOpenChange={setConfirmNewOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start fresh?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will clear all menus, categories, items, and modifiers.
+              Export first if you want to keep your work.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={startFresh}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear &amp; Start Fresh
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
