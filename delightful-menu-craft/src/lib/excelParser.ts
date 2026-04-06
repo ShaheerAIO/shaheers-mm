@@ -61,6 +61,12 @@ const parseString = (value: unknown): string => {
   return String(value);
 };
 
+// Visibility columns default to true when the cell is absent (backward-compat)
+const parseVisibility = (value: unknown): boolean => {
+  if (value === null || value === undefined || value === '') return true;
+  return parseBoolean(value);
+};
+
 // Parse Menu sheet
 const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
@@ -126,6 +132,13 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
     addonIds: parseString(row['addonIds']),
     isSpecialRequest: parseBoolean(row['isSpecialRequest']),
+    visibilityPos: parseVisibility(row['visibilityPos']),
+    visibilityKiosk: parseVisibility(row['visibilityKiosk']),
+    visibilityOnline: parseVisibility(row['visibilityOnline']),
+    visibilityThirdParty: parseVisibility(row['visibilityThirdParty']),
+    availableDays: parseString(row['availableDays']),
+    availableTimeStart: parseString(row['availableTimeStart']),
+    availableTimeEnd: parseString(row['availableTimeEnd']),
   }));
 };
 

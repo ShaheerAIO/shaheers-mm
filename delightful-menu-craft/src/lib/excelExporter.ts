@@ -24,12 +24,14 @@ const HEADERS = {
   MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder'],
   CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder'],
   ITEM: [
-    'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture', 
+    'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture',
     'onlineImage', 'landscapeImage', 'thirdPartyImage', 'kioskItemImage', 'itemPrice',
     'taxLinkedWithParentSetting', 'calculatePricesWithTaxIncluded', 'takeoutException',
     'stockStatus', 'stockValue', 'orderQuantityLimit', 'minLimit', 'maxLimit', 'noMaxLimit',
     'stationIds', 'preparationTime', 'calories', 'tagIds', 'inheritTagsFromCategory',
-    'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest'
+    'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
+    'visibilityPos', 'visibilityKiosk', 'visibilityOnline', 'visibilityThirdParty',
+    'availableDays', 'availableTimeStart', 'availableTimeEnd',
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
   CATEGORY_MODIFIER_GROUPS: ['modifierGroupId', 'categoryId', 'sortOrder'],
