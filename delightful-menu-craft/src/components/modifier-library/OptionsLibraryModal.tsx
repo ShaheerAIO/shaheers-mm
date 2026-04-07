@@ -128,17 +128,17 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl h-[85vh] flex flex-col p-0">
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 pr-14">
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
             Modifier Options Library
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col gap-4 px-6 pb-6 min-h-0 overflow-hidden">
           {/* Search and Create */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex shrink-0 items-center gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -173,7 +173,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
 
           {/* Create Form */}
           {showCreateForm && (
-            <div className="mb-4 p-4 bg-muted/50 rounded-lg border border-border space-y-3">
+            <div className="shrink-0 p-4 bg-muted/50 rounded-lg border border-border space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Option Name *</Label>
@@ -362,7 +362,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
           </ScrollArea>
 
           {/* Summary */}
-          <div className="mt-3 text-xs text-muted-foreground">
+          <div className="shrink-0 text-xs text-muted-foreground">
             {modifierOptions.length} total option{modifierOptions.length !== 1 ? 's' : ''}
             {searchTerm && ` • ${filteredOptions.length} shown`}
           </div>
