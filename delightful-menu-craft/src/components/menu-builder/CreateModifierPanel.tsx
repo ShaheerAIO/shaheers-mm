@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -10,8 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import type { Modifier, ModifierOption } from '@/types/menu';
+import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 
 interface CreateModifierPanelProps {
   itemId: number;
@@ -50,12 +57,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   // Modifier fields
   const [modifierName, setModifierName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
+  /** Match modifier name vs separate POS label */
+  const [posDisplayMode, setPosDisplayMode] = useState<'match_modifier' | 'custom_pos'>('match_modifier');
+  const [prefix, setPrefix] = useState('');
   const [minSelector, setMinSelector] = useState(0);
   const [maxSelector, setMaxSelector] = useState(1);
   const [noMaxSelection, setNoMaxSelection] = useState(false);
   const [isOptional, setIsOptional] = useState('Select any');
   const [onPrem, setOnPrem] = useState(true);
   const [offPrem, setOffPrem] = useState(true);
+  const [pizzaSelection, setPizzaSelection] = useState(false);
+  const [isSizeModifier, setIsSizeModifier] = useState(false);
+
+  // Modifier type mode — mutually exclusive
+  type ModifierMode = 'flat' | 'nested';
+  const [modifierMode, setModifierMode] = useState<ModifierMode>('flat');
 
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
@@ -77,6 +93,19 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       .map(id => modifiers.find(m => m.id === id))
       .filter((m): m is Modifier => m !== undefined);
   }, [nestedModifierIds, modifiers]);
+
+  // Auto-set minSelector to 1 when "Required" is selected
+  useEffect(() => {
+    if (isOptional === 'Required' && minSelector === 0) {
+      setMinSelector(1);
+    }
+  }, [isOptional, minSelector]);
+
+  useEffect(() => {
+    if (posDisplayMode === 'match_modifier') {
+      setPosDisplayName(modifierName);
+    }
+  }, [modifierName, posDisplayMode]);
 
   // Watch for pending option from CreateOptionPanel
   useEffect(() => {
@@ -182,8 +211,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       alert('Modifier name is required');
       return;
     }
-    if (options.length === 0) {
+    if (modifierMode === 'flat' && options.length === 0) {
       alert('At least one option is required');
+      return;
+    }
+    if (modifierMode === 'nested' && nestedModifierIds.length === 0) {
+      alert('At least one nested modifier is required');
       return;
     }
 
@@ -192,7 +225,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     const newModifier: Modifier = {
       id: newModifierId,
       modifierName: modifierName.trim(),
-      posDisplayName: posDisplayName.trim() || modifierName.trim(),
+      posDisplayName:
+        posDisplayMode === 'match_modifier'
+          ? modifierName.trim()
+          : posDisplayName.trim() || modifierName.trim(),
       minSelector,
       maxSelector,
       noMaxSelection,
@@ -206,12 +242,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       canGuestSelectMoreModifiers: true,
       multiSelect: false,
       limitIndividualModifierSelection: false,
-      prefix: '',
-      pizzaSelection: false,
+      prefix: prefix.trim(),
+      pizzaSelection,
       price: 0,
       parentModifierId: 0,
       modifierIds: '',
-      isSizeModifier: false,
+      isSizeModifier,
     };
     addModifier(newModifier);
 
@@ -241,15 +277,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         modifierOptionId: optionId,
         isDefaultSelected: opt.isDefaultSelected,
         maxLimit: opt.price,
-        optionDisplayName: opt.optionName,
+        optionDisplayName: opt.posDisplayName.trim() || opt.optionName,
         sortOrder: index,
       });
     });
 
-    // 3. Set up nested modifiers
-    if (nestedModifierIds.length > 0) {
-      // We already added the modifier above, now update it with nested info
-      // Need to use setTimeout to ensure the modifier exists in store first
+    // 3. Set up nested modifiers (only in nested mode)
+    if (modifierMode === 'nested' && nestedModifierIds.length > 0) {
       const modifierIdsStr = nestedModifierIds.join(',');
       updateModifier(newModifierId, {
         modifierIds: modifierIdsStr,
@@ -288,23 +322,30 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const resetForm = () => {
     setModifierName('');
     setPosDisplayName('');
+    setPosDisplayMode('match_modifier');
+    setPrefix('');
     setMinSelector(0);
     setMaxSelector(1);
     setNoMaxSelection(false);
     setIsOptional('Select any');
     setOnPrem(true);
     setOffPrem(true);
+    setPizzaSelection(false);
+    setIsSizeModifier(false);
     setOptions([]);
     setNestedModifierIds([]);
+    setModifierMode('flat');
   };
 
-  const isValid = modifierName.trim().length > 0 && options.length > 0;
+  const isValid =
+    modifierName.trim().length > 0 &&
+    (modifierMode === 'flat' ? options.length > 0 : nestedModifierIds.length > 0);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-panel-border flex-shrink-0">
-        <h3 className="font-semibold">Create Modifier</h3>
+      <div className="flex items-center justify-between px-3 py-3 sm:px-4 border-b border-panel-border flex-shrink-0">
+        <h3 className="font-semibold text-sm sm:text-base">Create Modifier</h3>
         <button
           onClick={handleCancel}
           className="p-1.5 rounded-md hover:bg-muted transition-colors"
@@ -314,103 +355,233 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-        {/* Modifier Name */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-5 scrollbar-thin">
+        {/* Required name — always visible */}
         <div className="space-y-2">
-          <Label className="section-header">Modifier Name *</Label>
+          <Label className="section-header">Modifier name *</Label>
+          <p className="text-xs text-muted-foreground">
+            Internal name (reports, Excel, library). POS and ticket labels are in the section below.
+          </p>
           <input
             type="text"
             value={modifierName}
-            onChange={(e) => {
-              setModifierName(e.target.value);
-              if (!posDisplayName) {
-                setPosDisplayName(e.target.value);
-              }
-            }}
-            className="input-field text-lg font-semibold w-full"
+            onChange={(e) => setModifierName(e.target.value)}
+            className="input-field text-base sm:text-lg font-semibold w-full"
             placeholder="e.g., Toppings, Size, Add-ons"
             autoFocus
           />
         </div>
 
-        {/* Channel Availability */}
-        <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-          <Label className="section-header">Channel Availability</Label>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="onPrem" className="text-sm">On-Premise (Dine-in)</Label>
-              <p className="text-xs text-muted-foreground">Show for in-house orders</p>
-            </div>
-            <Switch
-              id="onPrem"
-              checked={onPrem}
-              onCheckedChange={setOnPrem}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="offPrem" className="text-sm">Off-Premise (Delivery/Pickup)</Label>
-              <p className="text-xs text-muted-foreground">Show for online/delivery orders</p>
-            </div>
-            <Switch
-              id="offPrem"
-              checked={offPrem}
-              onCheckedChange={setOffPrem}
-            />
-          </div>
-        </div>
-
-        {/* Selection Rules */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-2">
-            <Label className="section-header text-xs">Min Selection</Label>
-            <input
-              type="number"
-              min={0}
-              value={minSelector}
-              onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
-              className="input-field w-full"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="section-header text-xs">Max Selection</Label>
-            <input
-              type="number"
-              min={1}
-              value={maxSelector}
-              onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
-              disabled={noMaxSelection}
-              className="input-field w-full"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="section-header text-xs">No Max</Label>
-            <div className="pt-2">
-              <Switch
-                checked={noMaxSelection}
-                onCheckedChange={setNoMaxSelection}
-              />
-            </div>
+        {/* Flat vs nested — compact toggle buttons */}
+        <div className="space-y-1.5">
+          <Label className="section-header">Structure</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setModifierMode('flat');
+                setNestedModifierIds([]);
+              }}
+              className={cn(
+                'flex items-start gap-2 px-2 py-2 rounded-lg border text-left transition-colors',
+                modifierMode === 'flat'
+                  ? 'bg-primary/10 border-primary text-primary'
+                  : 'border-border text-muted-foreground hover:bg-muted/50',
+              )}
+            >
+              <List className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="font-semibold text-[11px] leading-tight">Flat options</div>
+                <div className="text-[9px] font-normal opacity-80 leading-snug mt-0.5">
+                  List of choices
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setModifierMode('nested');
+                setOptions([]);
+              }}
+              className={cn(
+                'flex items-start gap-2 px-2 py-2 rounded-lg border text-left transition-colors',
+                modifierMode === 'nested'
+                  ? 'bg-primary/10 border-primary text-primary'
+                  : 'border-border text-muted-foreground hover:bg-muted/50',
+              )}
+            >
+              <GitBranch className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="font-semibold text-[11px] leading-tight">Nested</div>
+                <div className="text-[9px] font-normal opacity-80 leading-snug mt-0.5">
+                  Sub-modifiers
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
-        {/* Selection Type */}
-        <div className="space-y-2">
-          <Label className="section-header">Selection Type</Label>
-          <Select value={isOptional} onValueChange={setIsOptional}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Select any">Optional (Select any)</SelectItem>
-              <SelectItem value="Required">Required</SelectItem>
-              <SelectItem value="Select one">Select One</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* POS / ticket naming — collapsible; uses Selects inside */}
+        <Accordion
+          type="multiple"
+          defaultValue={[]}
+          className="rounded-lg border border-border bg-muted/10 overflow-hidden"
+        >
+          <AccordionItem value="pos-labels" className="border-b border-border px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              POS & ticket labels
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">POS display name</Label>
+                  <Select
+                    value={posDisplayMode}
+                    onValueChange={(v: 'match_modifier' | 'custom_pos') => {
+                      setPosDisplayMode(v);
+                      if (v === 'match_modifier') {
+                        setPosDisplayName(modifierName);
+                      } else {
+                        setPosDisplayName((prev) => (prev.trim() ? prev : modifierName));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="match_modifier">Same as modifier name</SelectItem>
+                      <SelectItem value="custom_pos">Custom POS name</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {posDisplayMode === 'custom_pos' && (
+                    <input
+                      type="text"
+                      value={posDisplayName}
+                      onChange={(e) => setPosDisplayName(e.target.value)}
+                      className="input-field w-full text-sm"
+                      placeholder="Guest-facing POS label"
+                    />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="modPrefix" className="text-xs text-muted-foreground">
+                    Ticket / KDS prefix (optional)
+                  </Label>
+                  <input
+                    id="modPrefix"
+                    type="text"
+                    value={prefix}
+                    onChange={(e) => setPrefix(e.target.value)}
+                    className="input-field w-full text-sm"
+                    placeholder="e.g. TOP, SIDE"
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        {/* Options */}
-        <div className="space-y-3">
+          <AccordionItem value="channels-product" className="border-b border-border px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Channels & product
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="onPrem" className="text-sm">On-premise</Label>
+                    <p className="text-[10px] text-muted-foreground">Dine-in orders</p>
+                  </div>
+                  <Switch id="onPrem" checked={onPrem} onCheckedChange={setOnPrem} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="offPrem" className="text-sm">Off-premise</Label>
+                    <p className="text-[10px] text-muted-foreground">Delivery / pickup</p>
+                  </div>
+                  <Switch id="offPrem" checked={offPrem} onCheckedChange={setOffPrem} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="pizzaSelection" className="text-sm">Pizza selection</Label>
+                    <p className="text-[10px] text-muted-foreground">Left / right / whole</p>
+                  </div>
+                  <Switch
+                    id="pizzaSelection"
+                    checked={pizzaSelection}
+                    onCheckedChange={setPizzaSelection}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="isSizeModifier" className="text-sm">Size modifier</Label>
+                    <p className="text-[10px] text-muted-foreground">e.g. 10&quot;, 14&quot;, 20&quot;</p>
+                  </div>
+                  <Switch
+                    id="isSizeModifier"
+                    checked={isSizeModifier}
+                    onCheckedChange={setIsSizeModifier}
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="selection-rules" className="border-b-0 px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Selection rules
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={minSelector}
+                      onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
+                      className="input-field w-full text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={maxSelector}
+                      onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
+                      disabled={noMaxSelection}
+                      className="input-field w-full text-sm disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase text-muted-foreground">No max</Label>
+                    <div className="flex h-9 items-center">
+                      <Switch checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="section-header text-xs">Selection type</Label>
+                  <Select value={isOptional} onValueChange={setIsOptional}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Select any">Optional (select any)</SelectItem>
+                      <SelectItem value="Required">Required</SelectItem>
+                      <SelectItem value="Select one">Select one</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        {/* Options — flat mode only */}
+        {modifierMode === 'flat' && <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label className="section-header">
               Options ({options.length}) *
@@ -418,13 +589,15 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             <div className="flex gap-2">
               {availableOptions.length > 0 && (
                 <Select onValueChange={handleAddExistingOption}>
-                  <SelectTrigger className="w-28">
-                    <span className="text-xs">Add Existing</span>
+                  <SelectTrigger className="w-[min(100%,11rem)] min-w-[8rem]">
+                    <span className="text-xs truncate">Add Existing</span>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-w-[min(100vw-2rem,26rem)]">
                     {availableOptions.map((option) => (
                       <SelectItem key={option.id} value={option.id.toString()}>
-                        {option.optionName}
+                        <span className="line-clamp-2 text-left whitespace-normal">
+                          {formatModifierOptionForSelect(option)}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -449,15 +622,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                   className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
                 >
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">
-                        {option.optionName}
-                      </span>
-                      {option.type === 'new' && (
-                        <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">
-                          New
-                        </span>
-                      )}
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{option.optionName}</span>
+                        {option.type === 'new' && (
+                          <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">
+                            New
+                          </span>
+                        )}
+                      </div>
+                      {option.posDisplayName.trim() &&
+                        option.posDisplayName.trim() !== option.optionName && (
+                          <span className="text-xs text-muted-foreground">
+                            POS: {option.posDisplayName}
+                          </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">$</span>
@@ -495,10 +674,11 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
-        {/* Nested Modifiers */}
-        <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+        {/* Nested Modifiers — nested mode only */}
+        {modifierMode === 'nested' && (
+        <div className="space-y-3 rounded-lg border border-border bg-muted/5 p-3">
           <div className="flex items-center justify-between">
             <Label className="section-header flex items-center gap-1.5">
               <GitBranch className="w-3.5 h-3.5" />
@@ -511,16 +691,18 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                   setNestedModifierIds([...nestedModifierIds, id]);
                 }
               }}>
-                <SelectTrigger className="w-36">
-                  <span className="text-xs flex items-center gap-1">
-                    <Plus className="w-3 h-3" />
+                <SelectTrigger className="w-[min(100%,11rem)] min-w-[8rem]">
+                  <span className="text-xs flex items-center gap-1 truncate">
+                    <Plus className="w-3 h-3 shrink-0" />
                     Add Nested
                   </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[min(100vw-2rem,26rem)]">
                   {availableNestedModifiers.map((mod) => (
                     <SelectItem key={mod.id} value={mod.id.toString()}>
-                      {mod.modifierName}
+                      <span className="line-clamp-2 text-left whitespace-normal">
+                        {formatModifierForSelect(mod)}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -537,7 +719,16 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                 className="flex items-center gap-3 p-2.5 bg-background rounded-lg border border-border group"
               >
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{child.modifierName}</span>
+                  <span className="text-sm font-medium">
+                    {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName
+                      ? child.posDisplayName
+                      : child.modifierName}
+                  </span>
+                  {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName && (
+                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                      {child.modifierName}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                     <span>
                       {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
@@ -559,10 +750,11 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border bg-panel-bg flex gap-2">
+      <div className="px-3 py-3 sm:p-4 border-t border-border bg-panel-bg flex gap-2 flex-shrink-0">
         <button
           onClick={handleCancel}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors"

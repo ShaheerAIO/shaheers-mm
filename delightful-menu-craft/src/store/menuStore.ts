@@ -21,6 +21,16 @@ import type {
   AiPatch,
 } from '@/types/menu';
 
+/** Remove an id from comma-separated modifier id lists (nested / group refs). */
+function stripModifierIdFromCommaList(list: string | undefined, removeId: number): string {
+  if (!list?.trim()) return '';
+  return list
+    .split(',')
+    .map((x) => parseInt(x.trim(), 10))
+    .filter((n) => !isNaN(n) && n > 0 && n !== removeId)
+    .join(',');
+}
+
 interface MenuState {
   // UI State
   activeTab: TabType;
@@ -451,11 +461,37 @@ export const useMenuStore = create<MenuState>()(
       updateModifier: (id, updates) => set((state) => ({
         modifiers: state.modifiers.map((m) => (m.id === id ? { ...m, ...updates } : m)),
       })),
-      deleteModifier: (id) => set((state) => ({
-        modifiers: state.modifiers.filter((m) => m.id !== id),
-        itemModifiers: state.itemModifiers.filter((im) => im.modifierId !== id),
-        modifierModifierOptions: state.modifierModifierOptions.filter((mmo) => mmo.modifierId !== id),
-      })),
+      deleteModifier: (id) =>
+        set((state) => {
+          const strip = (s: string | undefined) => stripModifierIdFromCommaList(s, id);
+          const modifiers = state.modifiers
+            .filter((m) => m.id !== id)
+            .map((m) => {
+              const modifierIds = strip(m.modifierIds);
+              const parentModifierId = m.parentModifierId === id ? 0 : m.parentModifierId;
+              return {
+                ...m,
+                modifierIds,
+                parentModifierId,
+                isNested: parentModifierId > 0 ? m.isNested : false,
+                addNested: modifierIds.length > 0,
+              };
+            });
+          return {
+            modifiers,
+            itemModifiers: state.itemModifiers.filter((im) => im.modifierId !== id),
+            modifierModifierOptions: state.modifierModifierOptions.filter(
+              (mmo) => mmo.modifierId !== id,
+            ),
+            itemModifierGroups: state.itemModifierGroups.filter((g) => g.modifierId !== id),
+            modifierGroups: state.modifierGroups.map((mg) => ({
+              ...mg,
+              modifierIds: strip(mg.modifierIds),
+            })),
+            selectedModifierId:
+              state.selectedModifierId === id ? null : state.selectedModifierId,
+          };
+        }),
       
       // Modifier Option Actions
       addModifierOption: (option) => set((state) => ({ modifierOptions: [...state.modifierOptions, option] })),

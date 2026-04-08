@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Item } from '@/types/menu';
 import {
   Select,
@@ -33,6 +33,10 @@ interface DraftState {
   itemPrice: number;
   itemDescription: string;
   stockStatus: string;
+  orderQuantityLimit: boolean;
+  minLimit: number;
+  maxLimit: number;
+  noMaxLimit: boolean;
   inheritModifiersFromCategory: boolean;
   preparationTime: number;
   calories: number;
@@ -94,13 +98,43 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   // Get nested child modifiers for a given modifier
   const getNestedModifiers = (modifierId: number) => {
     const mod = modifiers.find(m => m.id === modifierId);
-    if (!mod?.modifierIds) return [];
-    return mod.modifierIds
-      .split(',')
-      .map(id => parseInt(id.trim()))
-      .filter(id => !isNaN(id) && id > 0)
-      .map(id => modifiers.find(m => m.id === id))
-      .filter((m): m is NonNullable<typeof m> => m !== undefined);
+    if (!mod) return [];
+    // Primary: explicit modifierIds string
+    if (mod.modifierIds) {
+      const fromIds = mod.modifierIds
+        .split(',')
+        .map(id => parseInt(id.trim()))
+        .filter(id => !isNaN(id) && id > 0)
+        .map(id => modifiers.find(m => m.id === id))
+        .filter((m): m is NonNullable<typeof m> => m !== undefined);
+      if (fromIds.length > 0) return fromIds;
+    }
+    // Fallback: find modifiers that declare this as their parent
+    return modifiers.filter(m => m.parentModifierId === modifierId);
+  };
+
+  // Get options for a child modifier (join table first, parentModifierId fallback)
+  const getChildModifierOptions = (modifierId: number) => {
+    const joinEntries = modifierModifierOptions
+      .filter(mmo => mmo.modifierId === modifierId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    if (joinEntries.length > 0) {
+      return joinEntries.map(mmo => ({
+        ...mmo,
+        option: modifierOptions.find(o => o.id === mmo.modifierOptionId),
+      }));
+    }
+    return modifierOptions
+      .filter(o => o.parentModifierId === modifierId)
+      .map((o, idx) => ({
+        modifierId,
+        modifierOptionId: o.id,
+        isDefaultSelected: false,
+        maxLimit: 0,
+        optionDisplayName: o.optionName,
+        sortOrder: idx,
+        option: o,
+      }));
   };
   
   // Draft state for all editable fields
@@ -111,6 +145,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     itemPrice: item.itemPrice,
     itemDescription: item.itemDescription,
     stockStatus: item.stockStatus,
+    orderQuantityLimit: item.orderQuantityLimit ?? false,
+    minLimit: item.minLimit ?? 0,
+    maxLimit: item.maxLimit ?? 0,
+    noMaxLimit: item.noMaxLimit ?? true,
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
     calories: item.calories,
@@ -123,8 +161,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     availableTimeEnd: item.availableTimeEnd ?? '',
   });
 
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [displayNameMode, setDisplayNameMode] = useState<DisplayNameMode>('same_as_item');
+  const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
   const [pendingModifierIds, setPendingModifierIds] = useState<number[]>([]);
@@ -146,6 +184,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemPrice: item.itemPrice,
       itemDescription: item.itemDescription,
       stockStatus: item.stockStatus,
+      orderQuantityLimit: item.orderQuantityLimit ?? false,
+      minLimit: item.minLimit ?? 0,
+      maxLimit: item.maxLimit ?? 0,
+      noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
@@ -157,10 +199,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       availableTimeStart: item.availableTimeStart ?? '',
       availableTimeEnd: item.availableTimeEnd ?? '',
     });
-    setAvailabilityOpen(false);
     setPriceInput(item.itemPrice.toFixed(2));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
+    setExpandedNestedChildIds([]);
     setStationDraft(
       item.stationIds
         ? item.stationIds.split(',').map(id => id.trim()).filter(Boolean)
@@ -201,6 +243,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.itemPrice !== item.itemPrice ||
       draft.itemDescription !== item.itemDescription ||
       draft.stockStatus !== item.stockStatus ||
+      draft.orderQuantityLimit !== (item.orderQuantityLimit ?? false) ||
+      draft.minLimit !== (item.minLimit ?? 0) ||
+      draft.maxLimit !== (item.maxLimit ?? 0) ||
+      draft.noMaxLimit !== (item.noMaxLimit ?? true) ||
       draft.inheritModifiersFromCategory !== item.inheritModifiersFromCategory ||
       draft.preparationTime !== item.preparationTime ||
       draft.calories !== item.calories ||
@@ -226,6 +272,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemPrice: draft.itemPrice,
       itemDescription: draft.itemDescription,
       stockStatus: draft.stockStatus,
+      orderQuantityLimit: draft.orderQuantityLimit,
+      minLimit: draft.minLimit,
+      maxLimit: draft.maxLimit,
+      noMaxLimit: draft.noMaxLimit,
       inheritModifiersFromCategory: draft.inheritModifiersFromCategory,
       preparationTime: draft.preparationTime,
       calories: draft.calories,
@@ -277,6 +327,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemPrice: item.itemPrice,
       itemDescription: item.itemDescription,
       stockStatus: item.stockStatus,
+      orderQuantityLimit: item.orderQuantityLimit ?? false,
+      minLimit: item.minLimit ?? 0,
+      maxLimit: item.maxLimit ?? 0,
+      noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
@@ -399,7 +453,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </div>
       )}
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
         {/* Item Name */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -511,192 +565,261 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </div>
         </div>
 
-        {/* Availability */}
-        <div className="border border-border rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setAvailabilityOpen(o => !o)}
-            className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Availability
-            </span>
-            {availabilityOpen
-              ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-              : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-            }
-          </button>
+        {/* Technical sections — collapsed by default */}
+        <Accordion
+          type="multiple"
+          defaultValue={[]}
+          className="rounded-lg border border-border bg-muted/10 overflow-hidden"
+        >
+          <AccordionItem value="order-quantity" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Order quantity
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label htmlFor="orderQuantityLimit" className="text-sm">Limit quantity per order</Label>
+                    <p className="text-xs text-muted-foreground">Set min/max how many of this item can be ordered at once</p>
+                  </div>
+                  <Switch
+                    id="orderQuantityLimit"
+                    checked={draft.orderQuantityLimit}
+                    onCheckedChange={(checked) => setDraft(d => ({ ...d, orderQuantityLimit: checked }))}
+                  />
+                </div>
+                {draft.orderQuantityLimit && (
+                  <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Minimum</Label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={draft.minLimit}
+                          onChange={(e) =>
+                            setDraft(d => ({
+                              ...d,
+                              minLimit: Math.max(0, parseInt(e.target.value, 10) || 0),
+                            }))
+                          }
+                          className="input-field w-full"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Maximum</Label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={draft.maxLimit}
+                          disabled={draft.noMaxLimit}
+                          onChange={(e) =>
+                            setDraft(d => ({
+                              ...d,
+                              maxLimit: Math.max(1, parseInt(e.target.value, 10) || 1),
+                            }))
+                          }
+                          className="input-field w-full disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label htmlFor="noMaxLimit" className="text-sm">No maximum</Label>
+                        <p className="text-xs text-muted-foreground">Allow unlimited quantity on a single order</p>
+                      </div>
+                      <Switch
+                        id="noMaxLimit"
+                        checked={draft.noMaxLimit}
+                        onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxLimit: checked }))}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-          {availabilityOpen && (
-            <div className="p-3 space-y-4 border-t border-border">
-              {/* Channel toggles */}
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Channels</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    { key: 'visibilityPos', label: 'POS' },
-                    { key: 'visibilityKiosk', label: 'Kiosk' },
-                    { key: 'visibilityOnline', label: 'Online' },
-                    { key: 'visibilityThirdParty', label: '3rd Party' },
-                  ] as const).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setDraft(d => ({ ...d, [key]: !d[key] }))}
-                      className={cn(
-                        "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
-                        draft[key]
-                          ? "bg-primary/10 border-primary/30 text-primary"
-                          : "bg-muted/50 border-border text-muted-foreground line-through"
-                      )}
-                    >
-                      <span>{label}</span>
-                      <span className="text-xs">{draft[key] ? '✓' : '✕'}</span>
-                    </button>
-                  ))}
+          <AccordionItem value="availability" className="border-b border-border px-3">
+            <AccordionTrigger className="px-0 py-3 hover:no-underline items-start gap-2 [&>svg]:mt-1">
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Availability</div>
+                <div className="text-[10px] font-normal normal-case text-muted-foreground truncate mt-0.5 pr-2">
+                  {buildAvailabilitySummary(draft)}
                 </div>
               </div>
-
-              {/* Day of week */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() => {
-                      const activeDays = draft.availableDays
-                        ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                        : [];
-                      // toggle all-days vs current-only
-                      setDraft(d => ({ ...d, availableDays: activeDays.length === 7 || activeDays.length === 0 ? '' : DAYS.join(',') }));
-                    }}
-                  >
-                    {(draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7)
-                      ? 'All days'
-                      : 'Select all'}
-                  </button>
-                </div>
-                <div className="flex gap-1">
-                  {DAYS.map(day => {
-                    const activeDays = draft.availableDays
-                      ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                      : [];
-                    const allActive = activeDays.length === 0;
-                    const isActive = allActive || activeDays.includes(day);
-                    return (
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Channels</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: 'visibilityPos', label: 'POS' },
+                      { key: 'visibilityKiosk', label: 'Kiosk' },
+                      { key: 'visibilityOnline', label: 'Online' },
+                      { key: 'visibilityThirdParty', label: '3rd Party' },
+                    ] as const).map(({ key, label }) => (
                       <button
-                        key={day}
+                        key={key}
                         type="button"
-                        onClick={() => {
-                          const current = draft.availableDays
-                            ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                            : DAYS.slice();
-                          // If currently showing "all" (empty string means all), expand to all then toggle off the clicked
-                          const base = draft.availableDays === '' ? [...DAYS] : current;
-                          const next = base.includes(day)
-                            ? base.filter(d => d !== day)
-                            : [...base, day];
-                          // If all 7 selected, store empty string (= all days)
-                          setDraft(d => ({ ...d, availableDays: next.length === 7 ? '' : next.join(',') }));
-                        }}
+                        onClick={() => setDraft(d => ({ ...d, [key]: !d[key] }))}
                         className={cn(
-                          "flex-1 py-1.5 rounded text-xs font-medium transition-colors border",
-                          isActive
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-muted/50 text-muted-foreground border-border"
+                          "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
+                          draft[key]
+                            ? "bg-primary/10 border-primary/30 text-primary"
+                            : "bg-muted/50 border-border text-muted-foreground line-through"
                         )}
                       >
-                        {day.slice(0, 1)}
+                        <span>{label}</span>
+                        <span className="text-xs">{draft[key] ? '✓' : '✕'}</span>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-                {/* Show which days are active as a readable label */}
-                <p className="text-xs text-muted-foreground">
-                  {draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7
-                    ? 'Available every day'
-                    : `Available: ${draft.availableDays.split(',').filter(Boolean).join(', ')}`
-                  }
-                </p>
-              </div>
 
-              {/* Time window */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours</p>
-                  {(draft.availableTimeStart || draft.availableTimeEnd) && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
-                      onClick={() => setDraft(d => ({ ...d, availableTimeStart: '', availableTimeEnd: '' }))}
+                      onClick={() => {
+                        const activeDays = draft.availableDays
+                          ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
+                          : [];
+                        setDraft(d => ({ ...d, availableDays: activeDays.length === 7 || activeDays.length === 0 ? '' : DAYS.join(',') }));
+                      }}
                     >
-                      Clear (all hours)
+                      {(draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7)
+                        ? 'All days'
+                        : 'Select all'}
                     </button>
+                  </div>
+                  <div className="flex gap-1">
+                    {DAYS.map(day => {
+                      const activeDays = draft.availableDays
+                        ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
+                        : [];
+                      const allActive = activeDays.length === 0;
+                      const isActive = allActive || activeDays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            const current = draft.availableDays
+                              ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
+                              : DAYS.slice();
+                            const base = draft.availableDays === '' ? [...DAYS] : current;
+                            const next = base.includes(day)
+                              ? base.filter(d => d !== day)
+                              : [...base, day];
+                            setDraft(d => ({ ...d, availableDays: next.length === 7 ? '' : next.join(',') }));
+                          }}
+                          className={cn(
+                            "flex-1 py-1.5 rounded text-xs font-medium transition-colors border",
+                            isActive
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/50 text-muted-foreground border-border"
+                          )}
+                        >
+                          {day.slice(0, 1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7
+                      ? 'Available every day'
+                      : `Available: ${draft.availableDays.split(',').filter(Boolean).join(', ')}`
+                    }
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours</p>
+                    {(draft.availableTimeStart || draft.availableTimeEnd) && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => setDraft(d => ({ ...d, availableTimeStart: '', availableTimeEnd: '' }))}
+                      >
+                        Clear (all hours)
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+                      <input
+                        type="time"
+                        value={draft.availableTimeStart}
+                        onChange={e => setDraft(d => ({ ...d, availableTimeStart: e.target.value }))}
+                        className="input-field flex-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+                      <input
+                        type="time"
+                        value={draft.availableTimeEnd}
+                        onChange={e => setDraft(d => ({ ...d, availableTimeEnd: e.target.value }))}
+                        className="input-field flex-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                  {!draft.availableTimeStart && !draft.availableTimeEnd && (
+                    <p className="text-xs text-muted-foreground">Available all hours</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 flex-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
-                    <input
-                      type="time"
-                      value={draft.availableTimeStart}
-                      onChange={e => setDraft(d => ({ ...d, availableTimeStart: e.target.value }))}
-                      className="input-field flex-1 text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
-                    <input
-                      type="time"
-                      value={draft.availableTimeEnd}
-                      onChange={e => setDraft(d => ({ ...d, availableTimeEnd: e.target.value }))}
-                      className="input-field flex-1 text-sm"
-                    />
-                  </div>
-                </div>
-                {!draft.availableTimeStart && !draft.availableTimeEnd && (
-                  <p className="text-xs text-muted-foreground">Available all hours</p>
-                )}
               </div>
-            </div>
-          )}
-        </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        {/* Modifiers */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="section-header">Modifiers</Label>
-            <div className="flex gap-2">
-              {availableModifiers.length > 0 && (
-                <Select onValueChange={handleAddModifier}>
-                  <SelectTrigger className="w-32">
-                    <span className="text-xs flex items-center gap-1">
-                      <Plus className="w-3 h-3" />
-                      Add
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableModifiers.map((mod) => (
-                      <SelectOption key={mod.id} value={mod.id.toString()}>
-                        {mod.modifierName}
-                      </SelectOption>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <button
-                className="btn-add"
-                onClick={() => setIsCreatingModifier(true)}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New
-              </button>
-            </div>
-          </div>
-          
-          {attachedModifiers.length > 0 ? (
-            <Accordion type="multiple" className="space-y-1">
+          <AccordionItem value="item-modifiers" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Modifiers
+                {attachedModifiers.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                    ({attachedModifiers.length})
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <div className="flex items-center justify-end gap-2">
+                  {availableModifiers.length > 0 && (
+                    <Select onValueChange={handleAddModifier}>
+                      <SelectTrigger className="w-32">
+                        <span className="text-xs flex items-center gap-1">
+                          <Plus className="w-3 h-3" />
+                          Add
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModifiers.map((mod) => (
+                          <SelectOption key={mod.id} value={mod.id.toString()}>
+                            {mod.modifierName}
+                          </SelectOption>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <button
+                    className="btn-add"
+                    onClick={() => setIsCreatingModifier(true)}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New
+                  </button>
+                </div>
+
+                {attachedModifiers.length > 0 ? (
+                  <Accordion type="multiple" className="space-y-1">
               {attachedModifiers.map((modifier) => {
                 const options = getModifierOptions(modifier.id);
                 const isPending = pendingModifierIds.includes(modifier.id);
@@ -734,9 +857,14 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3">
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground mb-2">
-                          {modifier.isOptional || 'Required'} • 
-                          Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                        <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
+                          <span>{modifier.isOptional || 'Required'} • Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}</span>
+                          {modifier.pizzaSelection && (
+                            <span className="bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded font-medium">Pizza</span>
+                          )}
+                          {modifier.isSizeModifier && (
+                            <span className="bg-purple-500/10 text-purple-600 px-1.5 py-0.5 rounded font-medium">Size</span>
+                          )}
                         </div>
                         {options.map((opt) => (
                           <div key={opt.modifierOptionId} className="flex items-center justify-between text-sm">
@@ -758,19 +886,69 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                           const nested = getNestedModifiers(modifier.id);
                           if (nested.length === 0) return null;
                           return (
-                            <div className="mt-3 pt-2 border-t border-border/50">
+                            <div className="mt-3 pt-2 border-t border-border/50 space-y-1.5">
                               <p className="text-xs font-medium text-muted-foreground mb-1.5">
                                 Nested modifiers:
                               </p>
-                              {nested.map(child => (
-                                <div key={child.id} className="flex items-center gap-1.5 text-xs text-muted-foreground py-0.5">
-                                  <span className="text-primary">↳</span>
-                                  <span className="font-medium text-foreground">{child.modifierName}</span>
-                                  <span>
-                                    ({modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options)
-                                  </span>
-                                </div>
-                              ))}
+                              {nested.map(child => {
+                                const childOpts = getChildModifierOptions(child.id);
+                                const isExpanded = expandedNestedChildIds.includes(child.id);
+                                return (
+                                  <div key={child.id} className="rounded border border-border/60 overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedNestedChildIds(prev =>
+                                          prev.includes(child.id)
+                                            ? prev.filter(id => id !== child.id)
+                                            : [...prev, child.id]
+                                        )
+                                      }
+                                      className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                      )}
+                                      <span className="font-medium text-foreground flex-1 text-left">
+                                        {child.posDisplayName || child.modifierName}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {childOpts.length} options
+                                      </span>
+                                    </button>
+                                    {isExpanded && (
+                                      <div className="border-t border-border/50 bg-muted/25 px-3 py-2 pl-6 space-y-1">
+                                        {childOpts.length === 0 ? (
+                                          <p className="text-xs text-muted-foreground py-0.5">No options defined</p>
+                                        ) : (
+                                          childOpts.map(opt => (
+                                            <div
+                                              key={opt.modifierOptionId}
+                                              className="flex items-center justify-between text-xs py-0.5 border-b border-border/40 last:border-0"
+                                            >
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-foreground">
+                                                  {opt.option?.posDisplayName || opt.option?.optionName || opt.optionDisplayName}
+                                                </span>
+                                                {opt.isDefaultSelected && (
+                                                  <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">
+                                                    Default
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <span className="text-muted-foreground tabular-nums">
+                                                {opt.maxLimit > 0 ? `+$${opt.maxLimit.toFixed(2)}` : '$0.00'}
+                                              </span>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           );
                         })()}
@@ -780,142 +958,176 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 );
               })}
             </Accordion>
-          ) : (
-            <p className="text-sm text-muted-foreground">No modifiers attached</p>
-          )}
-        </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No modifiers attached</p>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        {/* Tags */}
-        {itemTags.length > 0 && (
-          <div className="space-y-2">
-            <Label className="section-header">Tags</Label>
-            <div className="flex flex-wrap gap-1">
-              {itemTags.map(tag => (
-                <span 
-                  key={tag.id} 
-                  className="text-xs bg-muted px-2 py-1 rounded"
-                >
-                  {tag.name}
+          <AccordionItem value="tags" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Tags
+                <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                  ({itemTags.length})
                 </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Stations */}
-        <div className="space-y-2 pt-2 border-t border-border">
-          <div className="flex items-center justify-between">
-            <Label className="section-header">Stations</Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Assign this item to one or more kitchen stations.
-          </p>
-
-          {/* Selected stations as pills */}
-          <div className="flex flex-wrap gap-1 mb-2">
-            {stationDraft.length === 0 && (
-              <span className="text-xs text-muted-foreground">
-                No stations assigned
               </span>
-            )}
-            {stationDraft.map(id => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleToggleStation(id)}
-                className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
-              >
-                <span>{id}</span>
-                <span className="text-[10px] leading-none">✕</span>
-              </button>
-            ))}
-          </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              {itemTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {itemTags.map(tag => (
+                    <span
+                      key={tag.id}
+                      className="text-xs bg-muted px-2 py-1 rounded"
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No tags on this item</p>
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-          {/* All stations with checkboxes */}
-          {stations.length > 0 && (
-            <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-              {stations.map(id => (
-                <label
-                  key={id}
-                  className="flex items-center gap-2 text-xs cursor-pointer"
-                >
-                  <Checkbox
-                    checked={stationDraft.includes(id)}
-                    onCheckedChange={() => handleToggleStation(id)}
+          <AccordionItem value="stations" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Stations
+                {stationDraft.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                    ({stationDraft.length})
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Assign this item to one or more kitchen stations.
+                </p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {stationDraft.length === 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      No stations assigned
+                    </span>
+                  )}
+                  {stationDraft.map(id => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => handleToggleStation(id)}
+                      className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
+                    >
+                      <span>{id}</span>
+                      <span className="text-[10px] leading-none">✕</span>
+                    </button>
+                  ))}
+                </div>
+                {stations.length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                    {stations.map(id => (
+                      <label
+                        key={id}
+                        className="flex items-center gap-2 text-xs cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={stationDraft.includes(id)}
+                          onCheckedChange={() => handleToggleStation(id)}
+                        />
+                        <span className="text-muted-foreground">{id}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="text"
+                    value={newStationName}
+                    onChange={(e) => setNewStationName(e.target.value)}
+                    placeholder="Add station ID..."
+                    className="input-field flex-1 text-xs"
                   />
-                  <span className="text-muted-foreground">{id}</span>
-                </label>
-              ))}
-            </div>
-          )}
+                  <button
+                    type="button"
+                    onClick={handleAddStationInline}
+                    className="btn-add px-2 py-1 text-xs"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add
+                  </button>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-          {/* Inline add station */}
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              type="text"
-              value={newStationName}
-              onChange={(e) => setNewStationName(e.target.value)}
-              placeholder="Add station ID..."
-              className="input-field flex-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={handleAddStationInline}
-              className="btn-add px-2 py-1 text-xs"
-            >
-              <Plus className="w-3 h-3" />
-              Add
-            </button>
-          </div>
-        </div>
-
-        {/* Allergens */}
-        {itemAllergens.length > 0 && (
-          <div className="space-y-2">
-            <Label className="section-header">Allergens</Label>
-            <div className="flex flex-wrap gap-1">
-              {itemAllergens.map(allergen => (
-                <span 
-                  key={allergen.id} 
-                  className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded"
-                >
-                  {allergen.name}
+          <AccordionItem value="allergens" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Allergens
+                <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                  ({itemAllergens.length})
                 </span>
-              ))}
-            </div>
-          </div>
-        )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              {itemAllergens.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {itemAllergens.map(allergen => (
+                    <span
+                      key={allergen.id}
+                      className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded"
+                    >
+                      {allergen.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No allergens on this item</p>
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-        {/* Additional Info */}
-        <div className="space-y-3 pt-4 border-t border-border">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm text-muted-foreground">Inherit Modifiers from Category</Label>
-            <Switch
-              checked={draft.inheritModifiersFromCategory}
-              onCheckedChange={(checked) => setDraft(d => ({ ...d, inheritModifiersFromCategory: checked }))}
-            />
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Prep Time (min)</span>
-            <input
-              type="number"
-              min={0}
-              value={draft.preparationTime}
-              onChange={(e) => setDraft(d => ({ ...d, preparationTime: parseInt(e.target.value) || 0 }))}
-              className="input-field w-20 text-right"
-            />
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Calories</span>
-            <input
-              type="number"
-              min={0}
-              value={draft.calories}
-              onChange={(e) => setDraft(d => ({ ...d, calories: parseInt(e.target.value) || 0 }))}
-              className="input-field w-20 text-right"
-            />
-          </div>
-        </div>
+          <AccordionItem value="kitchen-details" className="border-b-0 px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Kitchen & details
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="inheritMods" className="text-sm text-muted-foreground">Inherit modifiers from category</Label>
+                  <Switch
+                    id="inheritMods"
+                    checked={draft.inheritModifiersFromCategory}
+                    onCheckedChange={(checked) => setDraft(d => ({ ...d, inheritModifiersFromCategory: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Prep time (min)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft.preparationTime}
+                    onChange={(e) => setDraft(d => ({ ...d, preparationTime: parseInt(e.target.value) || 0 }))}
+                    className="input-field w-20 text-right"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Calories</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft.calories}
+                    onChange={(e) => setDraft(d => ({ ...d, calories: parseInt(e.target.value) || 0 }))}
+                    className="input-field w-20 text-right"
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
       
       {/* Save/Discard buttons */}

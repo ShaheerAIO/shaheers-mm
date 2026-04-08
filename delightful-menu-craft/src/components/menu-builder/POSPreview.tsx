@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import {
@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   MoreVertical,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Select,
@@ -22,9 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Item } from '@/types/menu';
+import type { Item, Modifier } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
+import { ModifierPanel } from './pos-preview/ModifierPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,7 +50,7 @@ const TAX_RATE = 0.05;
 // ---------------------------------------------------------------------------
 
 export function POSPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded } = useMenuStore();
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifiers } = useMenuStore();
 
   // Clock
   const [now, setNow] = useState(() => new Date());
@@ -63,6 +65,22 @@ export function POSPreview() {
 
   // Local ticket state
   const [ticketLines, setTicketLines] = useState<TicketLine[]>([]);
+
+  // QSR modifier panel state
+  const [qsrModifierItem, setQsrModifierItem] = useState<Item | null>(null);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  /** Bumps when opening the modifier panel for a *new* line so React remounts with fresh state. */
+  const [qsrModifierNewInstance, setQsrModifierNewInstance] = useState(0);
+
+  /** Dims ticket when modifier panel is open and Done is not yet allowed (QSR + TSR). */
+  const [ticketModifierBlocked, setTicketModifierBlocked] = useState(false);
+  const handleModifierTicketBlock = useCallback((blocked: boolean) => {
+    setTicketModifierBlocked(blocked);
+  }, []);
+
+  useEffect(() => {
+    setTicketModifierBlocked(false);
+  }, [posMode]);
 
   const addToTicket = (
     item: Item,
@@ -85,6 +103,42 @@ export function POSPreview() {
   };
 
   const clearTicket = () => setTicketLines([]);
+
+  // QSR item click handler - checks for modifiers and opens panel if needed
+  const handleQsrItemClick = (item: Item) => {
+    const hasModifiers = itemModifiers.some((im) => im.itemId === item.id);
+    if (!hasModifiers) {
+      addToTicket(item, {}, 1);
+      return;
+    }
+    // Check if item has required modifiers
+    const itemMods = itemModifiers
+      .filter((im) => im.itemId === item.id)
+      .map((im) => modifiers.find((m) => m.id === im.modifierId))
+      .filter((m): m is Modifier => m !== undefined);
+    
+    const hasRequiredMods = itemMods.some((m) => m.isOptional === 'Required');
+    
+    if (hasRequiredMods) {
+      // Auto-open modifier panel for required modifiers
+      setEditingLineId(null);
+      setQsrModifierNewInstance((n) => n + 1);
+      setQsrModifierItem(item);
+    } else {
+      // Optional modifiers: add to ticket, user can edit later
+      addToTicket(item, {}, 1);
+    }
+  };
+
+  const qsrModifierInitialSelections = useMemo(() => {
+    if (!editingLineId) return undefined;
+    return ticketLines.find((l) => l.lineId === editingLineId)?.selectedOptions;
+  }, [editingLineId, ticketLines]);
+
+  const qsrModifierInitialQty = useMemo(() => {
+    if (!editingLineId) return undefined;
+    return ticketLines.find((l) => l.lineId === editingLineId)?.qty;
+  }, [editingLineId, ticketLines]);
 
   // Financials
   const subtotal = useMemo(
@@ -173,7 +227,7 @@ export function POSPreview() {
       {/* ── Body ── */}
       <div className="flex flex-1 min-h-0">
         {/* ── Left: ticket ── */}
-        <aside className="w-[min(100%,320px)] sm:w-[26%] flex flex-col min-w-0 border-r border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-ticket-bg))]">
+        <aside className="relative w-[min(100%,320px)] sm:w-[26%] flex flex-col min-w-0 border-r border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-ticket-bg))]">
           {/* Ticket header */}
           <div className="p-3 border-b border-[hsl(var(--pos-shell-border))] flex items-start justify-between gap-2">
             <div>
@@ -215,10 +269,21 @@ export function POSPreview() {
                 </p>
               </div>
             ) : (
-              ticketLines.map((line) => (
+              ticketLines.map((line) => {
+                const hasModifiers = itemModifiers.some((im) => im.itemId === line.item.id);
+                return (
                 <div
                   key={line.lineId}
-                  className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0.5 py-2 border-b border-zinc-800/80 text-sm group"
+                  onClick={() => {
+                    if (posMode === 'qsr' && hasModifiers) {
+                      setQsrModifierItem(line.item);
+                      setEditingLineId(line.lineId);
+                    }
+                  }}
+                  className={cn(
+                    "grid grid-cols-[1fr_auto_auto_auto] gap-x-2 gap-y-0.5 py-2 border-b border-zinc-800/80 text-sm group",
+                    posMode === 'qsr' && hasModifiers && "cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                  )}
                 >
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-1">
@@ -246,7 +311,8 @@ export function POSPreview() {
                     ${(line.item.itemPrice * line.qty).toFixed(2)}
                   </span>
                 </div>
-              ))
+              );
+              })
             )}
           </div>
 
@@ -308,6 +374,22 @@ export function POSPreview() {
               </button>
             </div>
           </div>
+
+          {ticketModifierBlocked && (
+            <div
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-zinc-950/75 px-4 text-center backdrop-blur-sm"
+              aria-live="polite"
+              role="status"
+            >
+              <AlertCircle className="w-10 h-10 text-amber-500/90 shrink-0" aria-hidden />
+              <p className="text-sm font-semibold text-zinc-100 max-w-[240px] leading-snug">
+                Finish modifier selections
+              </p>
+              <p className="text-xs text-zinc-400 max-w-[220px] leading-relaxed">
+                Complete the choices on the menu panel (same rules as Done), or press Cancel to go back.
+              </p>
+            </div>
+          )}
         </aside>
 
         {/* ── Right: menu panel ── */}
@@ -382,13 +464,51 @@ export function POSPreview() {
           <div
             className={cn(
               'flex-1 min-h-0',
-              posMode === 'qsr' && 'overflow-x-auto overflow-y-hidden p-3',
+              posMode === 'qsr' && !qsrModifierItem && 'overflow-x-auto overflow-y-hidden p-3',
             )}
           >
             {posMode === 'qsr' ? (
-              <QSRMenuPanel onAddToTicket={(item) => addToTicket(item, {}, 1)} />
+              qsrModifierItem ? (
+                <ModifierPanel
+                  key={editingLineId ?? `new-${qsrModifierNewInstance}`}
+                  item={qsrModifierItem}
+                  categoryColor="#f97316"
+                  initialSelectedOptions={qsrModifierInitialSelections}
+                  initialQty={qsrModifierInitialQty}
+                  onTicketBlockChange={handleModifierTicketBlock}
+                  onDone={(item, opts, qty) => {
+                    if (editingLineId) {
+                      // Update existing line
+                      setTicketLines((prev) =>
+                        prev.map((line) =>
+                          line.lineId === editingLineId
+                            ? { ...line, selectedOptions: opts, qty }
+                            : line
+                        )
+                      );
+                      setEditingLineId(null);
+                    } else {
+                      // Add new line
+                      addToTicket(item, opts, qty);
+                    }
+                    setQsrModifierItem(null);
+                  }}
+                  onCancel={() => {
+                    if (editingLineId) {
+                      // User is editing existing item - just close panel
+                      setEditingLineId(null);
+                    }
+                    setQsrModifierItem(null);
+                  }}
+                />
+              ) : (
+                <QSRMenuPanel onAddToTicket={handleQsrItemClick} />
+              )
             ) : (
-              <TSRMenuPanel onAddToTicket={addToTicket} />
+              <TSRMenuPanel
+                onAddToTicket={addToTicket}
+                onTicketBlockChange={handleModifierTicketBlock}
+              />
             )}
           </div>
         </section>

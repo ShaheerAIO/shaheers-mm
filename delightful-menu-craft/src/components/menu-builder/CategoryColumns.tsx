@@ -3,6 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { CategoryColumn } from './CategoryColumn';
 import { Plus, Upload } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
+import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function CategoryColumns() {
   const { 
@@ -21,9 +22,9 @@ export function CategoryColumns() {
   } = useMenuStore();
 
   const panelWidth =
-    (selectedItemId ? 320 : 0) +
-    (isCreatingModifier ? 320 : 0) +
-    (isCreatingOption ? 320 : 0);
+    (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
   // Get categories for the selected menu
   // Categories are linked to menus via the menuIds field (comma-separated)

@@ -36,28 +36,33 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
         .filter((ci) => ci.categoryId === cat.id)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((ci) => items.find((i) => i.id === ci.itemId))
-        .filter((i): i is Item => i !== undefined);
+        .filter((i): i is Item => i !== undefined && i.visibilityPos);
 
-      const subcatSections = subcats
-        .map((sub) => {
-          const subItems = categoryItems
-            .filter((ci) => ci.categoryId === sub.id)
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((ci) => items.find((i) => i.id === ci.itemId))
-            .filter((i): i is Item => i !== undefined);
-          return { subcategory: sub, items: subItems };
-        })
-        .filter((s) => s.items.length > 0);
+      const subcatItemsFlat = subcats.flatMap((sub) =>
+        categoryItems
+          .filter((ci) => ci.categoryId === sub.id)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((ci) => items.find((i) => i.id === ci.itemId))
+          .filter((i): i is Item => i !== undefined && i.visibilityPos),
+      );
 
-      return { category: cat, directItems, subcatSections };
+      const seen = new Set<number>();
+      const flatItems: Item[] = [];
+      for (const item of [...directItems, ...subcatItemsFlat]) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          flatItems.push(item);
+        }
+      }
+
+      return { category: cat, flatItems };
     });
   }, [rootCategories, categories, categoryItems, items]);
 
   return (
     <div className="flex gap-3 h-full min-h-[200px]">
-      {menuColumns.map(({ category, directItems, subcatSections }) => {
+      {menuColumns.map(({ category, flatItems }) => {
         const accent = category.color || '#f97316';
-        const allEmpty = directItems.length === 0 && subcatSections.length === 0;
         return (
           <div
             key={category.id}
@@ -71,33 +76,13 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
               {category.posDisplayName || category.categoryName}
             </div>
 
-            {/* Items + subcategory sections */}
+            {/* All items from this category and its subcategories, flat (no subcategory headers) */}
             <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 pr-0.5">
-              {directItems.map((item) => (
+              {flatItems.map((item) => (
                 <ItemTile key={item.id} item={item} accent={accent} onClick={() => onAddToTicket(item)} />
               ))}
 
-              {subcatSections.map(({ subcategory, items: subItems }) => (
-                <div key={subcategory.id} className="mt-1">
-                  <div
-                    className={`w-full ${POS_TILE_HEIGHT} rounded-lg flex items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-wider text-white/90 mb-1 text-center leading-tight line-clamp-3`}
-                    style={{ backgroundColor: subcategory.color || accent }}
-                  >
-                    {subcategory.posDisplayName || subcategory.categoryName}
-                  </div>
-                  {subItems.map((item) => (
-                    <div key={item.id} className="mb-1.5">
-                      <ItemTile
-                        item={item}
-                        accent={subcategory.color || accent}
-                        onClick={() => onAddToTicket(item)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              {allEmpty && (
+              {flatItems.length === 0 && (
                 <p className="text-[10px] text-zinc-600 text-center py-4">Empty</p>
               )}
             </div>

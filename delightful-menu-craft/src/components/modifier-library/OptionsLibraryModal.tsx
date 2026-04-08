@@ -263,8 +263,8 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                     <div
                       key={option.id}
                       className={cn(
-                        "px-4 py-2.5 grid grid-cols-12 gap-2 items-center border-b transition-colors",
-                        isEditing ? "bg-primary/5" : "hover:bg-muted/30"
+                        'group px-4 py-2.5 grid grid-cols-12 gap-2 items-center border-b transition-colors',
+                        isEditing ? 'bg-primary/5' : 'hover:bg-muted/30',
                       )}
                     >
                       {isEditing ? (
@@ -339,15 +339,18 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                           </div>
                           <div className="col-span-1 flex justify-end gap-1">
                             <button
+                              type="button"
                               onClick={() => startEditing(option)}
-                              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{ opacity: 1 }}
+                              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded opacity-70 group-hover:opacity-100 transition-opacity"
+                              title="Edit"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteOption(option.id)}
-                              className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded"
+                              className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded opacity-70 group-hover:opacity-100 transition-opacity"
+                              title="Delete from library"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

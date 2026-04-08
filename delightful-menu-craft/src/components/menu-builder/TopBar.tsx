@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { AiEnhanceModal } from './AiEnhanceModal';
+import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function TopBar() {
   const { 
@@ -44,9 +45,9 @@ export function TopBar() {
   } = useMenuStore();
 
   const panelWidth =
-    (selectedItemId ? 320 : 0) +
-    (isCreatingModifier ? 320 : 0) +
-    (isCreatingOption ? 320 : 0);
+    (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);

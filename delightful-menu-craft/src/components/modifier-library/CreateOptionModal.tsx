@@ -26,6 +26,7 @@ interface CreateOptionModalProps {
 export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModalProps) {
   const [optionName, setOptionName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
+  const [posDisplayNameTouched, setPosDisplayNameTouched] = useState(false);
   const [price, setPrice] = useState('0.00');
   const [isStockAvailable, setIsStockAvailable] = useState(true);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
@@ -44,6 +45,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
     // Reset form
     setOptionName('');
     setPosDisplayName('');
+    setPosDisplayNameTouched(false);
     setPrice('0.00');
     setIsStockAvailable(true);
     setIsSizeModifier(false);
@@ -53,6 +55,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
   const handleClose = () => {
     setOptionName('');
     setPosDisplayName('');
+    setPosDisplayNameTouched(false);
     setPrice('0.00');
     setIsStockAvailable(true);
     setIsSizeModifier(false);
@@ -81,7 +84,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
               value={optionName}
               onChange={(e) => {
                 setOptionName(e.target.value);
-                if (!posDisplayName) {
+                if (!posDisplayNameTouched) {
                   setPosDisplayName(e.target.value);
                 }
               }}
@@ -98,7 +101,10 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
               id="posDisplayName"
               type="text"
               value={posDisplayName}
-              onChange={(e) => setPosDisplayName(e.target.value)}
+              onChange={(e) => {
+                setPosDisplayName(e.target.value);
+                setPosDisplayNameTouched(true);
+              }}
               placeholder="Leave blank to use option name"
               className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             />

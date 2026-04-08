@@ -9,11 +9,12 @@ import { POS_TILE_FRAME } from './posTileStyles';
 
 interface TSRMenuPanelProps {
   onAddToTicket: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
+  onTicketBlockChange?: (blocked: boolean) => void;
 }
 
 type DrillLevel = 'categories' | 'subcategories' | 'items' | 'modifiers';
 
-export function TSRMenuPanel({ onAddToTicket }: TSRMenuPanelProps) {
+export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPanelProps) {
   const { categories, items, categoryItems, selectedMenuId, itemModifiers } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -56,7 +57,7 @@ export function TSRMenuPanel({ onAddToTicket }: TSRMenuPanelProps) {
       if (seen.has(ci.itemId)) continue;
       seen.add(ci.itemId);
       const item = items.find((i) => i.id === ci.itemId);
-      if (item) ordered.push(item);
+      if (item && item.visibilityPos) ordered.push(item);
     }
     return ordered;
   }, [activeCategoryId, categoryItems, items]);
@@ -72,7 +73,7 @@ export function TSRMenuPanel({ onAddToTicket }: TSRMenuPanelProps) {
         if (seen.has(ci.itemId)) continue;
         seen.add(ci.itemId);
         const item = items.find((i) => i.id === ci.itemId);
-        if (item) ordered.push(item);
+        if (item && item.visibilityPos) ordered.push(item);
       }
       return ordered;
     },
@@ -314,6 +315,7 @@ export function TSRMenuPanel({ onAddToTicket }: TSRMenuPanelProps) {
               categoryColor={accentColor}
               onDone={handleDone}
               onCancel={() => setActiveItemId(null)}
+              onTicketBlockChange={onTicketBlockChange}
             />
           </div>
         )}

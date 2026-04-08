@@ -9,6 +9,7 @@ export function CreateOptionPanel() {
 
   const [optionName, setOptionName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
+  const [posDisplayNameTouched, setPosDisplayNameTouched] = useState(false);
   const [isStockAvailable, setIsStockAvailable] = useState(true);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
@@ -28,6 +29,7 @@ export function CreateOptionPanel() {
     // Reset form
     setOptionName('');
     setPosDisplayName('');
+    setPosDisplayNameTouched(false);
     setIsStockAvailable(true);
     setIsSizeModifier(false);
   };
@@ -37,6 +39,7 @@ export function CreateOptionPanel() {
     // Reset form
     setOptionName('');
     setPosDisplayName('');
+    setPosDisplayNameTouched(false);
     setIsStockAvailable(true);
     setIsSizeModifier(false);
   };
@@ -46,8 +49,8 @@ export function CreateOptionPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-panel-border flex-shrink-0">
-        <h3 className="font-semibold">Create Option</h3>
+      <div className="flex items-center justify-between px-3 py-3 sm:px-4 border-b border-panel-border flex-shrink-0">
+        <h3 className="font-semibold text-sm sm:text-base">Create Option</h3>
         <button
           onClick={handleCancel}
           className="p-1.5 rounded-md hover:bg-muted transition-colors"
@@ -57,7 +60,7 @@ export function CreateOptionPanel() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-4 scrollbar-thin">
         {/* Option Name */}
         <div className="space-y-2">
           <Label htmlFor="optionName" className="section-header">
@@ -69,7 +72,7 @@ export function CreateOptionPanel() {
             value={optionName}
             onChange={(e) => {
               setOptionName(e.target.value);
-              if (!posDisplayName) {
+              if (!posDisplayNameTouched) {
                 setPosDisplayName(e.target.value);
               }
             }}
@@ -88,7 +91,10 @@ export function CreateOptionPanel() {
             id="posDisplayName"
             type="text"
             value={posDisplayName}
-            onChange={(e) => setPosDisplayName(e.target.value)}
+            onChange={(e) => {
+              setPosDisplayName(e.target.value);
+              setPosDisplayNameTouched(true);
+            }}
             placeholder="Leave blank to use option name"
             className="input-field w-full"
           />
@@ -126,7 +132,7 @@ export function CreateOptionPanel() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border bg-panel-bg flex gap-2">
+      <div className="px-3 py-3 sm:p-4 border-t border-border bg-panel-bg flex gap-2 flex-shrink-0">
         <button
           onClick={handleCancel}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors"

@@ -105,7 +105,7 @@ export default {
       },
       spacing: {
         "sidebar": "60px",
-        "right-panel": "320px",
+        "right-panel": "388px",
       },
     },
   },

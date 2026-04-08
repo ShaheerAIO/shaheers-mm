@@ -4,6 +4,7 @@ import { ItemDetailPanel } from '@/components/menu-builder/ItemDetailPanel';
 import { CreateModifierPanel } from '@/components/menu-builder/CreateModifierPanel';
 import { CreateOptionPanel } from '@/components/menu-builder/CreateOptionPanel';
 import { cn } from '@/lib/utils';
+import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function RightSidebar() {
   const {
@@ -26,6 +27,8 @@ export function RightSidebar() {
 
   if (!selectedItem) return null;
 
+  const panelStyle = { width: RIGHT_PANEL_WIDTH_PX } as const;
+
   return (
     <>
       {/* Backdrop overlay - only when nested panels are open */}
@@ -39,10 +42,13 @@ export function RightSidebar() {
       {/* Sidebars container - sits on the right, panels stack left-to-right */}
       <div className="fixed top-0 right-0 h-screen flex z-50">
         {/* Level 1: Item Detail Panel - always visible when item selected */}
-        <aside className={cn(
-          "w-[320px] h-full bg-panel-bg border-l border-panel-border flex flex-col transition-all duration-300",
-          (isCreatingModifier || isCreatingOption) && "brightness-75"
-        )}>
+        <aside
+          style={panelStyle}
+          className={cn(
+            'h-full bg-panel-bg border-l border-panel-border flex flex-col transition-all duration-300 shrink-0',
+            (isCreatingModifier || isCreatingOption) && 'brightness-75',
+          )}
+        >
           <div className="flex items-center justify-between p-4 border-b border-panel-border flex-shrink-0">
             <button
               onClick={() => setSelectedItem(null)}
@@ -65,17 +71,23 @@ export function RightSidebar() {
 
         {/* Level 2: Create Modifier Panel */}
         {isCreatingModifier && (
-          <aside className={cn(
-            "w-[320px] h-full bg-panel-bg border-l border-panel-border flex flex-col transition-all duration-300",
-            isCreatingOption && "brightness-75"
-          )}>
+          <aside
+            style={panelStyle}
+            className={cn(
+              'h-full bg-panel-bg border-l border-panel-border flex flex-col transition-all duration-300 shrink-0',
+              isCreatingOption && 'brightness-75',
+            )}
+          >
             <CreateModifierPanel itemId={selectedItem.id} />
           </aside>
         )}
 
         {/* Level 3: Create Option Panel */}
         {isCreatingOption && (
-          <aside className="w-[320px] h-full bg-panel-bg border-l border-panel-border flex flex-col">
+          <aside
+            style={panelStyle}
+            className="h-full bg-panel-bg border-l border-panel-border flex flex-col shrink-0"
+          >
             <CreateOptionPanel />
           </aside>
         )}
