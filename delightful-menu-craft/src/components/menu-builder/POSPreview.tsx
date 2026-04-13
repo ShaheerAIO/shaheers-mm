@@ -464,6 +464,7 @@ export function POSPreview() {
           <div
             className={cn(
               'flex-1 min-h-0',
+              posMode === 'qsr' && qsrModifierItem && 'flex flex-col overflow-hidden',
               posMode === 'qsr' && !qsrModifierItem && 'overflow-x-auto overflow-y-hidden p-3',
             )}
           >

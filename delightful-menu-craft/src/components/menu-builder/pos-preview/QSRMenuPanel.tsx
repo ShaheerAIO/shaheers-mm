@@ -60,30 +60,38 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
   }, [rootCategories, categories, categoryItems, items]);
 
   return (
-    <div className="flex gap-3 h-full min-h-[200px]">
+    <div className="flex gap-3 h-full min-h-0">
       {menuColumns.map(({ category, flatItems }) => {
         const accent = category.color || '#f97316';
         return (
           <div
             key={category.id}
-            className={`flex flex-col gap-2 ${POS_TILE_WIDTH} h-full min-h-0`}
+            className="flex flex-col gap-2 h-full min-h-0 max-h-full w-max shrink-0"
           >
-            {/* Category header — same tile size as item buttons */}
+            {/* Category header — half tile height; width grows with item columns */}
             <div
-              className={`w-full ${POS_TILE_HEIGHT} rounded-lg flex items-center justify-center px-2 text-center text-xs font-semibold text-white shadow-sm shrink-0 leading-tight`}
+              className="w-full min-w-[118px] sm:min-w-[128px] h-[37px] rounded-md flex items-center justify-center px-2 text-center text-[11px] font-semibold text-white shadow-sm shrink-0 leading-tight"
               style={{ backgroundColor: accent }}
             >
               {category.posDisplayName || category.categoryName}
             </div>
 
-            {/* All items from this category and its subcategories, flat (no subcategory headers) */}
-            <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 pr-0.5">
+            {/* Items flow down then wrap right; column width grows — no inner horizontal scroll */}
+            <div
+              className={cn(
+                'flex flex-1 min-h-0 h-full max-h-full min-w-[118px] sm:min-w-[128px]',
+                'flex-col flex-wrap content-start items-start gap-x-2 gap-y-1.5',
+                'overflow-x-visible overflow-y-hidden',
+              )}
+            >
               {flatItems.map((item) => (
                 <ItemTile key={item.id} item={item} accent={accent} onClick={() => onAddToTicket(item)} />
               ))}
 
               {flatItems.length === 0 && (
-                <p className="text-[10px] text-zinc-600 text-center py-4">Empty</p>
+                <p className="text-[10px] text-zinc-600 text-center py-4 w-full min-w-[118px] sm:min-w-[128px]">
+                  Empty
+                </p>
               )}
             </div>
           </div>
@@ -109,7 +117,7 @@ function ItemTile({
       onClick={onClick}
       disabled={isUnavailable}
       className={cn(
-        `w-full ${POS_TILE_HEIGHT} rounded-lg box-border flex flex-col items-stretch justify-between px-2.5 py-2.5 text-left transition-colors`,
+        `${POS_TILE_WIDTH} ${POS_TILE_HEIGHT} rounded-lg box-border flex flex-col items-stretch justify-between px-2.5 py-2.5 text-left transition-colors shrink-0`,
         'bg-[hsl(var(--pos-menu-tile))] border border-zinc-700/80',
         'hover:border-zinc-500 hover:bg-zinc-800/80',
         isUnavailable && 'opacity-45 border-red-900/50 cursor-not-allowed',

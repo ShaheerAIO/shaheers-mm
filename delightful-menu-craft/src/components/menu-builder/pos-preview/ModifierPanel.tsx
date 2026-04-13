@@ -11,6 +11,19 @@ import type {
 } from '@/types/menu';
 import { POS_TILE_FRAME } from './posTileStyles';
 
+/** ItemModifiers often list nested mods explicitly; hide any mod that is a child of another linked mod. */
+function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifier[]): Modifier[] {
+  if (linked.length <= 1) return linked;
+  return linked.filter((m) => {
+    for (const p of linked) {
+      if (p.id === m.id) continue;
+      const children = getChildModifiersForInit(p, allModifiers);
+      if (children.some((c) => c.id === m.id)) return false;
+    }
+    return true;
+  });
+}
+
 type PizzaSide = 'left' | 'right' | 'whole';
 
 function getChildModifiersForInit(modifier: Modifier, allModifiers: Modifier[]): Modifier[] {
@@ -83,6 +96,15 @@ function buildInitialModifierState(
   return { selectedOptions: merged, pizzaSides };
 }
 
+/** Excel often exports booleans as the string "FALSE" — don't show as a rule header. */
+function isMeaningfulOptionalLabel(value: string | undefined): boolean {
+  const t = value?.trim() ?? '';
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (lower === 'false' || lower === 'true') return false;
+  return true;
+}
+
 const SIDE_LABELS: Record<PizzaSide, string> = { left: 'Left Half', right: 'Right Half', whole: 'Whole' };
 const SIDE_SHORT: Record<PizzaSide, string> = { left: 'L', right: 'R', whole: 'W' };
 const SIDE_COLORS: Record<PizzaSide, string> = { left: 'bg-blue-500', right: 'bg-green-500', whole: 'bg-orange-500' };
@@ -111,20 +133,19 @@ export function ModifierPanel({
   const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions } = useMenuStore();
 
   const attachedModifiers = useMemo(() => {
-    return itemModifiers
+    const raw = itemModifiers
       .filter((im) => im.itemId === item.id)
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((im) => modifiers.find((m) => m.id === im.modifierId))
       .filter((m): m is Modifier => m !== undefined);
+    return filterRootItemModifiers(raw, modifiers);
   }, [itemModifiers, item.id, modifiers]);
 
-  // Default to size modifier tab if one exists
-  const defaultTabIdx = useMemo(() => {
-    const sizeIdx = attachedModifiers.findIndex((m) => m.isSizeModifier);
-    return sizeIdx >= 0 ? sizeIdx : 0;
-  }, [attachedModifiers]);
-
-  const [activeModifierIdx, setActiveModifierIdx] = useState(defaultTabIdx);
+  /** Per root modifier: drill path into nested groups (Left→sauces, etc.). */
+  const [drillPathByRoot, setDrillPathByRoot] = useState<Record<number, number[]>>({});
+  useEffect(() => {
+    setDrillPathByRoot({});
+  }, [item.id]);
   const [initialBundle] = useState(() =>
     buildInitialModifierState(
       item,
@@ -142,8 +163,6 @@ export function ModifierPanel({
   const [currentPizzaSide, setCurrentPizzaSide] = useState<PizzaSide>('whole');
 
   const [qty, setQty] = useState(() => initialQty ?? 1);
-
-  const activeModifier = attachedModifiers[activeModifierIdx] ?? null;
 
   // Size gating: find any size modifier; toppings are locked until size is chosen
   const sizeModifier = attachedModifiers.find((m) => m.isSizeModifier) ?? null;
@@ -189,6 +208,10 @@ export function ModifierPanel({
             ? current.filter((id) => id !== optionId)
             : [...current, optionId],
         };
+      }
+      // Single-select: second click on the same option clears selection
+      if (current.length === 1 && current[0] === optionId) {
+        return { ...prev, [modifierId]: [] };
       }
       return { ...prev, [modifierId]: [optionId] };
     });
@@ -278,10 +301,164 @@ export function ModifierPanel({
     };
   }, [canPressDone, onTicketBlockChange]);
 
-  const currentOptions = activeModifier ? getOptions(activeModifier.id) : [];
+  /** Leaf modifier: option tiles (and pizza side strip when applicable). */
+  const renderFlatLeaf = (mod: Modifier) => {
+    const currentOptions = getOptions(mod.id);
+    return (
+      <div>
+        {isMeaningfulOptionalLabel(mod.isOptional) && (
+          <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-wider font-medium">
+            {mod.isOptional}
+          </p>
+        )}
+
+        {mod.pizzaSelection && (
+          <div className="flex gap-1.5 mb-2">
+            {(['left', 'right', 'whole'] as PizzaSide[]).map((side) => (
+              <button
+                key={side}
+                type="button"
+                onClick={() => setCurrentPizzaSide(side)}
+                className={cn(
+                  'flex-1 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide border transition-colors',
+                  currentPizzaSide === side
+                    ? 'bg-orange-500/20 border-orange-500 text-orange-400'
+                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500',
+                )}
+              >
+                {SIDE_LABELS[side]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {currentOptions.map(({ modifierOptionId, option, isDefaultSelected }) => {
+            const isPizza = mod.pizzaSelection;
+            const activeSelections = selectedOptions[mod.id];
+            const pizzaSide = pizzaSides[modifierOptionId];
+            const isSelected = isPizza
+              ? pizzaSide !== undefined
+              : activeSelections !== undefined
+                ? activeSelections.includes(modifierOptionId)
+                : isDefaultSelected;
+
+            return (
+              <button
+                key={modifierOptionId}
+                type="button"
+                onClick={() =>
+                  isPizza
+                    ? togglePizzaOption(mod.id, modifierOptionId)
+                    : toggleOption(mod.id, modifierOptionId, mod.multiSelect)
+                }
+                className={cn(
+                  `${POS_TILE_FRAME} flex items-center justify-center px-2.5 text-xs font-semibold text-center transition-all border relative`,
+                  isSelected
+                    ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
+                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
+                )}
+                style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
+              >
+                <span className="line-clamp-2 leading-tight px-0.5">
+                  {option?.posDisplayName || option?.optionName}
+                </span>
+                {isPizza && pizzaSide && (
+                  <span
+                    className={cn(
+                      'absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white',
+                      SIDE_COLORS[pizzaSide],
+                    )}
+                  >
+                    {SIDE_SHORT[pizzaSide]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {currentOptions.length === 0 && (
+            <p className="w-full text-center text-zinc-600 text-xs py-4">No options defined</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * Nested modifiers: horizontal row per level; deeper levels stack below within this root.
+   * `path` / `onPathChange` are scoped to one top-level modifier.
+   */
+  const renderNestedDrill = (
+    mod: Modifier,
+    depth: number,
+    path: number[],
+    onPathChange: (next: number[]) => void,
+  ) => {
+    const children = getChildModifiers(mod);
+    if (children.length === 0) {
+      return renderFlatLeaf(mod);
+    }
+
+    const selectedIdAtDepth = path[depth];
+    const selectedChild =
+      selectedIdAtDepth !== undefined
+        ? children.find((c) => c.id === selectedIdAtDepth)
+        : undefined;
+
+    return (
+      <div className="flex flex-col gap-2 w-full min-w-0">
+        <div className="flex flex-wrap gap-2 content-start">
+          {children.map((child) => {
+            const isOpen = selectedIdAtDepth === child.id;
+            return (
+              <button
+                key={child.id}
+                type="button"
+                onClick={() => {
+                  onPathChange(
+                    path[depth] === child.id
+                      ? path.slice(0, depth)
+                      : [...path.slice(0, depth), child.id],
+                  );
+                }}
+                className={cn(
+                  `${POS_TILE_FRAME} flex flex-col items-center justify-center gap-0.5 px-2 text-xs font-semibold text-center transition-all border`,
+                  isOpen
+                    ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
+                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
+                )}
+                style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
+              >
+                <span className="line-clamp-3 leading-tight px-0.5">
+                  {child.posDisplayName || child.modifierName}
+                </span>
+                {isMeaningfulOptionalLabel(child.isOptional) && (
+                  <span className="text-[9px] text-zinc-500 font-normal line-clamp-1">
+                    {child.isOptional}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {selectedChild && (
+          <div className="w-full min-w-0 border-t border-zinc-800/60 pt-2 flex flex-col gap-2">
+            {renderNestedDrill(selectedChild, depth + 1, path, onPathChange)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderModifierBody = (rootMod: Modifier) => {
+    const path = drillPathByRoot[rootMod.id] ?? [];
+    const onPathChange = (next: number[]) =>
+      setDrillPathByRoot((s) => ({ ...s, [rootMod.id]: next }));
+    return renderNestedDrill(rootMod, 0, path, onPathChange);
+  };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Item header */}
       <div
         className="flex items-center justify-between px-4 py-3 shrink-0 gap-3"
@@ -357,186 +534,65 @@ export function ModifierPanel({
         </div>
       ) : (
         <>
-          {/* Modifier tabs */}
-          <div className="flex border-b border-zinc-800 shrink-0 overflow-x-auto">
-            {attachedModifiers.map((mod, idx) => {
-              const isLocked = !mod.isSizeModifier && !sizeIsSelected && sizeModifier !== null;
-              return (
-                <button
-                  key={mod.id}
-                  type="button"
-                  onClick={() => !isLocked && setActiveModifierIdx(idx)}
-                  disabled={isLocked}
-                  className={cn(
-                    'px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors',
-                    isLocked
-                      ? 'border-transparent text-zinc-700 cursor-not-allowed'
-                      : idx === activeModifierIdx
-                      ? 'border-[hsl(var(--pos-accent))] text-zinc-100 bg-white/[0.03]'
-                      : 'border-transparent text-zinc-500 hover:text-zinc-300',
-                  )}
-                >
-                  {mod.posDisplayName || mod.modifierName}
-                  {mod.isSizeModifier && (
-                    <span className="ml-1.5 text-[9px] text-purple-400 font-bold uppercase tracking-wider">
-                      Size
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Size prompt banner */}
           {sizeModifier && !sizeIsSelected && (
-            <div className="px-4 py-2 bg-purple-500/10 border-b border-purple-500/20 text-purple-300 text-xs font-medium text-center">
+            <div className="px-4 py-2 bg-purple-500/10 border-b border-purple-500/20 text-purple-300 text-xs font-medium text-center shrink-0">
               Select a size to unlock toppings
             </div>
           )}
 
-          {/* Options grid */}
-          <div className="flex-1 overflow-y-auto p-3 min-h-0">
-            {activeModifier && (() => {
-              const childMods = getChildModifiers(activeModifier);
-
-              // Nested modifier rendering: group options by child modifier
-              if (childMods.length > 0) {
+          {/* Every root modifier: label tile (left) + its own horizontal rows / drill (right), all visible */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-2">
+            <div className="flex flex-col gap-4 max-w-5xl mx-auto w-full">
+              {attachedModifiers.map((mod) => {
+                const isLocked =
+                  !mod.isSizeModifier && !sizeIsSelected && sizeModifier !== null;
                 return (
-                  <div className="space-y-5">
-                    {childMods.map((child) => {
-                      const childOptions = getOptions(child.id);
-                      return (
-                        <div key={child.id}>
-                          <p className="text-[10px] text-zinc-400 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1.5">
-                            {child.posDisplayName || child.modifierName}
-                            {child.isOptional && (
-                              <span className="normal-case text-zinc-600 font-normal">
-                                • {child.isOptional}
-                              </span>
-                            )}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {childOptions.map(({ modifierOptionId, option, isDefaultSelected }) => {
-                              const activeSelections = selectedOptions[child.id];
-                              const isSelected =
-                                activeSelections !== undefined
-                                  ? activeSelections.includes(modifierOptionId)
-                                  : isDefaultSelected;
-                              return (
-                                <button
-                                  key={modifierOptionId}
-                                  type="button"
-                                  onClick={() =>
-                                    toggleOption(child.id, modifierOptionId, child.multiSelect)
-                                  }
-                                  className={cn(
-                                    `${POS_TILE_FRAME} flex items-center justify-center px-2.5 text-xs font-semibold text-center transition-all border`,
-                                    isSelected
-                                      ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
-                                      : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
-                                  )}
-                                  style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
-                                >
-                                  <span className="line-clamp-2 leading-tight px-0.5">
-                                    {option?.posDisplayName || option?.optionName}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                            {childOptions.length === 0 && (
-                              <p className="w-full text-center text-zinc-600 text-xs py-2">
-                                No options defined
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div
+                    key={mod.id}
+                    className="flex flex-row gap-2 sm:gap-3 items-start border-b border-zinc-800/60 pb-4 last:border-0 last:pb-0"
+                  >
+                    <div
+                      className={cn(
+                        `${POS_TILE_FRAME} shrink-0 flex flex-col items-center justify-center gap-0.5 px-2 text-xs font-semibold text-center border pointer-events-none select-none cursor-default`,
+                        isLocked
+                          ? 'border-zinc-800 text-zinc-500 opacity-60'
+                          : 'border-zinc-600 text-zinc-200',
+                      )}
+                      style={{
+                        borderLeftWidth: 4,
+                        // Swapped vs option tiles: stripe is neutral "main", fill carries category accent
+                        borderLeftColor: isLocked ? '#3f3f46' : '#71717a',
+                        background: isLocked
+                          ? 'rgb(9 9 11 / 0.85)'
+                          : `color-mix(in srgb, ${categoryColor} 22%, rgb(39 39 42 / 0.92))`,
+                      }}
+                    >
+                      <span className="line-clamp-3 leading-tight px-0.5">
+                        {mod.posDisplayName || mod.modifierName}
+                      </span>
+                      {mod.isSizeModifier && (
+                        <span
+                          className={cn(
+                            'text-[9px] font-bold uppercase tracking-wider',
+                            isLocked ? 'text-zinc-500' : 'text-purple-400',
+                          )}
+                        >
+                          Size
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-2 pt-0">
+                      {isLocked ? (
+                        <p className="text-xs text-zinc-500">Select a size first to unlock.</p>
+                      ) : (
+                        renderModifierBody(mod)
+                      )}
+                    </div>
                   </div>
                 );
-              }
-
-              // Standard flat rendering
-              return (
-                <div>
-                  {activeModifier.isOptional && (
-                    <p className="text-[10px] text-zinc-600 mb-2.5 uppercase tracking-wider font-medium">
-                      {activeModifier.isOptional}
-                    </p>
-                  )}
-
-                  {/* Pizza side selector */}
-                  {activeModifier.pizzaSelection && (
-                    <div className="flex gap-1.5 mb-3">
-                      {(['left', 'right', 'whole'] as PizzaSide[]).map((side) => (
-                        <button
-                          key={side}
-                          type="button"
-                          onClick={() => setCurrentPizzaSide(side)}
-                          className={cn(
-                            'flex-1 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide border transition-colors',
-                            currentPizzaSide === side
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                              : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:border-zinc-500',
-                          )}
-                        >
-                          {SIDE_LABELS[side]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {currentOptions.map(({ modifierOptionId, option, isDefaultSelected }) => {
-                      const isPizza = activeModifier.pizzaSelection;
-                      const activeSelections = selectedOptions[activeModifier.id];
-                      const pizzaSide = pizzaSides[modifierOptionId];
-                      const isSelected = isPizza
-                        ? pizzaSide !== undefined
-                        : activeSelections !== undefined
-                        ? activeSelections.includes(modifierOptionId)
-                        : isDefaultSelected;
-
-                      return (
-                        <button
-                          key={modifierOptionId}
-                          type="button"
-                          onClick={() =>
-                            isPizza
-                              ? togglePizzaOption(activeModifier.id, modifierOptionId)
-                              : toggleOption(activeModifier.id, modifierOptionId, activeModifier.multiSelect)
-                          }
-                          className={cn(
-                            `${POS_TILE_FRAME} flex items-center justify-center px-2.5 text-xs font-semibold text-center transition-all border relative`,
-                            isSelected
-                              ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
-                              : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
-                          )}
-                          style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
-                        >
-                          <span className="line-clamp-2 leading-tight px-0.5">
-                            {option?.posDisplayName || option?.optionName}
-                          </span>
-                          {isPizza && pizzaSide && (
-                            <span
-                              className={cn(
-                                'absolute top-1 right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white',
-                                SIDE_COLORS[pizzaSide],
-                              )}
-                            >
-                              {SIDE_SHORT[pizzaSide]}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                    {currentOptions.length === 0 && (
-                      <p className="w-full text-center text-zinc-600 text-xs py-6">No options defined</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+              })}
+            </div>
           </div>
         </>
       )}
