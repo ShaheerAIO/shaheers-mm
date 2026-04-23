@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { 
-  Menu, 
-  Category, 
-  Item, 
-  Modifier, 
+import type {
+  Menu,
+  Category,
+  Item,
+  Modifier,
   ModifierOption,
   ModifierGroup,
   ModifierModifierOption,
@@ -15,11 +15,28 @@ import type {
   ItemModifierGroup,
   Allergen,
   Tag,
+  Station,
   ExcelMenuData,
-  TabType, 
+  TabType,
   ViewMode,
   AiPatch,
 } from '@/types/menu';
+
+const parseStationIdsCsv = (csv: string | undefined): number[] => {
+  if (!csv?.trim()) return [];
+  return csv
+    .split(',')
+    .map((p) => parseInt(p.trim(), 10))
+    .filter((n) => !isNaN(n) && n > 0);
+};
+
+const serializeStationIdsCsv = (ids: number[]): string =>
+  Array.from(new Set(ids))
+    .sort((a, b) => a - b)
+    .join(',');
+
+const getNextStationId = (stations: Station[]): number =>
+  stations.length === 0 ? 1 : Math.max(...stations.map((s) => s.id)) + 1;
 
 /** Remove an id from comma-separated modifier id lists (nested / group refs). */
 function stripModifierIdFromCommaList(list: string | undefined, removeId: number): string {
@@ -39,6 +56,7 @@ interface MenuState {
   selectedCategoryId: number | null;
   selectedItemId: number | null;
   selectedModifierId: number | null;
+  editingCategoryId: number | null;
   isDataLoaded: boolean;
   isCreatingModifier: boolean;
   isCreatingOption: boolean;
@@ -67,7 +85,7 @@ interface MenuState {
   tags: Tag[];
 
   // Derived / helper data (not part of Excel schema)
-  stations: string[]; // unique list of station IDs used across items
+  stations: Station[]; // canonical station catalog
   
   // Actions - UI
   setActiveTab: (tab: TabType) => void;
@@ -76,6 +94,7 @@ interface MenuState {
   setSelectedCategory: (id: number | null) => void;
   setSelectedItem: (id: number | null) => void;
   setSelectedModifier: (id: number | null) => void;
+  setEditingCategory: (id: number | null) => void;
   setIsCreatingModifier: (value: boolean) => void;
   setIsCreatingOption: (value: boolean) => void;
   setPendingOption: (option: { optionName: string; posDisplayName: string; isStockAvailable: boolean; isSizeModifier: boolean; } | null) => void;
@@ -135,15 +154,18 @@ interface MenuState {
   deleteTag: (id: number) => void;
   
   // Actions - Stations
-  addStation: (id: string) => void;
-  renameStation: (oldId: string, newId: string) => void;
-  deleteStation: (id: string) => void;
-  assignItemToStation: (itemId: number, stationId: string) => void;
-  unassignItemFromStation: (itemId: number, stationId: string) => void;
-  bulkSetItemsForStation: (stationId: string, itemIds: number[]) => void;
+  addStation: (name?: string) => number;
+  renameStation: (id: number, newName: string) => void;
+  deleteStation: (id: number) => void;
+  assignItemToStation: (itemId: number, stationId: number) => void;
+  unassignItemFromStation: (itemId: number, stationId: number) => void;
+  bulkSetItemsForStation: (stationId: number, itemIds: number[]) => void;
 
   // Actions - AI Enhancement
   applyAiPatches: (patches: AiPatch[], newStations: string[]) => void;
+
+  // Actions - Bulk Item Update
+  bulkUpdateItems: (ids: number[], transform: (item: Item) => Partial<Item>) => void;
 
   // Helper - Get next ID
   getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'allergens' | 'tags'>) => number;
@@ -181,6 +203,7 @@ export const useMenuStore = create<MenuState>()(
       selectedCategoryId: null,
       selectedItemId: null,
       selectedModifierId: null,
+      editingCategoryId: null,
       isDataLoaded: false,
       isCreatingModifier: false,
       isCreatingOption: false,
@@ -202,7 +225,7 @@ export const useMenuStore = create<MenuState>()(
       allergens: [],
       tags: [],
       stations: [],
-      
+
       // UI Actions
       setActiveTab: (tab) => set({ activeTab: tab, selectedItemId: null }),
       setViewMode: (mode) =>
@@ -219,8 +242,9 @@ export const useMenuStore = create<MenuState>()(
         ),
       setSelectedMenu: (id) => set({ selectedMenuId: id, selectedCategoryId: null, selectedItemId: null }),
       setSelectedCategory: (id) => set({ selectedCategoryId: id }),
-      setSelectedItem: (id) => set({ selectedItemId: id }),
+      setSelectedItem: (id) => set({ selectedItemId: id, editingCategoryId: null }),
       setSelectedModifier: (id) => set({ selectedModifierId: id }),
+      setEditingCategory: (id) => set({ editingCategoryId: id, selectedItemId: null }),
       setIsCreatingModifier: (value) => set({ isCreatingModifier: value }),
       setIsCreatingOption: (value) => set({ isCreatingOption: value }),
       setPendingOption: (option) => set({ pendingOption: option }),
@@ -259,16 +283,14 @@ export const useMenuStore = create<MenuState>()(
       
       // Import/Export Actions
       importData: (data) => {
-        // Derive stations from imported items
-        const stationSet = new Set<string>();
-        data.items.forEach(item => {
-          if (item.stationIds) {
-            item.stationIds.split(',').forEach(rawId => {
-              const trimmed = rawId.trim();
-              if (trimmed) stationSet.add(trimmed);
-            });
-          }
+        // Derive station catalog from numeric stationIds on items
+        const numericIdSet = new Set<number>();
+        data.items.forEach((item) => {
+          parseStationIdsCsv(item.stationIds).forEach((n) => numericIdSet.add(n));
         });
+        const stations: Station[] = Array.from(numericIdSet)
+          .sort((a, b) => a - b)
+          .map((id) => ({ id, name: `Station ${id}` }));
 
         set({
           menus: data.menus,
@@ -285,7 +307,7 @@ export const useMenuStore = create<MenuState>()(
           modifierModifierOptions: data.modifierModifierOptions,
           allergens: data.allergens,
           tags: data.tags,
-          stations: Array.from(stationSet).sort(),
+          stations,
           isDataLoaded: true,
           selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
         });
@@ -543,132 +565,104 @@ export const useMenuStore = create<MenuState>()(
       updateAllergen: (id, updates) => set((state) => ({
         allergens: state.allergens.map((a) => (a.id === id ? { ...a, ...updates } : a)),
       })),
-      deleteAllergen: (id) => set((state) => ({
-        allergens: state.allergens.filter((a) => a.id !== id),
-      })),
-      
+      deleteAllergen: (id) => set((state) => {
+        const idStr = String(id);
+        return {
+          allergens: state.allergens.filter((a) => a.id !== id),
+          items: state.items.map((item) => ({
+            ...item,
+            allergenIds: item.allergenIds
+              ? item.allergenIds.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',')
+              : item.allergenIds,
+          })),
+        };
+      }),
+
       // Tag Actions
       addTag: (tag) => set((state) => ({ tags: [...state.tags, tag] })),
       updateTag: (id, updates) => set((state) => ({
         tags: state.tags.map((t) => (t.id === id ? { ...t, ...updates } : t)),
       })),
-      deleteTag: (id) => set((state) => ({
-        tags: state.tags.filter((t) => t.id !== id),
-      })),
+      deleteTag: (id) => set((state) => {
+        const idStr = String(id);
+        return {
+          tags: state.tags.filter((t) => t.id !== id),
+          items: state.items.map((item) => ({
+            ...item,
+            tagIds: item.tagIds
+              ? item.tagIds.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',')
+              : item.tagIds,
+          })),
+          categories: state.categories.map((cat) => ({
+            ...cat,
+            tagIds: cat.tagIds
+              ? cat.tagIds.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',')
+              : cat.tagIds,
+          })),
+        };
+      }),
 
       // Station Actions
-      addStation: (id) => set((state) => {
-        const trimmed = id.trim();
-        if (!trimmed) return state;
-        if (state.stations.includes(trimmed)) return state;
-        return {
-          ...state,
-          stations: [...state.stations, trimmed].sort(),
-        };
-      }),
-
-      renameStation: (oldId, newId) => set((state) => {
-        const from = oldId.trim();
-        const to = newId.trim();
-        if (!from || !to || from === to) return state;
-
-        // Update stations list
-        const stations = state.stations
-          .map(s => (s === from ? to : s))
-          .filter((s, idx, arr) => arr.indexOf(s) === idx)
-          .sort();
-
-        // Helper to replace in stationIds CSV
-        const replaceInCsv = (csv: string | undefined): string => {
-          if (!csv) return '';
-          const parts = csv.split(',').map(p => p.trim()).filter(Boolean);
-          const updated = parts.map(p => (p === from ? to : p));
-          return Array.from(new Set(updated)).join(',');
-        };
-
-        const items = state.items.map(item => ({
-          ...item,
-          stationIds: replaceInCsv(item.stationIds),
+      addStation: (name) => {
+        const state = get();
+        const id = getNextStationId(state.stations);
+        const stationName = name?.trim() || `Station ${id}`;
+        set((s) => ({
+          stations: [...s.stations, { id, name: stationName }].sort((a, b) => a.id - b.id),
         }));
+        return id;
+      },
 
-        return { ...state, stations, items };
+      renameStation: (id, newName) => set((state) => {
+        const name = newName.trim();
+        if (!name) return state;
+        return {
+          stations: state.stations.map((s) => (s.id === id ? { ...s, name } : s)),
+        };
       }),
 
-      deleteStation: (id) => set((state) => {
-        const target = id.trim();
-        if (!target) return state;
+      deleteStation: (id) => set((state) => ({
+        stations: state.stations.filter((s) => s.id !== id),
+        items: state.items.map((item) => {
+          const remaining = parseStationIdsCsv(item.stationIds).filter((n) => n !== id);
+          return { ...item, stationIds: serializeStationIdsCsv(remaining) };
+        }),
+      })),
 
-        const stations = state.stations.filter(s => s !== target);
-
-        const items = state.items.map(item => {
-          if (!item.stationIds) return item;
-          const remaining = item.stationIds
-            .split(',')
-            .map(p => p.trim())
-            .filter(p => p && p !== target);
-          return {
-            ...item,
-            stationIds: remaining.join(','),
-          };
-        });
-
-        return { ...state, stations, items };
-      }),
-
-      assignItemToStation: (itemId, stationId) => set((state) => {
-        const target = stationId.trim();
-        if (!target) return state;
-
-        const items = state.items.map(item => {
+      assignItemToStation: (itemId, stationId) => set((state) => ({
+        items: state.items.map((item) => {
           if (item.id !== itemId) return item;
-          const existing = item.stationIds
-            ? item.stationIds.split(',').map(p => p.trim()).filter(Boolean)
-            : [];
-          if (existing.includes(target)) return item;
-          const updated = [...existing, target];
-          return {
-            ...item,
-            stationIds: updated.join(','),
-          };
-        });
+          const existing = parseStationIdsCsv(item.stationIds);
+          if (existing.includes(stationId)) return item;
+          return { ...item, stationIds: serializeStationIdsCsv([...existing, stationId]) };
+        }),
+      })),
 
-        const stations = state.stations.includes(target)
-          ? state.stations
-          : [...state.stations, target].sort();
-
-        return { ...state, items, stations };
-      }),
-
-      unassignItemFromStation: (itemId, stationId) => set((state) => {
-        const target = stationId.trim();
-        if (!target) return state;
-
-        const items = state.items.map(item => {
-          if (item.id !== itemId || !item.stationIds) return item;
-          const remaining = item.stationIds
-            .split(',')
-            .map(p => p.trim())
-            .filter(p => p && p !== target);
-          return {
-            ...item,
-            stationIds: remaining.join(','),
-          };
-        });
-
-        return { ...state, items };
-      }),
+      unassignItemFromStation: (itemId, stationId) => set((state) => ({
+        items: state.items.map((item) => {
+          if (item.id !== itemId) return item;
+          const remaining = parseStationIdsCsv(item.stationIds).filter((n) => n !== stationId);
+          return { ...item, stationIds: serializeStationIdsCsv(remaining) };
+        }),
+      })),
 
       applyAiPatches: (patches, newStations) => set((state) => {
         let items = [...state.items];
         let categories = [...state.categories];
         let stations = [...state.stations];
 
-        // Register any new stations the AI proposed
+        const resolveOrCreateStation = (name: string): number => {
+          const found = stations.find((s) => s.name.toLowerCase() === name.toLowerCase());
+          if (found) return found.id;
+          const id = getNextStationId(stations);
+          stations = [...stations, { id, name }].sort((a, b) => a.id - b.id);
+          return id;
+        };
+
+        // Pre-register new stations the AI proposed
         for (const s of newStations) {
           const trimmed = s.trim();
-          if (trimmed && !stations.includes(trimmed)) {
-            stations = [...stations, trimmed].sort();
-          }
+          if (trimmed) resolveOrCreateStation(trimmed);
         }
 
         for (const patch of patches) {
@@ -679,13 +673,11 @@ export const useMenuStore = create<MenuState>()(
               );
               break;
             case 'item_station': {
-              const stationName = patch.to.trim();
-              // Auto-register station if it doesn't exist yet
-              if (stationName && !stations.includes(stationName)) {
-                stations = [...stations, stationName].sort();
-              }
+              const stationId = resolveOrCreateStation(patch.to.trim());
               items = items.map((i) =>
-                i.id === patch.entityId ? { ...i, stationIds: stationName } : i,
+                i.id === patch.entityId
+                  ? { ...i, stationIds: serializeStationIdsCsv([stationId]) }
+                  : i,
               );
               break;
             }
@@ -705,55 +697,192 @@ export const useMenuStore = create<MenuState>()(
         return { items, categories, stations };
       }),
 
-      bulkSetItemsForStation: (stationId, itemIds) => set((state) => {
-        const target = stationId.trim();
-        if (!target) return state;
-
-        const idSet = new Set(itemIds);
-
-        const items = state.items.map(item => {
-          const current = item.stationIds
-            ? item.stationIds.split(',').map(p => p.trim()).filter(Boolean)
-            : [];
-
-          const has = current.includes(target);
-          const shouldHave = idSet.has(item.id);
-
-          // If already correct, skip
-          if (has === shouldHave) return item;
-
-          let updated = current;
-          if (shouldHave && !has) {
-            updated = [...current, target];
-          } else if (!shouldHave && has) {
-            updated = current.filter(p => p !== target);
-          }
-
-          return {
-            ...item,
-            stationIds: updated.join(','),
-          };
-        });
-
-        const anyHasStation = items.some(item =>
-          item.stationIds
-            ?.split(',')
-            .map(p => p.trim())
-            .filter(Boolean)
-            .includes(target)
-        );
-
-        const stations = anyHasStation
-          ? (state.stations.includes(target)
-            ? state.stations
-            : [...state.stations, target].sort())
-          : state.stations.filter(s => s !== target);
-
-        return { ...state, items, stations };
+      bulkUpdateItems: (ids, transform) => set((state) => {
+        const idSet = new Set(ids);
+        return {
+          items: state.items.map((item) =>
+            idSet.has(item.id) ? { ...item, ...transform(item) } : item,
+          ),
+        };
       }),
+
+      bulkSetItemsForStation: (stationId, itemIds) => set((state) => {
+        const idSet = new Set(itemIds);
+        const items = state.items.map((item) => {
+          const current = parseStationIdsCsv(item.stationIds);
+          const has = current.includes(stationId);
+          const shouldHave = idSet.has(item.id);
+          if (has === shouldHave) return item;
+          const updated = shouldHave
+            ? [...current, stationId]
+            : current.filter((n) => n !== stationId);
+          return { ...item, stationIds: serializeStationIdsCsv(updated) };
+        });
+        return { items };
+      }),
+
     }),
     {
       name: 'menu-manager-storage',
+      version: 6,
+      migrate(persisted: unknown, fromVersion: number) {
+        const state = persisted as Record<string, unknown>;
+
+        if (fromVersion < 2) {
+          // Migrate items: replace old visibility + timing fields with new ones
+          const { parseDaySchedules, serializeDaySchedules, defaultVisibility } =
+            require('@/lib/visibility') as typeof import('@/lib/visibility');
+
+          if (Array.isArray(state.items)) {
+            state.items = (state.items as Record<string, unknown>[]).map((item) => {
+              const vis = defaultVisibility();
+              if (typeof item.visibilityPos === 'boolean')   vis.visibilityPos   = item.visibilityPos;
+              if (typeof item.visibilityKiosk === 'boolean') vis.visibilityKiosk = item.visibilityKiosk;
+              const online = typeof item.visibilityOnline === 'boolean' ? item.visibilityOnline : true;
+              const third  = typeof item.visibilityThirdParty === 'boolean' ? item.visibilityThirdParty : true;
+              vis.visibilityQr        = typeof item.visibilityQr        === 'boolean' ? item.visibilityQr        : online;
+              vis.visibilityWebsite   = typeof item.visibilityWebsite   === 'boolean' ? item.visibilityWebsite   : online;
+              vis.visibilityMobileApp = typeof item.visibilityMobileApp === 'boolean' ? item.visibilityMobileApp : online;
+              vis.visibilityDoordash  = typeof item.visibilityDoordash  === 'boolean' ? item.visibilityDoordash  : third;
+
+              const daySchedules = typeof item.daySchedules === 'string' && item.daySchedules
+                ? item.daySchedules
+                : serializeDaySchedules(parseDaySchedules(
+                    undefined,
+                    typeof item.availableDays      === 'string' ? item.availableDays      : undefined,
+                    typeof item.availableTimeStart === 'string' ? item.availableTimeStart : undefined,
+                    typeof item.availableTimeEnd   === 'string' ? item.availableTimeEnd   : undefined,
+                  ));
+
+              const migrated = { ...item, ...vis, daySchedules };
+              delete migrated.visibilityOnline;
+              delete migrated.visibilityThirdParty;
+              delete migrated.availableDays;
+              delete migrated.availableTimeStart;
+              delete migrated.availableTimeEnd;
+              return migrated;
+            });
+          }
+
+          if (Array.isArray(state.modifiers)) {
+            const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+            state.modifiers = (state.modifiers as Record<string, unknown>[]).map((mod) => ({
+              ...dv(),
+              ...mod,
+            }));
+          }
+
+          if (Array.isArray(state.modifierOptions)) {
+            const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+            state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((opt) => ({
+              ...dv(),
+              ...opt,
+            }));
+          }
+        }
+
+        if (fromVersion < 3) {
+          // Migrate stations: convert any string tokens in item.stationIds to numeric IDs
+          // and build a Station[] catalog in state.stations.
+          const tokenToId = new Map<string, number>();
+          let nextId = 1;
+
+          // First pass: claim IDs for already-numeric tokens
+          if (Array.isArray(state.items)) {
+            for (const item of state.items as Record<string, unknown>[]) {
+              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+              for (const raw of csv.split(',')) {
+                const token = raw.trim();
+                if (!token || tokenToId.has(token)) continue;
+                const n = parseInt(token, 10);
+                if (!isNaN(n) && n > 0 && String(n) === token) {
+                  tokenToId.set(token, n);
+                  if (n >= nextId) nextId = n + 1;
+                }
+              }
+            }
+          }
+
+          // Second pass: assign new IDs to non-numeric tokens
+          if (Array.isArray(state.items)) {
+            for (const item of state.items as Record<string, unknown>[]) {
+              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+              for (const raw of csv.split(',')) {
+                const token = raw.trim();
+                if (!token || tokenToId.has(token)) continue;
+                tokenToId.set(token, nextId++);
+              }
+            }
+          }
+
+          // Build Station catalog
+          const stationCatalog: Array<{ id: number; name: string }> = [];
+          tokenToId.forEach((numId, token) => {
+            const n = parseInt(token, 10);
+            const isNumeric = !isNaN(n) && String(n) === token;
+            stationCatalog.push({ id: numId, name: isNumeric ? `Station ${numId}` : token });
+          });
+          stationCatalog.sort((a, b) => a.id - b.id);
+          state.stations = stationCatalog;
+
+          // Rewrite item stationIds to numeric CSV
+          if (Array.isArray(state.items)) {
+            state.items = (state.items as Record<string, unknown>[]).map((item) => {
+              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+              if (!csv.trim()) return item;
+              const numericIds = Array.from(
+                new Set(
+                  csv.split(',')
+                    .map((r) => r.trim())
+                    .filter(Boolean)
+                    .map((t) => tokenToId.get(t))
+                    .filter((n): n is number => n !== undefined),
+                ),
+              ).sort((a, b) => a - b);
+              return { ...item, stationIds: numericIds.join(',') };
+            });
+          }
+        }
+
+        if (fromVersion < 4) {
+          // Add maxQtyPerOption (default 1) to all ModifierModifierOption records
+          if (Array.isArray(state.modifierModifierOptions)) {
+            state.modifierModifierOptions = (state.modifierModifierOptions as Record<string, unknown>[]).map((mmo) => ({
+              ...mmo,
+              maxQtyPerOption: typeof mmo.maxQtyPerOption === 'number' ? mmo.maxQtyPerOption : 1,
+            }));
+          }
+        }
+
+        if (fromVersion < 5) {
+          // Add visibility fields (default true) to all Category records
+          if (Array.isArray(state.categories)) {
+            state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
+              visibilityPos: true,
+              visibilityKiosk: true,
+              visibilityQr: true,
+              visibilityWebsite: true,
+              visibilityMobileApp: true,
+              visibilityDoordash: true,
+              ...cat,
+            }));
+          }
+        }
+
+        if (fromVersion < 6) {
+          // Add daySchedules (all days enabled, no time restriction) to all Category records
+          const { serializeDaySchedules, defaultDaySchedules } =
+            require('@/lib/visibility') as typeof import('@/lib/visibility');
+          if (Array.isArray(state.categories)) {
+            state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
+              daySchedules: serializeDaySchedules(defaultDaySchedules()),
+              ...cat,
+            }));
+          }
+        }
+
+        return persisted as MenuState;
+      },
     }
   )
 );

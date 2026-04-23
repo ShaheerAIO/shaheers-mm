@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
+import type { Station } from '@/types/menu';
 import { Upload, Radio, Plus, Pencil, Trash2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -27,56 +28,54 @@ export function StationsContent() {
   } = useMenuStore();
 
   const [newStationName, setNewStationName] = useState('');
-  const [stationToDelete, setStationToDelete] = useState<string | null>(null);
-  const [editingStationId, setEditingStationId] = useState<string | null>(null);
+  const [stationToDelete, setStationToDelete] = useState<number | null>(null);
+  const [editingStationId, setEditingStationId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [stationSelections, setStationSelections] = useState<Record<string, Set<number>>>({});
+  const [stationSelections, setStationSelections] = useState<Record<number, Set<number>>>({});
   const [itemSearch, setItemSearch] = useState('');
 
-  // Fallback: derive stations from items if store.stations is empty (for older persisted data)
-  const derivedStationsFromItems = useMemo(() => {
-    const set = new Set<string>();
-    items.forEach(item => {
+  // Fallback: derive stations from items if store.stations is empty
+  const derivedStationsFromItems = useMemo((): Station[] => {
+    const idSet = new Set<number>();
+    items.forEach((item) => {
       if (item.stationIds) {
         item.stationIds
           .split(',')
-          .map(id => id.trim())
-          .filter(Boolean)
-          .forEach(id => set.add(id));
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => !isNaN(n) && n > 0)
+          .forEach((n) => idSet.add(n));
       }
     });
-    return Array.from(set).sort();
+    return Array.from(idSet)
+      .sort((a, b) => a - b)
+      .map((id) => ({ id, name: `Station ${id}` }));
   }, [items]);
 
-  const effectiveStations = stations.length > 0 ? stations : derivedStationsFromItems;
+  const effectiveStations: Station[] = stations.length > 0 ? stations : derivedStationsFromItems;
 
-  // Build initial selection map from current items & stations
   const buildInitialSelections = () => {
-    const map: Record<string, Set<number>> = {};
-    effectiveStations.forEach(id => {
-      map[id] = new Set<number>();
+    const map: Record<number, Set<number>> = {};
+    effectiveStations.forEach((s) => {
+      map[s.id] = new Set<number>();
     });
-    items.forEach(item => {
+    items.forEach((item) => {
       if (!item.stationIds) return;
-      const ids = item.stationIds
+      item.stationIds
         .split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-      ids.forEach(id => {
-        if (!map[id]) {
-          map[id] = new Set<number>();
-        }
-        map[id].add(item.id);
-      });
+        .map((p) => parseInt(p.trim(), 10))
+        .filter((n) => !isNaN(n) && n > 0)
+        .forEach((n) => {
+          if (!map[n]) map[n] = new Set<number>();
+          map[n].add(item.id);
+        });
     });
     return map;
   };
 
-  // Keep selection map in sync with data
   useMemo(() => {
     setStationSelections(buildInitialSelections());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, effectiveStations.join('|')]);
+  }, [items, effectiveStations.map((s) => s.id).join('|')]);
 
   const filteredItems = useMemo(() => {
     const base = [...items].sort((a, b) => a.itemName.localeCompare(b.itemName));
@@ -85,12 +84,12 @@ export function StationsContent() {
     return base.filter(
       (item) =>
         item.itemName.toLowerCase().includes(q) ||
-        item.posDisplayName.toLowerCase().includes(q)
+        item.posDisplayName.toLowerCase().includes(q),
     );
   }, [items, itemSearch]);
 
-  const toggleItemForStation = (stationId: string, itemId: number) => {
-    setStationSelections(prev => {
+  const toggleItemForStation = (stationId: number, itemId: number) => {
+    setStationSelections((prev) => {
       const currentSet = prev[stationId] ? new Set(prev[stationId]) : new Set<number>();
       if (currentSet.has(itemId)) {
         currentSet.delete(itemId);
@@ -101,7 +100,7 @@ export function StationsContent() {
     });
   };
 
-  const handleSaveStationSelection = (stationId: string) => {
+  const handleSaveStationSelection = (stationId: number) => {
     const selectedSet = stationSelections[stationId] || new Set<number>();
     bulkSetItemsForStation(stationId, Array.from(selectedSet));
   };
@@ -113,13 +112,13 @@ export function StationsContent() {
     setNewStationName('');
   };
 
-  const startEditingStation = (stationId: string) => {
-    setEditingStationId(stationId);
-    setEditingName(stationId);
+  const startEditingStation = (station: Station) => {
+    setEditingStationId(station.id);
+    setEditingName(station.name);
   };
 
   const commitStationRename = () => {
-    if (editingStationId && editingName.trim() && editingName.trim() !== editingStationId) {
+    if (editingStationId !== null && editingName.trim()) {
       renameStation(editingStationId, editingName.trim());
     }
     setEditingStationId(null);
@@ -155,8 +154,9 @@ export function StationsContent() {
             <Input
               value={newStationName}
               onChange={(e) => setNewStationName(e.target.value)}
-              placeholder="New station ID..."
+              placeholder="New station name..."
               className="w-40 h-8 text-xs"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddStation(); }}
             />
             <button
               type="button"
@@ -171,14 +171,14 @@ export function StationsContent() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-6">
-        Stations are defined by the <code className="bg-muted px-1 rounded">stationIds</code> field on items.
-        Items can be assigned to multiple stations. Use this view to manage station membership in bulk.
+        Stations are identified by numeric IDs. Rename a station without affecting item assignments.
+        Use this view to manage station membership in bulk.
       </p>
 
       {effectiveStations.length > 0 ? (
         <div className="flex gap-4 overflow-x-auto">
-          {effectiveStations.map((stationId) => {
-            const selectedSet = stationSelections[stationId] || new Set<number>();
+          {effectiveStations.map((station) => {
+            const selectedSet = stationSelections[station.id] || new Set<number>();
             const stationItemsSorted = [...filteredItems].sort((a, b) => {
               const aSel = selectedSet.has(a.id) ? 0 : 1;
               const bSel = selectedSet.has(b.id) ? 0 : 1;
@@ -187,17 +187,15 @@ export function StationsContent() {
             });
             return (
               <div
-                key={stationId}
-                className={cn(
-                  "flex flex-col min-w-[260px] px-2"
-                )}
+                key={station.id}
+                className={cn('flex flex-col min-w-[260px] px-2')}
               >
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2">
-                  <Radio className="w-4 h-4 text-primary" />
-                    {editingStationId === stationId ? (
+                    <Radio className="w-4 h-4 text-primary" />
+                    {editingStationId === station.id ? (
                       <input
-                        className="input-field h-7 w-24 text-xs"
+                        className="input-field h-7 w-32 text-xs"
                         value={editingName}
                         onChange={(e) => setEditingName(e.target.value)}
                         onBlur={commitStationRename}
@@ -211,15 +209,13 @@ export function StationsContent() {
                         autoFocus
                       />
                     ) : (
-                      <span className="font-semibold text-sm">
-                        Station {stationId}
-                      </span>
+                      <span className="font-semibold text-sm">{station.name}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => startEditingStation(stationId)}
+                      onClick={() => startEditingStation(station)}
                       className="p-1 text-muted-foreground hover:text-foreground"
                       title="Rename station"
                     >
@@ -227,7 +223,7 @@ export function StationsContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setStationToDelete(stationId)}
+                      onClick={() => setStationToDelete(station.id)}
                       className="p-1 text-muted-foreground hover:text-destructive"
                       title="Delete station"
                     >
@@ -239,14 +235,14 @@ export function StationsContent() {
                   {selectedSet.size} items assigned
                 </div>
                 <div className="space-y-1 flex-1 overflow-y-auto pr-1 mt-1">
-                  {stationItemsSorted.map(item => (
+                  {stationItemsSorted.map((item) => (
                     <label
                       key={item.id}
                       className="flex items-center gap-2 text-xs cursor-pointer"
                     >
                       <Checkbox
                         checked={selectedSet.has(item.id)}
-                        onCheckedChange={() => toggleItemForStation(stationId, item.id)}
+                        onCheckedChange={() => toggleItemForStation(station.id, item.id)}
                       />
                       <span className="truncate">
                         {item.itemName}
@@ -261,7 +257,7 @@ export function StationsContent() {
                   <button
                     type="button"
                     className="btn-add h-8 px-3 text-xs flex items-center gap-1"
-                    onClick={() => handleSaveStationSelection(stationId)}
+                    onClick={() => handleSaveStationSelection(station.id)}
                   >
                     <Save className="w-3 h-3" />
                     Save
@@ -275,13 +271,10 @@ export function StationsContent() {
         <div className="text-center py-12 text-muted-foreground">
           <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <p>No stations found in the data</p>
-          <p className="text-sm mt-1">
-            Assign station IDs to items to see them here
-          </p>
+          <p className="text-sm mt-1">Add a station above or assign station IDs to items</p>
         </div>
       )}
 
-      {/* Delete confirmation */}
       <AlertDialog open={stationToDelete !== null} onOpenChange={() => setStationToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -294,7 +287,7 @@ export function StationsContent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (stationToDelete) {
+                if (stationToDelete !== null) {
                   deleteStation(stationToDelete);
                 }
                 setStationToDelete(null);
@@ -306,7 +299,6 @@ export function StationsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 }

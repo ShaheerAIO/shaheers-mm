@@ -1,8 +1,9 @@
-import { 
-  LayoutGrid, 
-  Settings2, 
+import {
+  LayoutGrid,
+  Settings2,
   Radio,
-  BarChart3
+  BarChart3,
+  Layers,
 } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
 import type { TabType } from '@/types/menu';
@@ -12,6 +13,7 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'menu-builder', label: 'Menu', icon: LayoutGrid },
   { id: 'modifier-library', label: 'Modifiers', icon: Settings2 },
   { id: 'stations', label: 'Stations', icon: Radio },
+  { id: 'categories', label: 'Bulk', icon: Layers },
   { id: 'stats', label: 'Stats', icon: BarChart3 },
 ];
 

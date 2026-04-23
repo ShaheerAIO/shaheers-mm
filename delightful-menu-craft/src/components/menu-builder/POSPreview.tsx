@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Item, Modifier } from '@/types/menu';
+import type { Item, ModifierModifierOption } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 import { ModifierPanel } from './pos-preview/ModifierPanel';
@@ -45,12 +45,33 @@ type PosMode = 'qsr' | 'tsr';
 
 const TAX_RATE = 0.05;
 
+/** Sum join-table `maxLimit` for each selected option occurrence (duplicates = multi-qty). */
+function modifierSurchargePerUnit(
+  selectedOptions: Record<number, number[]>,
+  modifierModifierOptions: ModifierModifierOption[],
+): number {
+  let sum = 0;
+  for (const [modIdStr, ids] of Object.entries(selectedOptions)) {
+    const modId = Number(modIdStr);
+    if (!Number.isFinite(modId)) continue;
+    if (!Array.isArray(ids)) continue;
+    for (const optionId of ids) {
+      const mmo = modifierModifierOptions.find(
+        (m) => m.modifierId === modId && m.modifierOptionId === optionId,
+      );
+      sum += mmo?.maxLimit ?? 0;
+    }
+  }
+  return sum;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function POSPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifiers } = useMenuStore();
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions } =
+    useMenuStore();
 
   // Clock
   const [now, setNow] = useState(() => new Date());
@@ -104,30 +125,19 @@ export function POSPreview() {
 
   const clearTicket = () => setTicketLines([]);
 
-  // QSR item click handler - checks for modifiers and opens panel if needed
+  // QSR item click handler - opens modifier panel when item has modifiers,
+  // otherwise fast-adds to ticket. Reads fresh state from the store directly
+  // to avoid any stale-closure issues with React's render snapshot.
   const handleQsrItemClick = (item: Item) => {
-    const hasModifiers = itemModifiers.some((im) => im.itemId === item.id);
+    const { itemModifiers: freshItemModifiers } = useMenuStore.getState();
+    const hasModifiers = freshItemModifiers.some((im) => im.itemId === item.id);
     if (!hasModifiers) {
       addToTicket(item, {}, 1);
       return;
     }
-    // Check if item has required modifiers
-    const itemMods = itemModifiers
-      .filter((im) => im.itemId === item.id)
-      .map((im) => modifiers.find((m) => m.id === im.modifierId))
-      .filter((m): m is Modifier => m !== undefined);
-    
-    const hasRequiredMods = itemMods.some((m) => m.isOptional === 'Required');
-    
-    if (hasRequiredMods) {
-      // Auto-open modifier panel for required modifiers
-      setEditingLineId(null);
-      setQsrModifierNewInstance((n) => n + 1);
-      setQsrModifierItem(item);
-    } else {
-      // Optional modifiers: add to ticket, user can edit later
-      addToTicket(item, {}, 1);
-    }
+    setEditingLineId(null);
+    setQsrModifierNewInstance((n) => n + 1);
+    setQsrModifierItem(item);
   };
 
   const qsrModifierInitialSelections = useMemo(() => {
@@ -142,8 +152,12 @@ export function POSPreview() {
 
   // Financials
   const subtotal = useMemo(
-    () => ticketLines.reduce((s, l) => s + l.item.itemPrice * l.qty, 0),
-    [ticketLines],
+    () =>
+      ticketLines.reduce((s, l) => {
+        const mod = modifierSurchargePerUnit(l.selectedOptions, modifierModifierOptions);
+        return s + (l.item.itemPrice + mod) * l.qty;
+      }, 0),
+    [ticketLines, modifierModifierOptions],
   );
   const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
@@ -271,6 +285,8 @@ export function POSPreview() {
             ) : (
               ticketLines.map((line) => {
                 const hasModifiers = itemModifiers.some((im) => im.itemId === line.item.id);
+                const modPerUnit = modifierSurchargePerUnit(line.selectedOptions, modifierModifierOptions);
+                const lineTotal = (line.item.itemPrice + modPerUnit) * line.qty;
                 return (
                 <div
                   key={line.lineId}
@@ -292,7 +308,7 @@ export function POSPreview() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => removeFromTicket(line.lineId)}
+                        onClick={(e) => { e.stopPropagation(); removeFromTicket(line.lineId); }}
                         className="shrink-0 opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-opacity"
                         aria-label="Remove"
                       >
@@ -303,12 +319,19 @@ export function POSPreview() {
                       <TicketLineOptions line={line} />
                     )}
                   </div>
-                  <span className="text-zinc-400 tabular-nums text-right text-xs">{line.qty}</span>
-                  <span className="text-zinc-400 tabular-nums text-right text-xs">
-                    ${line.item.itemPrice.toFixed(2)}
+                  <span className="text-zinc-400 tabular-nums text-right text-xs self-start pt-0.5">
+                    {line.qty}
                   </span>
-                  <span className="text-zinc-200 font-medium tabular-nums text-right text-xs">
-                    ${(line.item.itemPrice * line.qty).toFixed(2)}
+                  <div className="flex flex-col items-end gap-0.5 tabular-nums text-right text-xs self-start">
+                    <span className="text-zinc-300">${line.item.itemPrice.toFixed(2)}</span>
+                    {modPerUnit > 0 ? (
+                      <span className="text-[10px] text-[hsl(var(--pos-accent-muted))] font-medium">
+                        +${modPerUnit.toFixed(2)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-zinc-200 font-medium tabular-nums text-right text-xs self-start pt-0.5">
+                    ${lineTotal.toFixed(2)}
                   </span>
                 </div>
               );

@@ -6,6 +6,7 @@ import type {
   CategoryItem,
 } from '@/types/menu';
 import type { ScraperMenuData } from './doordashApi';
+import { parseVisibilityFromScraper, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
 
 // ---------------------------------------------------------------------------
 // Coerce helpers — handle null/undefined/wrong-type values from API
@@ -108,13 +109,8 @@ export function mapScraperToExcelData(data: ScraperMenuData): ExcelMenuData {
     inheritModifiersFromCategory: bool(i.inheritModifiersFromCategory, false),
     addonIds: str(i.addonIds),
     isSpecialRequest: bool(i.isSpecialRequest, true),
-    visibilityPos: bool(i.visibilityPos, true),
-    visibilityKiosk: bool(i.visibilityKiosk, true),
-    visibilityOnline: bool(i.visibilityOnline, true),
-    visibilityThirdParty: bool(i.visibilityThirdParty, true),
-    availableDays: str(i.availableDays),
-    availableTimeStart: str(i.availableTimeStart),
-    availableTimeEnd: str(i.availableTimeEnd),
+    ...parseVisibilityFromScraper(i),
+    daySchedules: serializeDaySchedules(defaultDaySchedules()),
   }));
 
   // --- Category Items ---

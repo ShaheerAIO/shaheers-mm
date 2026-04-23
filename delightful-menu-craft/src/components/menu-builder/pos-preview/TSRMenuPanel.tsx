@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
 import { ModifierPanel } from './ModifierPanel';
 import { POS_TILE_FRAME } from './posTileStyles';
+import { isVisibleOnChannel } from '@/lib/visibility';
 
 interface TSRMenuPanelProps {
   onAddToTicket: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
@@ -57,7 +58,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
       if (seen.has(ci.itemId)) continue;
       seen.add(ci.itemId);
       const item = items.find((i) => i.id === ci.itemId);
-      if (item && item.visibilityPos) ordered.push(item);
+      if (item && isVisibleOnChannel(item, 'visibilityPos')) ordered.push(item);
     }
     return ordered;
   }, [activeCategoryId, categoryItems, items]);
@@ -73,7 +74,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
         if (seen.has(ci.itemId)) continue;
         seen.add(ci.itemId);
         const item = items.find((i) => i.id === ci.itemId);
-        if (item && item.visibilityPos) ordered.push(item);
+        if (item && isVisibleOnChannel(item, 'visibilityPos')) ordered.push(item);
       }
       return ordered;
     },

@@ -3,8 +3,9 @@ import { useMenuStore } from '@/store/menuStore';
 import { ItemDetailPanel } from '@/components/menu-builder/ItemDetailPanel';
 import { CreateModifierPanel } from '@/components/menu-builder/CreateModifierPanel';
 import { CreateOptionPanel } from '@/components/menu-builder/CreateOptionPanel';
+import { CategoryDetailPanel } from '@/components/categories/CategoryDetailPanel';
 import { cn } from '@/lib/utils';
-import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
+import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function RightSidebar() {
   const {
@@ -15,19 +16,25 @@ export function RightSidebar() {
     isCreatingOption,
     setIsCreatingModifier,
     setIsCreatingOption,
+    editingCategoryId,
+    setEditingCategory,
+    categories,
   } = useMenuStore();
 
   const selectedItem = items.find(i => i.id === selectedItemId);
-  const isOpen = !!selectedItem;
+  const editingCategory = editingCategoryId != null
+    ? categories.find(c => c.id === editingCategoryId) ?? null
+    : null;
 
   const handleBackdropClick = () => {
     setIsCreatingOption(false);
     setIsCreatingModifier(false);
   };
 
-  if (!selectedItem) return null;
+  if (!selectedItem && !editingCategory) return null;
 
   const panelStyle = { width: RIGHT_PANEL_WIDTH_PX } as const;
+  const categoryPanelStyle = { width: CATEGORY_PANEL_WIDTH_PX } as const;
 
   return (
     <>
@@ -41,7 +48,35 @@ export function RightSidebar() {
 
       {/* Sidebars container - sits on the right, panels stack left-to-right */}
       <div className="fixed top-0 right-0 h-screen flex z-50">
+        {/* Category Detail Panel - shown when editing a category and no item selected */}
+        {editingCategory && !selectedItem && (
+          <aside
+            style={categoryPanelStyle}
+            className="h-full bg-panel-bg border-l border-panel-border flex flex-col shrink-0"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-panel-border flex-shrink-0">
+              <button
+                onClick={() => setEditingCategory(null)}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </button>
+              <button
+                onClick={() => setEditingCategory(null)}
+                className="p-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <CategoryDetailPanel category={editingCategory} />
+            </div>
+          </aside>
+        )}
+
         {/* Level 1: Item Detail Panel - always visible when item selected */}
+        {selectedItem && (
         <aside
           style={panelStyle}
           className={cn(
@@ -68,9 +103,10 @@ export function RightSidebar() {
             <ItemDetailPanel item={selectedItem} />
           </div>
         </aside>
+        )}
 
         {/* Level 2: Create Modifier Panel */}
-        {isCreatingModifier && (
+        {isCreatingModifier && selectedItem && (
           <aside
             style={panelStyle}
             className={cn(

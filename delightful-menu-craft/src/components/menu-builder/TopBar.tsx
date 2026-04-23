@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, Sparkles, Pencil, Check, X, Plus, Trash2 } from 'lucide-react';
+import { Upload, Download, FilePlus, Pencil, Check, X, Plus, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -21,7 +21,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AiEnhanceModal } from './AiEnhanceModal';
 import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function TopBar() {
@@ -49,7 +48,6 @@ export function TopBar() {
     (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
-  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [confirmDeleteMenuOpen, setConfirmDeleteMenuOpen] = useState(false);
   const [renamingMenu, setRenamingMenu] = useState(false);
@@ -175,25 +173,7 @@ export function TopBar() {
             <Download className="w-4 h-4" />
             Export
           </button>
-
-          {/* AI Enhance */}
-          <button
-            onClick={() => setAiModalOpen(true)}
-            disabled={!isDataLoaded}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
-              isDataLoaded
-                ? "border-orange-500/60 text-orange-400 hover:bg-orange-500/10 hover:border-orange-400"
-                : "border-border/50 text-muted-foreground cursor-not-allowed"
-            )}
-            title="Enhance menu with AI: suggest stations, short names, and descriptions"
-          >
-            <Sparkles className="w-4 h-4" />
-            AI Enhance
-          </button>
         </div>
-
-        <AiEnhanceModal open={aiModalOpen} onOpenChange={setAiModalOpen} />
 
         <div className="w-px h-6 bg-border mx-2" />
 
@@ -216,8 +196,6 @@ export function TopBar() {
 
       {/* Menu Selector */}
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-sm text-muted-foreground">Menu:</span>
-
         {renamingMenu ? (
           <div className="flex items-center gap-1">
             <input
@@ -249,22 +227,50 @@ export function TopBar() {
           </div>
         ) : (
           <>
-            <Select
-              value={selectedMenuId?.toString() || ''}
-              onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
-              disabled={!isDataLoaded}
+            <div
+              className={cn(
+                'relative min-w-0 flex-1',
+                panelWidth > 0 ? 'w-40 max-w-[220px]' : 'w-56 max-w-[360px]',
+              )}
             >
-              <SelectTrigger className="min-w-0 w-32 max-w-[192px] flex-1">
-                <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
-              </SelectTrigger>
-              <SelectContent>
-                {menus.map((menu) => (
-                  <SelectItem key={menu.id} value={menu.id.toString()}>
-                    {menu.menuName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select
+                value={selectedMenuId?.toString() || ''}
+                onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
+                disabled={!isDataLoaded}
+              >
+                <SelectTrigger
+                  className={cn(
+                    'w-full h-9 text-sm pr-16 [&>span]:text-left [&>span]:truncate',
+                    panelWidth > 0 ? '[&>span]:max-w-[75%]' : '[&>span]:max-w-[calc(100%-2.75rem)]',
+                  )}
+                >
+                  <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {menus.map((menu) => (
+                    <SelectItem key={menu.id} value={menu.id.toString()}>
+                      {menu.menuName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {selectedMenuId != null && isDataLoaded && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    startRename();
+                  }}
+                  className="absolute right-8 top-1/2 -translate-y-1/2 z-10 h-6 w-6 inline-flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
+                  title="Rename menu"
+                  aria-label="Rename menu"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
             <button
               type="button"
@@ -275,17 +281,6 @@ export function TopBar() {
               <Plus className="w-4 h-4" />
               Add menu
             </button>
-
-            {selectedMenuId != null && isDataLoaded && (
-              <button
-                type="button"
-                onClick={startRename}
-                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
-                title="Rename menu"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            )}
 
             {selectedMenuId != null && isDataLoaded && menus.length > 1 && (
               <button

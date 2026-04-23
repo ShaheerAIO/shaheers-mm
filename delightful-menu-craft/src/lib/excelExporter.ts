@@ -22,7 +22,7 @@ const SHEET_NAMES = {
 // Column headers for each sheet (matching Excel exactly)
 const HEADERS = {
   MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder'],
-  CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder'],
+  CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules'],
   ITEM: [
     'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture',
     'onlineImage', 'landscapeImage', 'thirdPartyImage', 'kioskItemImage', 'itemPrice',
@@ -30,8 +30,8 @@ const HEADERS = {
     'stockStatus', 'stockValue', 'orderQuantityLimit', 'minLimit', 'maxLimit', 'noMaxLimit',
     'stationIds', 'preparationTime', 'calories', 'tagIds', 'inheritTagsFromCategory',
     'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
-    'visibilityPos', 'visibilityKiosk', 'visibilityOnline', 'visibilityThirdParty',
-    'availableDays', 'availableTimeStart', 'availableTimeEnd',
+    'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite',
+    'visibilityMobileApp', 'visibilityDoordash', 'daySchedules',
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
   CATEGORY_MODIFIER_GROUPS: ['modifierGroupId', 'categoryId', 'sortOrder'],
@@ -43,10 +43,16 @@ const HEADERS = {
     'id', 'modifierName', 'posDisplayName', 'isNested', 'addNested', 'modifierOptionPriceType',
     'isOptional', 'canGuestSelectMoreModifiers', 'multiSelect', 'limitIndividualModifierSelection',
     'minSelector', 'maxSelector', 'noMaxSelection', 'prefix', 'pizzaSelection', 'price',
-    'parentModifierId', 'offPrem', 'modifierIds', 'isSizeModifier', 'onPrem'
+    'parentModifierId', 'offPrem', 'modifierIds', 'isSizeModifier', 'onPrem',
+    'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite',
+    'visibilityMobileApp', 'visibilityDoordash',
   ],
-  MODIFIER_OPTION: ['id', 'optionName', 'posDisplayName', 'parentModifierId', 'isStockAvailable', 'isSizeModifier'],
-  MODIFIER_MODIFIER_OPTIONS: ['modifierId', 'modifierOptionId', 'isDefaultSelected', 'maxLimit', 'optionDisplayName', 'sortOrder'],
+  MODIFIER_OPTION: [
+    'id', 'optionName', 'posDisplayName', 'parentModifierId', 'isStockAvailable', 'isSizeModifier',
+    'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite',
+    'visibilityMobileApp', 'visibilityDoordash',
+  ],
+  MODIFIER_MODIFIER_OPTIONS: ['modifierId', 'modifierOptionId', 'isDefaultSelected', 'maxLimit', 'optionDisplayName', 'sortOrder', 'maxQtyPerOption'],
   ALLERGEN: ['id', 'name'],
   TAG: ['id', 'name'],
 };

@@ -8,8 +8,19 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import type { Item } from '@/types/menu';
+import {
+  VISIBILITY_CHANNELS,
+  defaultVisibility,
+  getChannelsByGroup,
+  parseDaySchedules,
+  serializeDaySchedules,
+  buildDaysSummary,
+  DAYS as SCHEDULE_DAYS,
+  type DayKey,
+  type DayScheduleMap,
+} from '@/lib/visibility';
 import {
   Select,
   SelectContent,
@@ -23,8 +34,6 @@ import { cn } from '@/lib/utils';
 interface ItemDetailPanelProps {
   item: Item;
 }
-
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 interface DraftState {
   itemName: string;
@@ -42,39 +51,30 @@ interface DraftState {
   calories: number;
   visibilityPos: boolean;
   visibilityKiosk: boolean;
-  visibilityOnline: boolean;
-  visibilityThirdParty: boolean;
-  availableDays: string;
-  availableTimeStart: string;
-  availableTimeEnd: string;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
+  daySchedules: DayScheduleMap;
 }
 
-type DisplayNameMode = 'same_as_item' | 'custom_pos' | 'custom_kds' | 'custom_both';
+function namesInitiallyLinked(item: Item): boolean {
+  const kds = item.kdsName ?? item.itemName;
+  return item.posDisplayName === item.itemName && kds === item.itemName;
+}
 
 function buildAvailabilitySummary(draft: DraftState): string {
-  const channels = [
-    draft.visibilityPos && 'POS',
-    draft.visibilityKiosk && 'Kiosk',
-    draft.visibilityOnline && 'Online',
-    draft.visibilityThirdParty && '3PO',
-  ].filter(Boolean) as string[];
-
-  const activeDays = draft.availableDays
-    ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-    : [];
+  const channels = VISIBILITY_CHANNELS
+    .filter(({ key }) => draft[key])
+    .map(({ label }) => label);
 
   const parts: string[] = [];
 
-  if (channels.length === 4) parts.push('All channels');
+  if (channels.length === VISIBILITY_CHANNELS.length) parts.push('All channels');
   else if (channels.length === 0) parts.push('Hidden');
   else parts.push(channels.join(', '));
 
-  if (activeDays.length === 0 || activeDays.length === 7) parts.push('All days');
-  else parts.push(activeDays.map(d => d.slice(0, 3)).join(', '));
-
-  if (draft.availableTimeStart && draft.availableTimeEnd)
-    parts.push(`${draft.availableTimeStart}–${draft.availableTimeEnd}`);
-  else parts.push('All hours');
+  parts.push(buildDaysSummary(draft.daySchedules));
 
   return parts.join('  ·  ');
 }
@@ -90,6 +90,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     removeItemModifier,
     tags,
     allergens,
+    addTag,
+    deleteTag,
+    addAllergen,
+    deleteAllergen,
+    getNextId,
     setIsCreatingModifier,
     stations,
     addStation,
@@ -152,28 +157,39 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
     calories: item.calories,
+    ...defaultVisibility(),
     visibilityPos: item.visibilityPos ?? true,
     visibilityKiosk: item.visibilityKiosk ?? true,
-    visibilityOnline: item.visibilityOnline ?? true,
-    visibilityThirdParty: item.visibilityThirdParty ?? true,
-    availableDays: item.availableDays ?? '',
-    availableTimeStart: item.availableTimeStart ?? '',
-    availableTimeEnd: item.availableTimeEnd ?? '',
+    visibilityQr: item.visibilityQr ?? true,
+    visibilityWebsite: item.visibilityWebsite ?? true,
+    visibilityMobileApp: item.visibilityMobileApp ?? true,
+    visibilityDoordash: item.visibilityDoordash ?? true,
+    daySchedules: parseDaySchedules(item.daySchedules),
   });
 
-  const [displayNameMode, setDisplayNameMode] = useState<DisplayNameMode>('same_as_item');
+  /** While true, editing item name updates POS + KDS to match. False after POS or KDS is edited, or on load if names already differ. */
+  const [itemNameDrivesPosKds, setItemNameDrivesPosKds] = useState(() => namesInitiallyLinked(item));
+  const [expandedDay, setExpandedDay] = useState<DayKey | null>(null);
+  const [bulkStart, setBulkStart] = useState('');
+  const [bulkEnd, setBulkEnd] = useState('');
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
   const [pendingModifierIds, setPendingModifierIds] = useState<number[]>([]);
   const [pendingRemovedModifierIds, setPendingRemovedModifierIds] = useState<number[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
-  const [stationDraft, setStationDraft] = useState<string[]>(
+  const [stationDraft, setStationDraft] = useState<number[]>(
     item.stationIds
-      ? item.stationIds.split(',').map(id => id.trim()).filter(Boolean)
+      ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
       : []
   );
   const [newStationName, setNewStationName] = useState('');
+  const [newTagName, setNewTagName] = useState('');
+  const [showTagInput, setShowTagInput] = useState(false);
+  const [pendingDeleteTagId, setPendingDeleteTagId] = useState<number | null>(null);
+  const [newAllergenName, setNewAllergenName] = useState('');
+  const [showAllergenInput, setShowAllergenInput] = useState(false);
+  const [pendingDeleteAllergenId, setPendingDeleteAllergenId] = useState<number | null>(null);
 
   // Reset draft state when item changes
   useEffect(() => {
@@ -191,41 +207,41 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
+      ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
-      visibilityOnline: item.visibilityOnline ?? true,
-      visibilityThirdParty: item.visibilityThirdParty ?? true,
-      availableDays: item.availableDays ?? '',
-      availableTimeStart: item.availableTimeStart ?? '',
-      availableTimeEnd: item.availableTimeEnd ?? '',
+      visibilityQr: item.visibilityQr ?? true,
+      visibilityWebsite: item.visibilityWebsite ?? true,
+      visibilityMobileApp: item.visibilityMobileApp ?? true,
+      visibilityDoordash: item.visibilityDoordash ?? true,
+      daySchedules: parseDaySchedules(item.daySchedules),
     });
+    setExpandedDay(null);
+    setBulkStart('');
+    setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setExpandedNestedChildIds([]);
     setStationDraft(
       item.stationIds
-        ? item.stationIds.split(',').map(id => id.trim()).filter(Boolean)
+        ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
         : []
     );
     setNewStationName('');
   }, [item.id]);
 
+  // Keep "item name drives POS/KDS" in sync with saved data after save; reset when switching items
   useEffect(() => {
-    const posMatches = draft.posDisplayName === draft.itemName;
-    const kdsMatches = draft.kdsName === draft.itemName;
-    if (posMatches && kdsMatches) setDisplayNameMode('same_as_item');
-    else if (!posMatches && kdsMatches) setDisplayNameMode('custom_pos');
-    else if (posMatches && !kdsMatches) setDisplayNameMode('custom_kds');
-    else setDisplayNameMode('custom_both');
-  }, [draft.itemName, draft.posDisplayName, draft.kdsName]);
+    setItemNameDrivesPosKds(namesInitiallyLinked(item));
+  }, [item.id, item.itemName, item.posDisplayName, item.kdsName]);
 
   const originalStationIds = useMemo(
     () =>
       item.stationIds
-        ? item.stationIds.split(',').map(id => id.trim()).filter(Boolean)
+        ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
         : [],
-    [item.stationIds]
+    [item.stationIds],
   );
 
   // Check if there are unsaved changes
@@ -252,11 +268,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.calories !== item.calories ||
       draft.visibilityPos !== (item.visibilityPos ?? true) ||
       draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
-      draft.visibilityOnline !== (item.visibilityOnline ?? true) ||
-      draft.visibilityThirdParty !== (item.visibilityThirdParty ?? true) ||
-      draft.availableDays !== (item.availableDays ?? '') ||
-      draft.availableTimeStart !== (item.availableTimeStart ?? '') ||
-      draft.availableTimeEnd !== (item.availableTimeEnd ?? '') ||
+      draft.visibilityQr !== (item.visibilityQr ?? true) ||
+      draft.visibilityWebsite !== (item.visibilityWebsite ?? true) ||
+      draft.visibilityMobileApp !== (item.visibilityMobileApp ?? true) ||
+      draft.visibilityDoordash !== (item.visibilityDoordash ?? true) ||
+      serializeDaySchedules(draft.daySchedules) !== item.daySchedules ||
       pendingModifierIds.length > 0 ||
       pendingRemovedModifierIds.length > 0 ||
       stationsChanged
@@ -282,18 +298,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       stationIds: stationDraft.join(','),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
-      visibilityOnline: draft.visibilityOnline,
-      visibilityThirdParty: draft.visibilityThirdParty,
-      availableDays: draft.availableDays,
-      availableTimeStart: draft.availableTimeStart,
-      availableTimeEnd: draft.availableTimeEnd,
-    });
-
-    // Ensure any new stations are registered in the store
-    stationDraft.forEach(id => {
-      if (id.trim()) {
-        addStation(id);
-      }
+      visibilityQr: draft.visibilityQr,
+      visibilityWebsite: draft.visibilityWebsite,
+      visibilityMobileApp: draft.visibilityMobileApp,
+      visibilityDoordash: draft.visibilityDoordash,
+      daySchedules: serializeDaySchedules(draft.daySchedules),
     });
 
     // Save pending modifier additions
@@ -334,19 +343,24 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
+      ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
-      visibilityOnline: item.visibilityOnline ?? true,
-      visibilityThirdParty: item.visibilityThirdParty ?? true,
-      availableDays: item.availableDays ?? '',
-      availableTimeStart: item.availableTimeStart ?? '',
-      availableTimeEnd: item.availableTimeEnd ?? '',
+      visibilityQr: item.visibilityQr ?? true,
+      visibilityWebsite: item.visibilityWebsite ?? true,
+      visibilityMobileApp: item.visibilityMobileApp ?? true,
+      visibilityDoordash: item.visibilityDoordash ?? true,
+      daySchedules: parseDaySchedules(item.daySchedules),
     });
+    setExpandedDay(null);
+    setBulkStart('');
+    setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setStationDraft(originalStationIds);
     setNewStationName('');
+    setItemNameDrivesPosKds(namesInitiallyLinked(item));
   };
 
   const handlePriceChange = (value: string) => {
@@ -417,18 +431,54 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     }
   };
 
-  // Parse tag IDs
-  const itemTagIds = item.tagIds?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
-  const itemTags = tags.filter(t => itemTagIds.includes(t.id));
+  // Parse tag IDs — exclude 0 and negative (Excel blank cells parse to 0)
+  const itemTagIds = item.tagIds?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id) && id > 0) || [];
+  // Only show tags that have a valid id and name (filter persisted phantom entries)
+  const validTags = tags.filter(t => t.id > 0 && t.name.trim().length > 0);
+  const itemTags = validTags.filter(t => itemTagIds.includes(t.id));
 
-  // Parse allergen IDs
-  const itemAllergenIds = item.allergenIds?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
-  const itemAllergens = allergens.filter(a => itemAllergenIds.includes(a.id));
+  // Parse allergen IDs — exclude 0 and negative
+  const itemAllergenIds = item.allergenIds?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id) && id > 0) || [];
+  // Only show allergens that have a valid id and name
+  const validAllergens = allergens.filter(a => a.id > 0 && a.name.trim().length > 0);
+  const itemAllergens = validAllergens.filter(a => itemAllergenIds.includes(a.id));
 
-  const handleToggleStation = (stationId: string) => {
-    setStationDraft(prev => {
+  const toggleItemTag = (tagId: number) => {
+    const current = new Set(itemTagIds);
+    current.has(tagId) ? current.delete(tagId) : current.add(tagId);
+    updateItem(item.id, { tagIds: [...current].join(',') });
+  };
+
+  const handleCreateTag = () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    const id = getNextId('tags');
+    addTag({ id, name });
+    updateItem(item.id, { tagIds: [...itemTagIds, id].join(',') });
+    setNewTagName('');
+    setShowTagInput(false);
+  };
+
+  const toggleItemAllergen = (allergenId: number) => {
+    const current = new Set(itemAllergenIds);
+    current.has(allergenId) ? current.delete(allergenId) : current.add(allergenId);
+    updateItem(item.id, { allergenIds: [...current].join(',') });
+  };
+
+  const handleCreateAllergen = () => {
+    const name = newAllergenName.trim();
+    if (!name) return;
+    const id = getNextId('allergens');
+    addAllergen({ id, name });
+    updateItem(item.id, { allergenIds: [...itemAllergenIds, id].join(',') });
+    setNewAllergenName('');
+    setShowAllergenInput(false);
+  };
+
+  const handleToggleStation = (stationId: number) => {
+    setStationDraft((prev) => {
       if (prev.includes(stationId)) {
-        return prev.filter(id => id !== stationId);
+        return prev.filter((id) => id !== stationId);
       }
       return [...prev, stationId];
     });
@@ -437,10 +487,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const handleAddStationInline = () => {
     const trimmed = newStationName.trim();
     if (!trimmed) return;
-    addStation(trimmed);
-    setStationDraft(prev =>
-      prev.includes(trimmed) ? prev : [...prev, trimmed]
-    );
+    // Find existing station by name (case-insensitive) or create a new one
+    const existing = stations.find((s) => s.name.toLowerCase() === trimmed.toLowerCase());
+    const stationId = existing ? existing.id : addStation(trimmed);
+    setStationDraft((prev) => (prev.includes(stationId) ? prev : [...prev, stationId]));
     setNewStationName('');
   };
 
@@ -454,75 +504,54 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       )}
       
       <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
-        {/* Item Name */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <Label className="section-header">Item Name</Label>
-            <Select
-              value={displayNameMode}
-              onValueChange={(value: DisplayNameMode) => {
-                setDisplayNameMode(value);
-                setDraft(d => {
-                  if (value === 'same_as_item') {
-                    return { ...d, posDisplayName: d.itemName, kdsName: d.itemName };
-                  }
-                  if (value === 'custom_pos') {
-                    return { ...d, kdsName: d.itemName };
-                  }
-                  if (value === 'custom_kds') {
-                    return { ...d, posDisplayName: d.itemName };
-                  }
-                  return d;
-                });
-              }}
-            >
-              <SelectTrigger className="h-7 w-[128px] px-2 text-[11px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectOption value="same_as_item">Match item</SelectOption>
-                <SelectOption value="custom_pos">Custom POS</SelectOption>
-                <SelectOption value="custom_kds">Custom KDS</SelectOption>
-                <SelectOption value="custom_both">Custom both</SelectOption>
-              </SelectContent>
-            </Select>
+        {/* Item name, POS, KDS — all visible; item name can drive the other two until you edit POS or KDS separately */}
+        <div className="space-y-1">
+          <Label className="section-header">Names</Label>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">Item name</span>
+              <input
+                type="text"
+                value={draft.itemName}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDraft((d) =>
+                    itemNameDrivesPosKds
+                      ? { ...d, itemName: v, posDisplayName: v, kdsName: v }
+                      : { ...d, itemName: v },
+                  );
+                }}
+                className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
+                placeholder="Item name"
+              />
+            </div>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">POS</span>
+              <input
+                type="text"
+                value={draft.posDisplayName}
+                onChange={(e) => {
+                  setItemNameDrivesPosKds(false);
+                  setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                }}
+                className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                placeholder="POS display name"
+              />
+            </div>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">KDS</span>
+              <input
+                type="text"
+                value={draft.kdsName}
+                onChange={(e) => {
+                  setItemNameDrivesPosKds(false);
+                  setDraft((d) => ({ ...d, kdsName: e.target.value }));
+                }}
+                className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                placeholder="KDS display name"
+              />
+            </div>
           </div>
-          <input
-            type="text"
-            value={draft.itemName}
-            onChange={(e) => setDraft(d => ({ 
-              ...d, 
-              itemName: e.target.value,
-              posDisplayName:
-                displayNameMode === 'custom_pos' || displayNameMode === 'custom_both'
-                  ? d.posDisplayName
-                  : e.target.value,
-              kdsName:
-                displayNameMode === 'custom_kds' || displayNameMode === 'custom_both'
-                  ? d.kdsName
-                  : e.target.value,
-            }))}
-            className="input-field text-lg font-semibold w-full"
-            placeholder="Item name"
-          />
-          {(displayNameMode === 'custom_pos' || displayNameMode === 'custom_both') && (
-            <input
-              type="text"
-              value={draft.posDisplayName}
-              onChange={(e) => setDraft(d => ({ ...d, posDisplayName: e.target.value }))}
-              className="input-field w-full text-sm"
-              placeholder="POS display name"
-            />
-          )}
-          {(displayNameMode === 'custom_kds' || displayNameMode === 'custom_both') && (
-            <input
-              type="text"
-              value={draft.kdsName}
-              onChange={(e) => setDraft(d => ({ ...d, kdsName: e.target.value }))}
-              className="input-field w-full text-sm"
-              placeholder="KDS display name"
-            />
-          )}
         </div>
 
         {/* Description */}
@@ -653,128 +682,229 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Channels</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { key: 'visibilityPos', label: 'POS' },
-                      { key: 'visibilityKiosk', label: 'Kiosk' },
-                      { key: 'visibilityOnline', label: 'Online' },
-                      { key: 'visibilityThirdParty', label: '3rd Party' },
-                    ] as const).map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setDraft(d => ({ ...d, [key]: !d[key] }))}
-                        className={cn(
-                          "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
-                          draft[key]
-                            ? "bg-primary/10 border-primary/30 text-primary"
-                            : "bg-muted/50 border-border text-muted-foreground line-through"
-                        )}
-                      >
-                        <span>{label}</span>
-                        <span className="text-xs">{draft[key] ? '✓' : '✕'}</span>
-                      </button>
+                  <div className="space-y-3">
+                    {Object.entries(getChannelsByGroup()).map(([group, channels]) => (
+                      <div key={group} className="space-y-1.5">
+                        <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">{group}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {channels.map(({ key, label }) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setDraft(d => ({ ...d, [key]: !d[key] }))}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
+                                draft[key]
+                                  ? "bg-primary/10 border-primary/30 text-primary"
+                                  : "bg-muted/50 border-border text-muted-foreground line-through"
+                              )}
+                            >
+                              <span>{label}</span>
+                              <span className="text-xs">{draft[key] ? '✓' : '✕'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline"
-                      onClick={() => {
-                        const activeDays = draft.availableDays
-                          ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                          : [];
-                        setDraft(d => ({ ...d, availableDays: activeDays.length === 7 || activeDays.length === 0 ? '' : DAYS.join(',') }));
-                      }}
-                    >
-                      {(draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7)
-                        ? 'All days'
-                        : 'Select all'}
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    {DAYS.map(day => {
-                      const activeDays = draft.availableDays
-                        ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                        : [];
-                      const allActive = activeDays.length === 0;
-                      const isActive = allActive || activeDays.includes(day);
-                      return (
+                {/* Per-day schedule */}
+                <div className="space-y-2">
+                  {/* ── Bulk hours setter ── */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                      {(bulkStart || bulkEnd) && (
                         <button
-                          key={day}
                           type="button"
-                          onClick={() => {
-                            const current = draft.availableDays
-                              ? draft.availableDays.split(',').map(d => d.trim()).filter(Boolean)
-                              : DAYS.slice();
-                            const base = draft.availableDays === '' ? [...DAYS] : current;
-                            const next = base.includes(day)
-                              ? base.filter(d => d !== day)
-                              : [...base, day];
-                            setDraft(d => ({ ...d, availableDays: next.length === 7 ? '' : next.join(',') }));
-                          }}
-                          className={cn(
-                            "flex-1 py-1.5 rounded text-xs font-medium transition-colors border",
-                            isActive
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted/50 text-muted-foreground border-border"
-                          )}
+                          className="text-xs text-muted-foreground hover:underline"
+                          onClick={() => { setBulkStart(''); setBulkEnd(''); }}
                         >
-                          {day.slice(0, 1)}
+                          Clear
                         </button>
-                      );
-                    })}
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+                        <input
+                          type="time"
+                          value={bulkStart}
+                          onChange={e => setBulkStart(e.target.value)}
+                          className="input-field flex-1 text-sm"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+                        <input
+                          type="time"
+                          value={bulkEnd}
+                          onChange={e => setBulkEnd(e.target.value)}
+                          className="input-field flex-1 text-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!bulkStart && !bulkEnd}
+                        onClick={() => {
+                          setDraft(prev => {
+                            const next = { ...prev.daySchedules };
+                            for (const d of SCHEDULE_DAYS) {
+                              if (next[d].enabled) {
+                                next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
+                              }
+                            }
+                            return { ...prev, daySchedules: next };
+                          });
+                        }}
+                        className="text-xs px-2.5 py-1.5 rounded-md border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+                      >
+                        Apply to all
+                      </button>
+                    </div>
+                    {!bulkStart && !bulkEnd && (
+                      <p className="text-[10px] text-muted-foreground">Set times above then click Apply — overrides all active days at once.</p>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {draft.availableDays === '' || draft.availableDays.split(',').filter(Boolean).length === 7
-                      ? 'Available every day'
-                      : `Available: ${draft.availableDays.split(',').filter(Boolean).join(', ')}`
-                    }
-                  </p>
-                </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours</p>
-                    {(draft.availableTimeStart || draft.availableTimeEnd) && (
+                  {/* ── Per-day toggles & overrides ── */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
                       <button
                         type="button"
                         className="text-xs text-primary hover:underline"
-                        onClick={() => setDraft(d => ({ ...d, availableTimeStart: '', availableTimeEnd: '' }))}
+                        onClick={() => {
+                          const allEnabled = SCHEDULE_DAYS.every(d => draft.daySchedules[d].enabled);
+                          setDraft(prev => {
+                            const next = { ...prev.daySchedules };
+                            for (const d of SCHEDULE_DAYS) {
+                              next[d] = { ...next[d], enabled: !allEnabled };
+                            }
+                            return { ...prev, daySchedules: next };
+                          });
+                        }}
                       >
-                        Clear (all hours)
+                        {SCHEDULE_DAYS.every(d => draft.daySchedules[d].enabled) ? 'All days' : 'Select all'}
                       </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 flex-1">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
-                      <input
-                        type="time"
-                        value={draft.availableTimeStart}
-                        onChange={e => setDraft(d => ({ ...d, availableTimeStart: e.target.value }))}
-                        className="input-field flex-1 text-sm"
-                      />
                     </div>
-                    <div className="flex items-center gap-1.5 flex-1">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
-                      <input
-                        type="time"
-                        value={draft.availableTimeEnd}
-                        onChange={e => setDraft(d => ({ ...d, availableTimeEnd: e.target.value }))}
-                        className="input-field flex-1 text-sm"
-                      />
-                    </div>
+                    <div className="flex flex-wrap gap-1">
+                    {SCHEDULE_DAYS.map(day => {
+                      const sched = draft.daySchedules[day];
+                      const isExpanded = expandedDay === day;
+                      const hasTime = sched.start || sched.end;
+                      return (
+                        <div key={day} className="flex flex-col items-stretch">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!sched.enabled) {
+                                // Enable day and expand it
+                                setDraft(prev => ({
+                                  ...prev,
+                                  daySchedules: { ...prev.daySchedules, [day]: { ...sched, enabled: true } },
+                                }));
+                                setExpandedDay(day);
+                              } else if (isExpanded) {
+                                setExpandedDay(null);
+                              } else {
+                                setExpandedDay(day);
+                              }
+                            }}
+                            className={cn(
+                              "px-2 py-1.5 rounded text-xs font-medium transition-colors border min-w-[36px]",
+                              sched.enabled
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-muted/50 text-muted-foreground border-border"
+                            )}
+                          >
+                            {day.slice(0, 1)}{sched.enabled && hasTime ? ' ·' : ''}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {!draft.availableTimeStart && !draft.availableTimeEnd && (
-                    <p className="text-xs text-muted-foreground">Available all hours</p>
+
+                  {/* Expanded day time editor */}
+                  {expandedDay && draft.daySchedules[expandedDay].enabled && (
+                    <div className="mt-2 p-3 rounded-md border border-border bg-muted/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium">{expandedDay} hours</p>
+                        <div className="flex gap-2">
+                          {(draft.daySchedules[expandedDay].start || draft.daySchedules[expandedDay].end) && (
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:underline"
+                              onClick={() => setDraft(prev => ({
+                                ...prev,
+                                daySchedules: {
+                                  ...prev.daySchedules,
+                                  [expandedDay]: { ...prev.daySchedules[expandedDay], start: '', end: '' },
+                                },
+                              }))}
+                            >
+                              Clear
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="text-xs text-destructive hover:underline"
+                            onClick={() => {
+                              setDraft(prev => ({
+                                ...prev,
+                                daySchedules: {
+                                  ...prev.daySchedules,
+                                  [expandedDay]: { enabled: false, start: '', end: '' },
+                                },
+                              }));
+                              setExpandedDay(null);
+                            }}
+                          >
+                            Disable day
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+                          <input
+                            type="time"
+                            value={draft.daySchedules[expandedDay].start}
+                            onChange={e => setDraft(prev => ({
+                              ...prev,
+                              daySchedules: {
+                                ...prev.daySchedules,
+                                [expandedDay]: { ...prev.daySchedules[expandedDay], start: e.target.value },
+                              },
+                            }))}
+                            className="input-field flex-1 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+                          <input
+                            type="time"
+                            value={draft.daySchedules[expandedDay].end}
+                            onChange={e => setDraft(prev => ({
+                              ...prev,
+                              daySchedules: {
+                                ...prev.daySchedules,
+                                [expandedDay]: { ...prev.daySchedules[expandedDay], end: e.target.value },
+                              },
+                            }))}
+                            className="input-field flex-1 text-sm"
+                          />
+                        </div>
+                      </div>
+                      {!draft.daySchedules[expandedDay].start && !draft.daySchedules[expandedDay].end && (
+                        <p className="text-xs text-muted-foreground">All hours (no restriction)</p>
+                      )}
+                    </div>
                   )}
-                </div>
-              </div>
+                  </div>{/* end Per-day toggles */}
+                </div>{/* end Per-day schedule (space-y-2) */}
+              </div>{/* end AccordionContent space-y-4 */}
             </AccordionContent>
           </AccordionItem>
 
@@ -818,6 +948,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   </button>
                 </div>
 
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border/70 px-2.5 py-1.5 bg-muted/10">
+                  <Label htmlFor="inheritMods" className="text-xs font-medium">
+                    Inherit modifiers from category
+                  </Label>
+                  <Switch
+                    id="inheritMods"
+                    checked={draft.inheritModifiersFromCategory}
+                    onCheckedChange={(checked) =>
+                      setDraft((d) => ({ ...d, inheritModifiersFromCategory: checked }))
+                    }
+                  />
+                </div>
+
                 {attachedModifiers.length > 0 ? (
                   <Accordion type="multiple" className="space-y-1">
               {attachedModifiers.map((modifier) => {
@@ -858,7 +1001,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     <AccordionContent className="px-3 pb-3">
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
-                          <span>{modifier.isOptional || 'Required'} • Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}</span>
+                          <span>
+                            {modifier.isOptional?.trim()
+                              ? `${modifier.isOptional} • `
+                              : ''}
+                            Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                          </span>
                           {modifier.pizzaSelection && (
                             <span className="bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded font-medium">Pizza</span>
                           )}
@@ -970,25 +1118,99 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               <span className="flex items-center gap-2">
                 Tags
                 <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
-                  ({itemTags.length})
+                  ({itemTags.length}/{validTags.length})
                 </span>
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              {itemTags.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {itemTags.map(tag => (
-                    <span
-                      key={tag.id}
-                      className="text-xs bg-muted px-2 py-1 rounded"
-                    >
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No tags on this item</p>
-              )}
+              <div className="space-y-2">
+                {validTags.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No tags exist yet. Create one below.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {validTags.map((tag) => {
+                      const isAssigned = itemTagIds.includes(tag.id);
+                      const isPendingDelete = pendingDeleteTagId === tag.id;
+                      if (isPendingDelete) {
+                        return (
+                          <span
+                            key={tag.id}
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-destructive/10 border-destructive/40 text-destructive"
+                          >
+                            <span>Delete "{tag.name}"?</span>
+                            <button
+                              type="button"
+                              onClick={() => { deleteTag(tag.id); setPendingDeleteTagId(null); }}
+                              className="text-destructive hover:text-destructive/70 font-bold"
+                              title="Confirm delete"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteTagId(null)}
+                              className="text-muted-foreground hover:text-foreground"
+                              title="Cancel"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span
+                          key={tag.id}
+                          className={cn(
+                            'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
+                            isAssigned
+                              ? 'bg-muted border-primary/40 text-foreground'
+                              : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30 hover:text-foreground',
+                          )}
+                          onClick={() => toggleItemTag(tag.id)}
+                        >
+                          {isAssigned && <Check className="w-2.5 h-2.5 shrink-0 text-primary" />}
+                          <span>{tag.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPendingDeleteTagId(tag.id); }}
+                            className="ml-0.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                            title="Delete tag globally"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {showTagInput ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="text"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTag(); if (e.key === 'Escape') { setShowTagInput(false); setNewTagName(''); } }}
+                      placeholder="Tag name..."
+                      className="input-field flex-1 text-xs"
+                      autoFocus
+                    />
+                    <button type="button" onClick={handleCreateTag} className="btn-add px-2 py-1 text-xs">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                    <button type="button" onClick={() => { setShowTagInput(false); setNewTagName(''); }} className="text-xs text-muted-foreground hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowTagInput(true)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                  >
+                    <Plus className="w-3 h-3" /> New tag
+                  </button>
+                )}
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -1014,30 +1236,33 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                       No stations assigned
                     </span>
                   )}
-                  {stationDraft.map(id => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => handleToggleStation(id)}
-                      className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
-                    >
-                      <span>{id}</span>
-                      <span className="text-[10px] leading-none">✕</span>
-                    </button>
-                  ))}
+                  {stationDraft.map((id) => {
+                    const label = stations.find((s) => s.id === id)?.name ?? `Station ${id}`;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => handleToggleStation(id)}
+                        className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
+                      >
+                        <span>{label}</span>
+                        <span className="text-[10px] leading-none">✕</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 {stations.length > 0 && (
                   <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                    {stations.map(id => (
+                    {stations.map((station) => (
                       <label
-                        key={id}
+                        key={station.id}
                         className="flex items-center gap-2 text-xs cursor-pointer"
                       >
                         <Checkbox
-                          checked={stationDraft.includes(id)}
-                          onCheckedChange={() => handleToggleStation(id)}
+                          checked={stationDraft.includes(station.id)}
+                          onCheckedChange={() => handleToggleStation(station.id)}
                         />
-                        <span className="text-muted-foreground">{id}</span>
+                        <span className="text-muted-foreground">{station.name}</span>
                       </label>
                     ))}
                   </div>
@@ -1047,7 +1272,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     type="text"
                     value={newStationName}
                     onChange={(e) => setNewStationName(e.target.value)}
-                    placeholder="Add station ID..."
+                    placeholder="Add station name..."
                     className="input-field flex-1 text-xs"
                   />
                   <button
@@ -1068,25 +1293,99 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               <span className="flex items-center gap-2">
                 Allergens
                 <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
-                  ({itemAllergens.length})
+                  ({itemAllergens.length}/{validAllergens.length})
                 </span>
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              {itemAllergens.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {itemAllergens.map(allergen => (
-                    <span
-                      key={allergen.id}
-                      className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded"
-                    >
-                      {allergen.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No allergens on this item</p>
-              )}
+              <div className="space-y-2">
+                {validAllergens.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No allergens exist yet. Create one below.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {validAllergens.map((allergen) => {
+                      const isAssigned = itemAllergenIds.includes(allergen.id);
+                      const isPendingDelete = pendingDeleteAllergenId === allergen.id;
+                      if (isPendingDelete) {
+                        return (
+                          <span
+                            key={allergen.id}
+                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-destructive/10 border-destructive/40 text-destructive"
+                          >
+                            <span>Delete "{allergen.name}"?</span>
+                            <button
+                              type="button"
+                              onClick={() => { deleteAllergen(allergen.id); setPendingDeleteAllergenId(null); }}
+                              className="text-destructive hover:text-destructive/70 font-bold"
+                              title="Confirm delete"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteAllergenId(null)}
+                              className="text-muted-foreground hover:text-foreground"
+                              title="Cancel"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span
+                          key={allergen.id}
+                          className={cn(
+                            'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
+                            isAssigned
+                              ? 'bg-destructive/15 border-destructive/40 text-destructive'
+                              : 'bg-muted/40 border-border text-muted-foreground hover:border-destructive/30 hover:text-foreground',
+                          )}
+                          onClick={() => toggleItemAllergen(allergen.id)}
+                        >
+                          {isAssigned && <Check className="w-2.5 h-2.5 shrink-0" />}
+                          <span>{allergen.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setPendingDeleteAllergenId(allergen.id); }}
+                            className="ml-0.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                            title="Delete allergen globally"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {showAllergenInput ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="text"
+                      value={newAllergenName}
+                      onChange={(e) => setNewAllergenName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAllergen(); if (e.key === 'Escape') { setShowAllergenInput(false); setNewAllergenName(''); } }}
+                      placeholder="Allergen name..."
+                      className="input-field flex-1 text-xs"
+                      autoFocus
+                    />
+                    <button type="button" onClick={handleCreateAllergen} className="btn-add px-2 py-1 text-xs">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                    <button type="button" onClick={() => { setShowAllergenInput(false); setNewAllergenName(''); }} className="text-xs text-muted-foreground hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllergenInput(true)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+                  >
+                    <Plus className="w-3 h-3" /> New allergen
+                  </button>
+                )}
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -1096,14 +1395,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="inheritMods" className="text-sm text-muted-foreground">Inherit modifiers from category</Label>
-                  <Switch
-                    id="inheritMods"
-                    checked={draft.inheritModifiersFromCategory}
-                    onCheckedChange={(checked) => setDraft(d => ({ ...d, inheritModifiersFromCategory: checked }))}
-                  />
-                </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Prep time (min)</span>
                   <input
@@ -1115,13 +1406,14 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   />
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Calories</span>
+                  <span className="text-muted-foreground">Calories (kcal)</span>
                   <input
                     type="number"
                     min={0}
                     value={draft.calories}
                     onChange={(e) => setDraft(d => ({ ...d, calories: parseInt(e.target.value) || 0 }))}
                     className="input-field w-20 text-right"
+                    aria-label="Calories in kilocalories"
                   />
                 </div>
               </div>

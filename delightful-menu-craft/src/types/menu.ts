@@ -25,6 +25,15 @@ export interface Category {
   tagIds: string; // comma-separated IDs
   menuIds: string; // comma-separated IDs
   sortOrder: number;
+  // Channel visibility (same model as Item)
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
+  // Scheduling — JSON-encoded DayScheduleMap (same format as Item)
+  daySchedules: string;
 }
 
 // Sheet 3: Item
@@ -59,14 +68,16 @@ export interface Item {
   inheritModifiersFromCategory: boolean;
   addonIds: string; // comma-separated IDs
   isSpecialRequest: boolean;
-  // Visibility & scheduling
+  // Visibility channels
   visibilityPos: boolean;
   visibilityKiosk: boolean;
-  visibilityOnline: boolean;
-  visibilityThirdParty: boolean;
-  availableDays: string; // comma-separated e.g. "Mon,Tue,Wed,Thu,Fri,Sat,Sun" (empty = all days)
-  availableTimeStart: string; // "HH:MM" format (empty = no restriction)
-  availableTimeEnd: string; // "HH:MM" format (empty = no restriction)
+  visibilityQr: boolean;       // QR code ordering
+  visibilityWebsite: boolean;  // Web ordering
+  visibilityMobileApp: boolean;// First-party mobile app
+  visibilityDoordash: boolean; // DoorDash / 3rd-party delivery
+  // Scheduling — JSON-encoded DayScheduleMap (see visibility.ts)
+  // Each day key present = day enabled; start/end = "" means no time restriction.
+  daySchedules: string;
 }
 
 // Sheet 4: Item Modifiers (join table)
@@ -135,10 +146,17 @@ export interface Modifier {
   pizzaSelection: boolean;
   price: number;
   parentModifierId: number;
-  offPrem: boolean;
+  offPrem: boolean;   // legacy — kept for Excel backward-compat
   modifierIds: string; // comma-separated IDs for nested modifiers
   isSizeModifier: boolean;
-  onPrem: boolean;
+  onPrem: boolean;    // legacy — kept for Excel backward-compat
+  // Channel visibility (same model as Item)
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
 }
 
 // Sheet 11: Modifier Option
@@ -149,6 +167,13 @@ export interface ModifierOption {
   parentModifierId: number;
   isStockAvailable: boolean;
   isSizeModifier: boolean;
+  // Channel visibility
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
 }
 
 // Sheet 12: Modifier ModifierOptions (join table - links modifiers to their options)
@@ -156,9 +181,11 @@ export interface ModifierModifierOption {
   modifierId: number;
   modifierOptionId: number;
   isDefaultSelected: boolean;
-  maxLimit: number; // This appears to be the price/limit field in the Excel
+  maxLimit: number; // option price/surcharge field
   optionDisplayName: string;
   sortOrder: number;
+  /** How many times a guest can select this option. 1 = once (default), 0 = unlimited, N = up to N. */
+  maxQtyPerOption: number;
 }
 
 // Sheet 13: Allergen
@@ -174,10 +201,19 @@ export interface Tag {
 }
 
 // =============================================================================
+// Station Catalog
+// =============================================================================
+
+export interface Station {
+  id: number;
+  name: string;
+}
+
+// =============================================================================
 // UI State Types
 // =============================================================================
 
-export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'stats';
+export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'stats' | 'categories';
 export type ViewMode = 'tree' | 'pos-preview';
 
 // =============================================================================

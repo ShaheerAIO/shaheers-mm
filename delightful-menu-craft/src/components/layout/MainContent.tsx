@@ -3,6 +3,7 @@ import { MenuBuilderContent } from '@/components/menu-builder/MenuBuilderContent
 import { ModifierLibraryContent } from '@/components/modifier-library/ModifierLibraryContent';
 import { StationsContent } from '@/components/stations/StationsContent';
 import { StatsContent } from '@/components/stats/StatsContent';
+import { CategoriesContent } from '@/components/categories/CategoriesContent';
 
 export function MainContent() {
   const { activeTab } = useMenuStore();
@@ -12,6 +13,7 @@ export function MainContent() {
       {activeTab === 'menu-builder' && <MenuBuilderContent />}
       {activeTab === 'modifier-library' && <ModifierLibraryContent />}
       {activeTab === 'stations' && <StationsContent />}
+      {activeTab === 'categories' && <CategoriesContent />}
       {activeTab === 'stats' && <StatsContent />}
     </main>
   );

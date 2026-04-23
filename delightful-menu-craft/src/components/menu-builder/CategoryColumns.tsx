@@ -3,26 +3,28 @@ import { useMenuStore } from '@/store/menuStore';
 import { CategoryColumn } from './CategoryColumn';
 import { Plus, Upload } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
-import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
+import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function CategoryColumns() {
-  const { 
-    categories, 
+  const {
+    categories,
     items,
     categoryItems,
-    selectedMenuId, 
+    selectedMenuId,
     selectedCategoryId,
     setSelectedCategory,
     isDataLoaded,
     addCategory,
     getNextId,
     selectedItemId,
+    editingCategoryId,
     isCreatingModifier,
     isCreatingOption,
   } = useMenuStore();
 
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (editingCategoryId ? CATEGORY_PANEL_WIDTH_PX : 0) +
     (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
@@ -86,6 +88,13 @@ export function CategoryColumns() {
       tagIds: '',
       menuIds: selectedMenuId.toString(),
       sortOrder: menuCategories.length,
+      visibilityPos: true,
+      visibilityKiosk: true,
+      visibilityQr: true,
+      visibilityWebsite: true,
+      visibilityMobileApp: true,
+      visibilityDoordash: true,
+      daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
     
     addCategory(newCategory);

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Item } from '@/types/menu';
 import { POS_TILE_HEIGHT, POS_TILE_WIDTH } from './posTileStyles';
+import { isVisibleOnChannel } from '@/lib/visibility';
 
 interface QSRMenuPanelProps {
   onAddToTicket: (item: Item) => void;
@@ -36,14 +37,14 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
         .filter((ci) => ci.categoryId === cat.id)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((ci) => items.find((i) => i.id === ci.itemId))
-        .filter((i): i is Item => i !== undefined && i.visibilityPos);
+        .filter((i): i is Item => i !== undefined && isVisibleOnChannel(i, 'visibilityPos'));
 
       const subcatItemsFlat = subcats.flatMap((sub) =>
         categoryItems
           .filter((ci) => ci.categoryId === sub.id)
           .sort((a, b) => a.sortOrder - b.sortOrder)
           .map((ci) => items.find((i) => i.id === ci.itemId))
-          .filter((i): i is Item => i !== undefined && i.visibilityPos),
+          .filter((i): i is Item => i !== undefined && isVisibleOnChannel(i, 'visibilityPos')),
       );
 
       const seen = new Set<number>();

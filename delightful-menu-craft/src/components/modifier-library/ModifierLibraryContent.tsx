@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import {
   Plus,
@@ -18,6 +18,14 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
+import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
+import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
+import {
+  VISIBILITY_CHANNELS,
+  defaultVisibility,
+  getChannelsByGroup,
+  type VisibilityChannelKey,
+} from '@/lib/visibility';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import type { Modifier, ModifierOption } from '@/types/menu';
@@ -36,6 +44,63 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+
+// ---------------------------------------------------------------------------
+// Shared confirm dialog
+// ---------------------------------------------------------------------------
+type ConfirmState = {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+} | null;
+
+function ConfirmDialog({ state, onClose }: { state: ConfirmState; onClose: () => void }) {
+  return (
+    <AlertDialog open={state !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <AlertDialogContent className="max-w-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{state?.title}</AlertDialogTitle>
+          {state?.description && (
+            <AlertDialogDescription>{state.description}</AlertDialogDescription>
+          )}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => { state?.onConfirm(); onClose(); }}
+            className={state?.destructive
+              ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              : undefined}
+          >
+            {state?.confirmLabel ?? 'Confirm'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function ModifierLibraryContent() {
   const {
@@ -52,7 +117,8 @@ export function ModifierLibraryContent() {
 
   const [modifierSearch, setModifierSearch] = useState('');
   const [showOptionsLibrary, setShowOptionsLibrary] = useState(false);
-  
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+
   const selectedModifier = modifiers.find(m => m.id === selectedModifierId);
   
   // Filter modifiers by search query
@@ -74,7 +140,7 @@ export function ModifierLibraryContent() {
       isNested: false,
       addNested: false,
       modifierOptionPriceType: 'NoCharge',
-      isOptional: 'Select any',
+      isOptional: '',
       canGuestSelectMoreModifiers: true,
       multiSelect: false,
       limitIndividualModifierSelection: false,
@@ -89,6 +155,7 @@ export function ModifierLibraryContent() {
       modifierIds: '',
       isSizeModifier: false,
       onPrem: true,
+      ...defaultVisibility(),
     };
     addModifier(newModifier);
     setSelectedModifier(newModifier.id);
@@ -202,8 +269,11 @@ export function ModifierLibraryContent() {
                     )}
                     {modifier.pizzaSelection && <span className="bg-orange-500/10 text-orange-600 px-1 rounded">Pizza</span>}
                     {modifier.isSizeModifier && <span className="bg-purple-500/10 text-purple-600 px-1 rounded">Size</span>}
-                    {modifier.onPrem && <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>}
-                    {modifier.offPrem && <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>}
+                    {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
+                      <span className="bg-amber-500/10 text-amber-600 px-1 rounded text-[10px]">
+                        {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
+                      </span>
+                    )}
                   </div>
                   </button>
                   <button
@@ -212,14 +282,13 @@ export function ModifierLibraryContent() {
                     className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (
-                        !window.confirm(
-                          `Delete modifier "${modifier.modifierName}"? This cannot be undone.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      deleteModifier(modifier.id);
+                      setConfirmState({
+                        title: 'Delete modifier?',
+                        description: `"${modifier.modifierName}" will be permanently removed from the library.`,
+                        confirmLabel: 'Delete',
+                        destructive: true,
+                        onConfirm: () => deleteModifier(modifier.id),
+                      });
                     }}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -247,12 +316,21 @@ export function ModifierLibraryContent() {
         isOpen={showOptionsLibrary}
         onClose={() => setShowOptionsLibrary(false)}
       />
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </>
   );
 }
 
 interface ModifierDetailProps {
   modifier: Modifier;
+}
+
+/** Same rule as item detail: POS can track modifier name until POS or Prefix is edited separately. */
+function modifierNamesInitiallyLinked(m: Modifier): boolean {
+  const name = m.modifierName?.trim() ?? '';
+  const pos = m.posDisplayName?.trim() ?? '';
+  return !pos || pos === name;
 }
 
 interface ModifierDraft {
@@ -267,6 +345,13 @@ interface ModifierDraft {
   isOptional: string;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
+  // Channel visibility
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
 }
 
 function ModifierDetail({ modifier }: ModifierDetailProps) {
@@ -287,9 +372,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   
   const [optionSearch, setOptionSearch] = useState('');
   const [showCreateOption, setShowCreateOption] = useState(false);
+  const [bulkCreateText, setBulkCreateText] = useState('');
+  const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
+  const [bulkLibrarySearch, setBulkLibrarySearch] = useState('');
+  const [bulkLibrarySelection, setBulkLibrarySelection] = useState<number[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   /** Which nested child modifier rows are expanded to show their options */
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
-  const [posDisplayMode, setPosDisplayMode] = useState<'match_modifier' | 'custom_pos'>('match_modifier');
+  /** While true, editing the library name also updates POS. Cleared after editing POS or Prefix. */
+  const [modifierNameDrivesPos, setModifierNameDrivesPos] = useState(() =>
+    modifierNamesInitiallyLinked(modifier),
+  );
 
   // Draft state for modifier fields
   const [draft, setDraft] = useState<ModifierDraft>({
@@ -304,13 +397,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     isOptional: modifier.isOptional,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
+    ...defaultVisibility(),
+    visibilityPos: modifier.visibilityPos ?? true,
+    visibilityKiosk: modifier.visibilityKiosk ?? true,
+    visibilityQr: modifier.visibilityQr ?? true,
+    visibilityWebsite: modifier.visibilityWebsite ?? true,
+    visibilityMobileApp: modifier.visibilityMobileApp ?? true,
+    visibilityDoordash: modifier.visibilityDoordash ?? true,
   });
 
   // Reset draft when modifier changes
   useEffect(() => {
-    const nm = modifier.modifierName?.trim() ?? '';
-    const pos = modifier.posDisplayName?.trim() ?? '';
-    setPosDisplayMode(!pos || pos === nm ? 'match_modifier' : 'custom_pos');
     setDraft({
       modifierName: modifier.modifierName,
       posDisplayName: modifier.posDisplayName,
@@ -323,19 +420,78 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
+      ...defaultVisibility(),
+      visibilityPos: modifier.visibilityPos ?? true,
+      visibilityKiosk: modifier.visibilityKiosk ?? true,
+      visibilityQr: modifier.visibilityQr ?? true,
+      visibilityWebsite: modifier.visibilityWebsite ?? true,
+      visibilityMobileApp: modifier.visibilityMobileApp ?? true,
+      visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
     setOptionSearch('');
     setExpandedNestedChildIds([]);
+    setBulkCreateText('');
   }, [modifier.id]);
 
-  // Check for unsaved changes
-  const hasChanges = useMemo(() => {
+  useEffect(() => {
+    if (bulkFromLibraryOpen) {
+      setBulkLibrarySelection([]);
+      setBulkLibrarySearch('');
+    }
+  }, [bulkFromLibraryOpen]);
+
+  useEffect(() => {
+    setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
+  }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
+
+  const currentStructureFingerprint = useMemo(
+    () =>
+      fingerprintModifierStructure(
+        modifier.id,
+        modifierModifierOptions,
+        modifier.modifierIds ?? '',
+        modifier.addNested,
+      ),
+    [modifier.id, modifier.modifierIds, modifier.addNested, modifierModifierOptions],
+  );
+
+  const [structureBaseline, setStructureBaseline] = useState(() =>
+    fingerprintModifierStructure(
+      modifier.id,
+      modifierModifierOptions,
+      modifier.modifierIds ?? '',
+      modifier.addNested,
+    ),
+  );
+
+  // Baseline only when switching which modifier is open — not on every join-table update.
+  useLayoutEffect(() => {
+    setStructureBaseline(
+      fingerprintModifierStructure(
+        modifier.id,
+        modifierModifierOptions,
+        modifier.modifierIds ?? '',
+        modifier.addNested,
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: capture store snapshot for new `modifier.id` only
+  }, [modifier.id]);
+
+  const hasMetadataChanges = useMemo(() => {
+    const effectiveDraftPos = draft.posDisplayName.trim() || draft.modifierName.trim();
+    const effectiveSavedPos =
+      modifier.posDisplayName.trim() || modifier.modifierName.trim();
     return (
-      draft.modifierName !== modifier.modifierName ||
-      draft.posDisplayName !== modifier.posDisplayName ||
-      draft.prefix !== (modifier.prefix ?? '') ||
+      draft.modifierName.trim() !== modifier.modifierName.trim() ||
+      effectiveDraftPos !== effectiveSavedPos ||
+      draft.prefix.trim() !== (modifier.prefix ?? '').trim() ||
       draft.onPrem !== modifier.onPrem ||
       draft.offPrem !== modifier.offPrem ||
+      VISIBILITY_CHANNELS.some(
+        (ch) =>
+          draft[ch.key as VisibilityChannelKey] !==
+          (modifier[ch.key as VisibilityChannelKey] ?? true),
+      ) ||
       draft.minSelector !== modifier.minSelector ||
       draft.maxSelector !== modifier.maxSelector ||
       draft.noMaxSelection !== modifier.noMaxSelection ||
@@ -345,29 +501,36 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     );
   }, [draft, modifier]);
 
+  const hasStructureChanges = currentStructureFingerprint !== structureBaseline;
+
+  const hasChanges = hasMetadataChanges || hasStructureChanges;
+
   const handleSave = () => {
-    updateModifier(modifier.id, {
-      modifierName: draft.modifierName,
-      posDisplayName:
-        posDisplayMode === 'match_modifier'
-          ? draft.modifierName.trim()
-          : draft.posDisplayName.trim() || draft.modifierName.trim(),
-      prefix: draft.prefix.trim(),
-      onPrem: draft.onPrem,
-      offPrem: draft.offPrem,
-      minSelector: draft.minSelector,
-      maxSelector: draft.maxSelector,
-      noMaxSelection: draft.noMaxSelection,
-      isOptional: draft.isOptional,
-      pizzaSelection: draft.pizzaSelection,
-      isSizeModifier: draft.isSizeModifier,
-    });
+    if (hasMetadataChanges) {
+      updateModifier(modifier.id, {
+        modifierName: draft.modifierName,
+        posDisplayName: draft.posDisplayName.trim() || draft.modifierName.trim(),
+        prefix: draft.prefix.trim(),
+        onPrem: draft.onPrem,
+        offPrem: draft.offPrem,
+        minSelector: draft.minSelector,
+        maxSelector: draft.maxSelector,
+        noMaxSelection: draft.noMaxSelection,
+        isOptional: draft.isOptional,
+        pizzaSelection: draft.pizzaSelection,
+        isSizeModifier: draft.isSizeModifier,
+        visibilityPos: draft.visibilityPos,
+        visibilityKiosk: draft.visibilityKiosk,
+        visibilityQr: draft.visibilityQr,
+        visibilityWebsite: draft.visibilityWebsite,
+        visibilityMobileApp: draft.visibilityMobileApp,
+        visibilityDoordash: draft.visibilityDoordash,
+      });
+    }
+    setSelectedModifier(null);
   };
 
   const handleDiscard = () => {
-    const nm = modifier.modifierName?.trim() ?? '';
-    const pos = modifier.posDisplayName?.trim() ?? '';
-    setPosDisplayMode(!pos || pos === nm ? 'match_modifier' : 'custom_pos');
     setDraft({
       modifierName: modifier.modifierName,
       posDisplayName: modifier.posDisplayName,
@@ -380,7 +543,24 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
+      ...defaultVisibility(),
+      visibilityPos: modifier.visibilityPos ?? true,
+      visibilityKiosk: modifier.visibilityKiosk ?? true,
+      visibilityQr: modifier.visibilityQr ?? true,
+      visibilityWebsite: modifier.visibilityWebsite ?? true,
+      visibilityMobileApp: modifier.visibilityMobileApp ?? true,
+      visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
+    setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
+    // Clears "dirty" for option/nested edits without reverting store (those are already persisted).
+    setStructureBaseline(
+      fingerprintModifierStructure(
+        modifier.id,
+        modifierModifierOptions,
+        modifier.modifierIds ?? '',
+        modifier.addNested,
+      ),
+    );
   };
 
   // Get options for this modifier via join table
@@ -410,21 +590,71 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     return modifierOptions.filter(o => !assignedOptionIds.includes(o.id));
   }, [modifierOptions, modifierOptionAssignments]);
 
-  const handleAddOption = (optionId: string) => {
-    const id = parseInt(optionId);
-    if (isNaN(id)) return;
-    
-    const option = modifierOptions.find(o => o.id === id);
-    if (!option) return;
-    
-    addModifierModifierOption({
-      modifierId: modifier.id,
-      modifierOptionId: id,
-      isDefaultSelected: false,
-      maxLimit: 0,
-      optionDisplayName: option.optionName,
-      sortOrder: modifierOptionAssignments.length,
+  const libraryDialogFilteredOptions = useMemo(() => {
+    const q = bulkLibrarySearch.trim().toLowerCase();
+    if (!q) return availableOptions;
+    return availableOptions.filter((o) => {
+      const name = o.optionName.toLowerCase();
+      const pos = (o.posDisplayName ?? '').toLowerCase();
+      const label = formatModifierOptionForSelect(o).toLowerCase();
+      return name.includes(q) || pos.includes(q) || label.includes(q);
     });
+  }, [availableOptions, bulkLibrarySearch]);
+
+  const handleBulkCreateFromLines = () => {
+    const names = parseBulkOptionNames(bulkCreateText);
+    if (names.length === 0) return;
+    for (const name of names) {
+      const {
+        modifierModifierOptions: mmo,
+        getNextId,
+        addModifierOption: addOpt,
+        addModifierModifierOption: addJoin,
+      } = useMenuStore.getState();
+      const count = mmo.filter((m) => m.modifierId === modifier.id).length;
+      const newOptionId = getNextId('modifierOptions');
+      addOpt({
+        id: newOptionId,
+        optionName: name,
+        posDisplayName: name,
+        parentModifierId: modifier.id,
+        isStockAvailable: true,
+        isSizeModifier: false,
+        ...defaultVisibility(),
+      });
+      addJoin({
+        modifierId: modifier.id,
+        modifierOptionId: newOptionId,
+        isDefaultSelected: false,
+        maxLimit: 0,
+        optionDisplayName: name,
+        sortOrder: count,
+        maxQtyPerOption: 1,
+      });
+    }
+    setBulkCreateText('');
+  };
+
+  const handleBulkAddExistingFromLibrary = () => {
+    if (bulkLibrarySelection.length === 0) return;
+    for (const id of bulkLibrarySelection) {
+      const option = modifierOptions.find((o) => o.id === id);
+      if (!option) continue;
+      const count = useMenuStore
+        .getState()
+        .modifierModifierOptions.filter((m) => m.modifierId === modifier.id).length;
+      useMenuStore.getState().addModifierModifierOption({
+        modifierId: modifier.id,
+        modifierOptionId: id,
+        isDefaultSelected: false,
+        maxLimit: 0,
+        optionDisplayName: option.optionName,
+        sortOrder: count,
+        maxQtyPerOption: 1,
+      });
+    }
+    setBulkLibrarySelection([]);
+    setBulkFromLibraryOpen(false);
   };
 
   const handleCreateOption = (optionData: {
@@ -443,6 +673,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       parentModifierId: modifier.id,
       isStockAvailable: optionData.isStockAvailable,
       isSizeModifier: optionData.isSizeModifier,
+      ...defaultVisibility(),
     };
     addModifierOption(newOption);
     
@@ -454,11 +685,24 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       maxLimit: optionData.price,
       optionDisplayName: optionData.optionName,
       sortOrder: modifierOptionAssignments.length,
+      maxQtyPerOption: 1,
     });
   };
 
   const handleOptionPriceChange = (optionId: number, maxLimit: number) => {
     updateModifierModifierOption(modifier.id, optionId, { maxLimit });
+  };
+
+  const handleOptionQtyChange = (optionId: number, maxQtyPerOption: number) => {
+    updateModifierModifierOption(modifier.id, optionId, { maxQtyPerOption });
+    // Keep limitIndividualModifierSelection in sync
+    const allAssignments = useMenuStore.getState().modifierModifierOptions.filter(
+      m => m.modifierId === modifier.id,
+    );
+    const anyMultiQty = allAssignments.some(
+      m => m.modifierOptionId === optionId ? maxQtyPerOption !== 1 : m.maxQtyPerOption !== 1,
+    );
+    updateModifier(modifier.id, { limitIndividualModifierSelection: anyMultiQty });
   };
 
   const handleRemoveOption = (optionId: number) => {
@@ -468,24 +712,26 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const handleDeleteOptionGlobally = (optionId: number, label: string) => {
     const usage = modifierModifierOptions.filter((mmo) => mmo.modifierOptionId === optionId).length;
     const name = label.trim() || 'This option';
-    const msg =
-      usage > 1
-        ? `${name} is linked to ${usage} modifiers. Delete it from the library everywhere?`
-        : `Delete ${name} from the library? This cannot be undone.`;
-    if (!window.confirm(msg)) return;
-    deleteModifierOption(optionId);
+    const description = usage > 1
+      ? `"${name}" is linked to ${usage} modifiers. It will be removed from the library and all those modifiers.`
+      : `"${name}" will be permanently removed from the option library.`;
+    setConfirmState({
+      title: 'Delete option?',
+      description,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => { deleteModifierOption(optionId); },
+    });
   };
 
   const handleDeleteModifier = () => {
-    if (
-      !window.confirm(
-        `Delete modifier "${modifier.modifierName}"? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
-    deleteModifier(modifier.id);
-    setSelectedModifier(null);
+    setConfirmState({
+      title: 'Delete modifier?',
+      description: `"${modifier.modifierName}" will be permanently removed from the library and unlinked from all items.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => { deleteModifier(modifier.id); setSelectedModifier(null); },
+    });
   };
 
   /** Options for any modifier id (join table first, then parentModifierId fallback) */
@@ -562,6 +808,39 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
   const effectiveMode = detectedMode ?? chosenMode;
 
+  const handleSwitchMode = (targetMode: 'flat' | 'nested') => {
+    if (effectiveMode === targetMode) return;
+
+    if (detectedMode === 'flat') {
+      const count = modifierOptionAssignments.length;
+      const snapshot = [...modifierOptionAssignments];
+      setConfirmState({
+        title: 'Switch to Nested Modifiers?',
+        description: `This will remove ${count} option assignment${count !== 1 ? 's' : ''} from this modifier.`,
+        confirmLabel: 'Switch',
+        destructive: false,
+        onConfirm: () => {
+          snapshot.forEach(a => removeModifierModifierOption(modifier.id, a.modifierOptionId));
+          setChosenMode(targetMode);
+        },
+      });
+    } else if (detectedMode === 'nested') {
+      const count = childModifiers.length;
+      setConfirmState({
+        title: 'Switch to Flat Options?',
+        description: `This will unlink ${count} nested modifier${count !== 1 ? 's' : ''} from this modifier.`,
+        confirmLabel: 'Switch',
+        destructive: false,
+        onConfirm: () => {
+          updateModifier(modifier.id, { modifierIds: '' });
+          setChosenMode(targetMode);
+        },
+      });
+    } else {
+      setChosenMode(targetMode);
+    }
+  };
+
   // Modifiers eligible to be added as children:
   // - not self
   // - not already a child
@@ -612,75 +891,60 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         )}
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Names */}
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label className="section-header">Modifier name</Label>
-              <p className="text-xs text-muted-foreground">
-                Internal / menu-builder name (reports, Excel, library).
-              </p>
-              <input
-                type="text"
-                value={draft.modifierName}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setDraft(d => ({
-                    ...d,
-                    modifierName: v,
-                    posDisplayName: posDisplayMode === 'match_modifier' ? v : d.posDisplayName,
-                  }));
-                }}
-                className="input-field text-xl font-semibold w-full"
-                placeholder="Modifier name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="section-header">POS display name</Label>
-              <Select
-                value={posDisplayMode}
-                onValueChange={(v: 'match_modifier' | 'custom_pos') => {
-                  setPosDisplayMode(v);
-                  if (v === 'match_modifier') {
-                    setDraft(d => ({ ...d, posDisplayName: d.modifierName }));
-                  } else {
-                    setDraft(d => ({
-                      ...d,
-                      posDisplayName: d.posDisplayName.trim() ? d.posDisplayName : d.modifierName,
-                    }));
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full max-w-md">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="match_modifier">Same as modifier name</SelectItem>
-                  <SelectItem value="custom_pos">Custom POS name</SelectItem>
-                </SelectContent>
-              </Select>
-              {posDisplayMode === 'custom_pos' && (
+          {/* Names — match ItemDetailPanel: section header + inline label rows; name can drive POS until POS/Prefix is edited */}
+          <div className="space-y-1">
+            <Label className="section-header">Names</Label>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
+                  Name
+                </span>
+                <input
+                  type="text"
+                  value={draft.modifierName}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setDraft((d) =>
+                      modifierNameDrivesPos
+                        ? { ...d, modifierName: v, posDisplayName: v }
+                        : { ...d, modifierName: v },
+                    );
+                  }}
+                  className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
+                  placeholder="Modifier name"
+                />
+              </div>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
+                  POS
+                </span>
                 <input
                   type="text"
                   value={draft.posDisplayName}
-                  onChange={(e) => setDraft(d => ({ ...d, posDisplayName: e.target.value }))}
-                  className="input-field w-full max-w-md text-sm"
-                  placeholder="Shown on POS / guest-facing UI"
+                  onChange={(e) => {
+                    setModifierNameDrivesPos(false);
+                    setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                  }}
+                  className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                  placeholder="POS display name"
                 />
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lib-mod-prefix" className="section-header">Prefix (optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Short label on tickets or kitchen display.
-              </p>
-              <input
-                id="lib-mod-prefix"
-                type="text"
-                value={draft.prefix}
-                onChange={(e) => setDraft(d => ({ ...d, prefix: e.target.value }))}
-                className="input-field w-full max-w-md text-sm"
-                placeholder="e.g., TOP, SIDE"
-              />
+              </div>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
+                  Prefix
+                </span>
+                <input
+                  id="lib-mod-prefix"
+                  type="text"
+                  value={draft.prefix}
+                  onChange={(e) => {
+                    setModifierNameDrivesPos(false);
+                    setDraft((d) => ({ ...d, prefix: e.target.value }));
+                  }}
+                  className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                  placeholder="e.g., TOP, SIDE"
+                />
+              </div>
             </div>
           </div>
 
@@ -695,68 +959,61 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             ) : null;
           })()}
 
-          {/* Modifier Type — mode selector (when empty) or locked indicator */}
+          {/* Modifier Type — always show both buttons; active mode highlighted, inactive greyed & disabled */}
           <div className="space-y-2">
             <Label className="section-header">Modifier Type</Label>
-            {effectiveMode === null ? (
-              // Nothing saved yet — let user choose
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setChosenMode('flat')}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
-                    chosenMode === 'flat'
-                      ? 'bg-primary/10 border-primary text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted/50',
-                  )}
-                >
-                  <List className="w-4 h-4 shrink-0" />
-                  <div>
-                    <div className="font-semibold text-xs">Flat Options</div>
-                    <div className="text-[10px] font-normal opacity-70 leading-tight">Guest picks from a list</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChosenMode('nested')}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
-                    chosenMode === 'nested'
-                      ? 'bg-primary/10 border-primary text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted/50',
-                  )}
-                >
-                  <GitBranch className="w-4 h-4 shrink-0" />
-                  <div>
-                    <div className="font-semibold text-xs">Nested Modifiers</div>
-                    <div className="text-[10px] font-normal opacity-70 leading-tight">Container for sub-modifiers</div>
-                  </div>
-                </button>
-              </div>
-            ) : (
-              // Mode is locked by existing data
-              <div className={cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs',
-                effectiveMode === 'flat'
-                  ? 'bg-primary/5 border-primary/20 text-primary'
-                  : 'bg-primary/5 border-primary/20 text-primary',
-              )}>
-                {effectiveMode === 'flat'
-                  ? <List className="w-3.5 h-3.5 shrink-0" />
-                  : <GitBranch className="w-3.5 h-3.5 shrink-0" />}
-                <div className="flex-1">
-                  <span className="font-semibold">
-                    {effectiveMode === 'flat' ? 'Flat Options' : 'Nested Modifiers'}
-                  </span>
-                  <span className="text-muted-foreground ml-1.5">
-                    {effectiveMode === 'flat'
-                      ? '— remove all options to switch to Nested'
-                      : '— remove all nested modifiers to switch to Flat'}
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Flat Options button */}
+              {(() => {
+                const isActive = effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat');
+                const willClear = effectiveMode === 'nested';
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchMode('flat')}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
+                      isActive
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted/50',
+                    )}
+                  >
+                    <List className="w-4 h-4 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Flat Options</div>
+                      <div className="text-[10px] font-normal opacity-70 leading-tight">
+                        {willClear ? 'Switch — will clear nested' : 'Guest picks from a list'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+              {/* Nested Modifiers button */}
+              {(() => {
+                const isActive = effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested');
+                const willClear = effectiveMode === 'flat';
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchMode('nested')}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
+                      isActive
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted/50',
+                    )}
+                  >
+                    <GitBranch className="w-4 h-4 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Nested Modifiers</div>
+                      <div className="text-[10px] font-normal opacity-70 leading-tight">
+                        {willClear ? 'Switch — will clear options' : 'Container for sub-modifiers'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Nested Modifiers — nested mode only */}
@@ -819,11 +1076,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         </span>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                           <span>{optCount} options</span>
-                          {child.onPrem && (
-                            <span className="bg-green-500/10 text-green-600 px-1 rounded">On</span>
-                          )}
-                          {child.offPrem && (
-                            <span className="bg-blue-500/10 text-blue-600 px-1 rounded">Off</span>
+                          {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
+                            <span className="bg-amber-500/10 text-amber-600 px-1 rounded">
+                              {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
+                            </span>
                           )}
                         </div>
                       </div>
@@ -873,30 +1129,45 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
           {/* Options — flat mode only */}
           {(effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat')) &&
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Label className="section-header">Options ({modifierOptionAssignments.length})</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {availableOptions.length > 0 && (
-                  <Select onValueChange={handleAddOption}>
-                    <SelectTrigger className="w-32">
-                      <span className="text-xs">Add Existing</span>
-                    </SelectTrigger>
-                    <SelectContent className="max-w-[min(100vw-2rem,28rem)]">
-                      {availableOptions.map((option) => (
-                        <SelectItem key={option.id} value={option.id.toString()}>
-                          <span className="line-clamp-2 text-left whitespace-normal">
-                            {formatModifierOptionForSelect(option)}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 text-xs"
+                    onClick={() => setBulkFromLibraryOpen(true)}
+                  >
+                    Add from library…
+                  </Button>
                 )}
-                <button className="btn-add" onClick={() => setShowCreateOption(true)}>
+                <button type="button" className="btn-add" onClick={() => setShowCreateOption(true)}>
                   <Plus className="w-3.5 h-3.5" />
                   New Option
                 </button>
               </div>
+            </div>
+
+            <div className="rounded-md border border-border bg-muted/20 p-2.5 space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">Bulk create (one name per line, or comma / semicolon separated)</Label>
+              <textarea
+                value={bulkCreateText}
+                onChange={(e) => setBulkCreateText(e.target.value)}
+                rows={3}
+                placeholder={'e.g.\nSmall\nMedium\nLarge'}
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-y min-h-[4.5rem] focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!parseBulkOptionNames(bulkCreateText).length}
+                onClick={handleBulkCreateFromLines}
+              >
+                Add as options
+              </Button>
             </div>
 
             {/* Search Options */}
@@ -958,19 +1229,38 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={assignment.maxLimit}
-                      onChange={(e) => handleOptionPriceChange(
-                        assignment.modifierOptionId,
-                        parseFloat(e.target.value) || 0
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground text-xs">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={assignment.maxLimit}
+                        onChange={(e) => handleOptionPriceChange(
+                          assignment.modifierOptionId,
+                          parseFloat(e.target.value) || 0
+                        )}
+                        className="input-field w-20"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
+                      <span className="text-muted-foreground text-xs">Qty</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={assignment.maxQtyPerOption ?? 1}
+                        onChange={(e) => handleOptionQtyChange(
+                          assignment.modifierOptionId,
+                          Math.max(0, parseInt(e.target.value) || 0)
+                        )}
+                        className="input-field w-14 text-center"
+                      />
+                      {(assignment.maxQtyPerOption ?? 1) === 0 && (
+                        <span className="text-[10px] text-primary font-semibold">∞</span>
                       )}
-                      className="input-field w-20"
-                    />
+                    </div>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -1012,31 +1302,32 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </div>
           </div>}
 
-          {/* Channel Availability (onPrem/offPrem) */}
+          {/* Channel Visibility */}
           <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-            <Label className="section-header">Channel Availability</Label>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="onPrem" className="text-sm">On-Premise (Dine-in)</Label>
-                <p className="text-xs text-muted-foreground">Show for in-house orders</p>
+            <Label className="section-header">Channel Visibility</Label>
+            {Object.entries(getChannelsByGroup()).map(([group, channels]) => (
+              <div key={group} className="space-y-1.5">
+                <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">{group}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {channels.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDraft(d => ({ ...d, [key]: !d[key as VisibilityChannelKey] }))}
+                      className={cn(
+                        "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
+                        draft[key as VisibilityChannelKey]
+                          ? "bg-primary/10 border-primary/30 text-primary"
+                          : "bg-muted/50 border-border text-muted-foreground line-through"
+                      )}
+                    >
+                      <span>{label}</span>
+                      <span className="text-xs">{draft[key as VisibilityChannelKey] ? '✓' : '✕'}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Switch
-                id="onPrem"
-                checked={draft.onPrem}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, onPrem: checked }))}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="offPrem" className="text-sm">Off-Premise (Delivery/Pickup)</Label>
-                <p className="text-xs text-muted-foreground">Show for online/delivery orders</p>
-              </div>
-              <Switch
-                id="offPrem"
-                checked={draft.offPrem}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, offPrem: checked }))}
-              />
-            </div>
+            ))}
           </div>
 
           {/* Pizza & Size Settings */}
@@ -1098,17 +1389,22 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </div>
           </div>
 
-          {/* Optional / Required */}
+          {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
           <div className="space-y-2">
             <Label className="section-header">Selection Type</Label>
-            <Select 
-              value={draft.isOptional} 
-              onValueChange={(value) => setDraft(d => ({ ...d, isOptional: value }))}
+            <Select
+              value={draft.isOptional === '' ? '__empty__' : draft.isOptional}
+              onValueChange={(value) =>
+                setDraft((d) => ({ ...d, isOptional: value === '__empty__' ? '' : value }))
+              }
             >
               <SelectTrigger className="w-48">
-                <SelectValue />
+                <SelectValue placeholder=" " />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="__empty__" className="text-muted-foreground/70">
+                  &nbsp;
+                </SelectItem>
                 <SelectItem value="Select any">Optional (Select any)</SelectItem>
                 <SelectItem value="Required">Required</SelectItem>
                 <SelectItem value="Select one">Select One</SelectItem>
@@ -1153,12 +1449,106 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         </div>
       </div>
 
+      <Dialog open={bulkFromLibraryOpen} onOpenChange={setBulkFromLibraryOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col gap-3">
+          <DialogHeader>
+            <DialogTitle>Add options from library</DialogTitle>
+            <DialogDescription>
+              Select one or more options from the library (not already on this modifier). POS follows each library entry.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search library options…"
+              value={bulkLibrarySearch}
+              onChange={(e) => setBulkLibrarySearch(e.target.value)}
+              className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {bulkLibrarySearch ? (
+              <button
+                type="button"
+                onClick={() => setBulkLibrarySearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setBulkLibrarySelection((prev) => [
+                  ...new Set([...prev, ...libraryDialogFilteredOptions.map((o) => o.id)]),
+                ])
+              }
+              disabled={libraryDialogFilteredOptions.length === 0}
+            >
+              Select all{bulkLibrarySearch.trim() ? ' shown' : ''}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setBulkLibrarySelection([])}>
+              Clear
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-2 space-y-1 max-h-[min(45vh,320px)]">
+            {availableOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No unassigned options in the library.</p>
+            ) : libraryDialogFilteredOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                {`No options match "${bulkLibrarySearch.trim()}"`}
+              </p>
+            ) : (
+              libraryDialogFilteredOptions.map((option) => (
+                <label
+                  key={option.id}
+                  className="flex items-start gap-2 text-sm cursor-pointer rounded-md p-1.5 hover:bg-muted/60"
+                >
+                  <Checkbox
+                    checked={bulkLibrarySelection.includes(option.id)}
+                    onCheckedChange={(checked) => {
+                      setBulkLibrarySelection((prev) =>
+                        checked === true
+                          ? prev.includes(option.id)
+                            ? prev
+                            : [...prev, option.id]
+                          : prev.filter((id) => id !== option.id),
+                      );
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setBulkFromLibraryOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBulkAddExistingFromLibrary}
+              disabled={bulkLibrarySelection.length === 0}
+            >
+              Add{bulkLibrarySelection.length ? ` (${bulkLibrarySelection.length})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Option Modal */}
       <CreateOptionModal
         isOpen={showCreateOption}
         onClose={() => setShowCreateOption(false)}
         onSave={handleCreateOption}
       />
+
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </>
   );
 }

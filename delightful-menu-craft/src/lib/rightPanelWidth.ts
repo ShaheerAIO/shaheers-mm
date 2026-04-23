@@ -3,3 +3,9 @@
  * ~10% wider than the original 320px design (352px), then ~10% again for comfortable mod creation.
  */
 export const RIGHT_PANEL_WIDTH_PX = 388;
+
+/**
+ * Width for the category detail panel — slightly wider to comfortably fit
+ * the 2-column channel grid and day-schedule UI.
+ */
+export const CATEGORY_PANEL_WIDTH_PX = 420;

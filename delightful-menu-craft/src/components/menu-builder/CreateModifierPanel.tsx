@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch, List } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List, Search } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -19,6 +19,23 @@ import {
 import { cn } from '@/lib/utils';
 import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
+import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
+import {
+  VISIBILITY_CHANNELS,
+  defaultVisibility,
+  getChannelsByGroup,
+  type VisibilityChannelKey,
+} from '@/lib/visibility';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface CreateModifierPanelProps {
   itemId: number;
@@ -31,6 +48,7 @@ type OptionDraft = {
   posDisplayName: string;
   price: number;
   isDefaultSelected: boolean;
+  maxQtyPerOption: number; // 1 = once, 0 = unlimited, N = up to N
 } & (
   | { type: 'existing'; existingOptionId: number }
   | { type: 'new'; isStockAvailable: boolean; isSizeModifier: boolean }
@@ -63,9 +81,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [minSelector, setMinSelector] = useState(0);
   const [maxSelector, setMaxSelector] = useState(1);
   const [noMaxSelection, setNoMaxSelection] = useState(false);
-  const [isOptional, setIsOptional] = useState('Select any');
+  const [isOptional, setIsOptional] = useState('');
   const [onPrem, setOnPrem] = useState(true);
   const [offPrem, setOffPrem] = useState(true);
+  const [channelVisibility, setChannelVisibility] = useState<Record<VisibilityChannelKey, boolean>>(defaultVisibility());
   const [pizzaSelection, setPizzaSelection] = useState(false);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
@@ -75,6 +94,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
+  const [bulkCreateText, setBulkCreateText] = useState('');
+  const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
+  const [bulkLibrarySearch, setBulkLibrarySearch] = useState('');
+  const [bulkLibrarySelection, setBulkLibrarySelection] = useState<number[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
 
   // Nested modifier IDs selected during creation
@@ -93,6 +116,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       .map(id => modifiers.find(m => m.id === id))
       .filter((m): m is Modifier => m !== undefined);
   }, [nestedModifierIds, modifiers]);
+
+  useEffect(() => {
+    if (bulkFromLibraryOpen) {
+      setBulkLibrarySelection([]);
+      setBulkLibrarySearch('');
+    }
+  }, [bulkFromLibraryOpen]);
 
   // Auto-set minSelector to 1 when "Required" is selected
   useEffect(() => {
@@ -117,6 +147,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         posDisplayName: pendingOption.posDisplayName,
         price: 0,
         isDefaultSelected: false,
+        maxQtyPerOption: 1,
         isStockAvailable: pendingOption.isStockAvailable,
         isSizeModifier: pendingOption.isSizeModifier,
       };
@@ -135,29 +166,65 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     return modifierOptions.filter(o => !addedOptionIds.includes(o.id));
   }, [modifierOptions, options]);
 
+  const libraryDialogFilteredOptions = useMemo(() => {
+    const q = bulkLibrarySearch.trim().toLowerCase();
+    if (!q) return availableOptions;
+    return availableOptions.filter((o) => {
+      const name = o.optionName.toLowerCase();
+      const pos = (o.posDisplayName ?? '').toLowerCase();
+      const label = formatModifierOptionForSelect(o).toLowerCase();
+      return name.includes(q) || pos.includes(q) || label.includes(q);
+    });
+  }, [availableOptions, bulkLibrarySearch]);
+
   // Get existing item modifiers count for sort order
   const itemModifiersCount = useMemo(() => {
     return itemModifiers.filter(im => im.itemId === itemId).length;
   }, [itemModifiers, itemId]);
 
-  const handleAddExistingOption = (optionId: string) => {
-    const id = parseInt(optionId);
-    if (isNaN(id)) return;
+  const handleBulkAddExistingFromLibrary = () => {
+    if (bulkLibrarySelection.length === 0) return;
+    const existingIds = new Set(
+      options.filter((o) => o.type === 'existing').map((o) => o.existingOptionId),
+    );
+    const newDrafts: OptionDraft[] = [];
+    for (const id of bulkLibrarySelection) {
+      if (existingIds.has(id)) continue;
+      const option = modifierOptions.find((o) => o.id === id);
+      if (!option) continue;
+      existingIds.add(id);
+      newDrafts.push({
+        id: `existing-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        type: 'existing',
+        existingOptionId: id,
+        optionName: option.optionName,
+        posDisplayName: option.posDisplayName,
+        price: 0,
+        isDefaultSelected: false,
+        maxQtyPerOption: 1,
+      });
+    }
+    if (newDrafts.length > 0) setOptions((prev) => [...prev, ...newDrafts]);
+    setBulkLibrarySelection([]);
+    setBulkFromLibraryOpen(false);
+  };
 
-    const option = modifierOptions.find(o => o.id === id);
-    if (!option) return;
-
-    const newOption: OptionDraft = {
-      id: `existing-${id}-${Date.now()}`,
-      type: 'existing',
-      existingOptionId: id,
-      optionName: option.optionName,
-      posDisplayName: option.posDisplayName,
+  const handleBulkCreateFromLines = () => {
+    const names = parseBulkOptionNames(bulkCreateText);
+    if (names.length === 0) return;
+    const newDrafts: OptionDraft[] = names.map((name, i) => ({
+      id: `new-bulk-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+      type: 'new' as const,
+      optionName: name,
+      posDisplayName: name,
       price: 0,
       isDefaultSelected: false,
-    };
-
-    setOptions([...options, newOption]);
+      maxQtyPerOption: 1,
+      isStockAvailable: true,
+      isSizeModifier: false,
+    }));
+    setOptions((prev) => [...prev, ...newDrafts]);
+    setBulkCreateText('');
   };
 
   const handleCreateNewOption = () => {
@@ -177,6 +244,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       posDisplayName: newOption.posDisplayName,
       price: 0,
       isDefaultSelected: false,
+      maxQtyPerOption: 1,
       isStockAvailable: newOption.isStockAvailable,
       isSizeModifier: newOption.isSizeModifier,
     };
@@ -241,13 +309,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       modifierOptionPriceType: 'NoCharge',
       canGuestSelectMoreModifiers: true,
       multiSelect: false,
-      limitIndividualModifierSelection: false,
+      limitIndividualModifierSelection: options.some(o => o.maxQtyPerOption !== 1),
       prefix: prefix.trim(),
       pizzaSelection,
       price: 0,
       parentModifierId: 0,
       modifierIds: '',
       isSizeModifier,
+      ...channelVisibility,
     };
     addModifier(newModifier);
 
@@ -267,6 +336,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           parentModifierId: newModifierId,
           isStockAvailable: opt.isStockAvailable,
           isSizeModifier: opt.isSizeModifier,
+          ...defaultVisibility(),
         };
         addModifierOption(newOption);
       }
@@ -279,6 +349,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         maxLimit: opt.price,
         optionDisplayName: opt.posDisplayName.trim() || opt.optionName,
         sortOrder: index,
+        maxQtyPerOption: opt.maxQtyPerOption,
       });
     });
 
@@ -327,7 +398,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setMinSelector(0);
     setMaxSelector(1);
     setNoMaxSelection(false);
-    setIsOptional('Select any');
+    setIsOptional('');
     setOnPrem(true);
     setOffPrem(true);
     setPizzaSelection(false);
@@ -335,6 +406,9 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
+    setBulkCreateText('');
+    setBulkFromLibraryOpen(false);
+    setBulkLibrarySelection([]);
   };
 
   const isValid =
@@ -355,13 +429,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-5 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-4 scrollbar-thin">
         {/* Required name — always visible */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label className="section-header">Modifier name *</Label>
-          <p className="text-xs text-muted-foreground">
-            Internal name (reports, Excel, library). POS and ticket labels are in the section below.
-          </p>
           <input
             type="text"
             value={modifierName}
@@ -487,20 +558,29 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-3 pb-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="onPrem" className="text-sm">On-premise</Label>
-                    <p className="text-[10px] text-muted-foreground">Dine-in orders</p>
+                {Object.entries(getChannelsByGroup()).map(([group, channels]) => (
+                  <div key={group} className="space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">{group}</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {channels.map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setChannelVisibility(v => ({ ...v, [key]: !v[key as VisibilityChannelKey] }))}
+                          className={cn(
+                            "flex items-center justify-between px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors",
+                            channelVisibility[key as VisibilityChannelKey]
+                              ? "bg-primary/10 border-primary/30 text-primary"
+                              : "bg-muted/50 border-border text-muted-foreground line-through"
+                          )}
+                        >
+                          <span>{label}</span>
+                          <span>{channelVisibility[key as VisibilityChannelKey] ? '✓' : '✕'}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <Switch id="onPrem" checked={onPrem} onCheckedChange={setOnPrem} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="offPrem" className="text-sm">Off-premise</Label>
-                    <p className="text-[10px] text-muted-foreground">Delivery / pickup</p>
-                  </div>
-                  <Switch id="offPrem" checked={offPrem} onCheckedChange={setOffPrem} />
-                </div>
+                ))}
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <Label htmlFor="pizzaSelection" className="text-sm">Pizza selection</Label>
@@ -564,11 +644,17 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="section-header text-xs">Selection type</Label>
-                  <Select value={isOptional} onValueChange={setIsOptional}>
+                  <Select
+                    value={isOptional === '' ? '__empty__' : isOptional}
+                    onValueChange={(v) => setIsOptional(v === '__empty__' ? '' : v)}
+                  >
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      <SelectValue placeholder=" " />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__empty__" className="text-muted-foreground/70">
+                        &nbsp;
+                      </SelectItem>
                       <SelectItem value="Select any">Optional (select any)</SelectItem>
                       <SelectItem value="Required">Required</SelectItem>
                       <SelectItem value="Select one">Select one</SelectItem>
@@ -581,33 +667,50 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         </Accordion>
 
         {/* Options — flat mode only */}
-        {modifierMode === 'flat' && <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label className="section-header">
-              Options ({options.length}) *
-            </Label>
-            <div className="flex gap-2">
+        {modifierMode === 'flat' && <div className="space-y-2.5">
+          {/* Header row: label + action buttons inline */}
+          <div className="flex items-center justify-between gap-2">
+            <Label className="section-header">Options ({options.length}) *</Label>
+            <div className="flex items-center gap-1.5">
               {availableOptions.length > 0 && (
-                <Select onValueChange={handleAddExistingOption}>
-                  <SelectTrigger className="w-[min(100%,11rem)] min-w-[8rem]">
-                    <span className="text-xs truncate">Add Existing</span>
-                  </SelectTrigger>
-                  <SelectContent className="max-w-[min(100vw-2rem,26rem)]">
-                    {availableOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id.toString()}>
-                        <span className="line-clamp-2 text-left whitespace-normal">
-                          {formatModifierOptionForSelect(option)}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <button
+                  type="button"
+                  onClick={() => setBulkFromLibraryOpen(true)}
+                  className="text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  From library
+                </button>
               )}
-              <button className="btn-add" onClick={handleCreateNewOption}>
+              <button type="button" className="btn-add" onClick={handleCreateNewOption}>
                 <Plus className="w-3.5 h-3.5" />
-                New Option
+                New
               </button>
             </div>
+          </div>
+
+          {/* Bulk create — compact, collapsible feel */}
+          <div className="rounded-md border border-border/60 bg-muted/10">
+            <div className="flex items-center justify-between px-2.5 py-1.5">
+              <span className="text-[11px] text-muted-foreground font-medium">Bulk add names</span>
+              {parseBulkOptionNames(bulkCreateText).length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-6 text-[11px] px-2"
+                  onClick={handleBulkCreateFromLines}
+                >
+                  Add {parseBulkOptionNames(bulkCreateText).length}
+                </Button>
+              )}
+            </div>
+            <textarea
+              value={bulkCreateText}
+              onChange={(e) => setBulkCreateText(e.target.value)}
+              rows={2}
+              placeholder={'One per line, or comma / semicolon separated'}
+              className="w-full rounded-b-md border-t border-border/60 bg-background px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            />
           </div>
 
           {options.length === 0 ? (
@@ -638,7 +741,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                           </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">$</span>
                       <input
                         type="number"
@@ -651,7 +754,27 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         className="input-field w-20 text-sm"
                         placeholder="0.00"
                       />
-                      <label className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground" title="Max times a guest can select this option (0 = unlimited)">Qty</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={option.maxQtyPerOption}
+                          onChange={(e) =>
+                            setOptions(opts => opts.map(o =>
+                              o.id === option.id
+                                ? { ...o, maxQtyPerOption: Math.max(0, parseInt(e.target.value) || 0) }
+                                : o
+                            ))
+                          }
+                          className="input-field w-14 text-sm text-center"
+                        />
+                        {option.maxQtyPerOption === 0 && (
+                          <span className="text-[10px] text-primary font-semibold">∞</span>
+                        )}
+                      </div>
+                      <label className="flex items-center gap-1 text-xs text-muted-foreground">
                         <input
                           type="checkbox"
                           checked={option.isDefaultSelected}
@@ -785,6 +908,98 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           </div>
         </div>
       )}
+
+      <Dialog open={bulkFromLibraryOpen} onOpenChange={setBulkFromLibraryOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col gap-3">
+          <DialogHeader>
+            <DialogTitle>Add options from library</DialogTitle>
+            <DialogDescription>
+              Select one or more library options not already in this list. They attach when you save the modifier.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search library options…"
+              value={bulkLibrarySearch}
+              onChange={(e) => setBulkLibrarySearch(e.target.value)}
+              className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {bulkLibrarySearch ? (
+              <button
+                type="button"
+                onClick={() => setBulkLibrarySearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setBulkLibrarySelection((prev) => [
+                  ...new Set([...prev, ...libraryDialogFilteredOptions.map((o) => o.id)]),
+                ])
+              }
+              disabled={libraryDialogFilteredOptions.length === 0}
+            >
+              Select all{bulkLibrarySearch.trim() ? ' shown' : ''}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setBulkLibrarySelection([])}>
+              Clear
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-2 space-y-1 max-h-[min(45vh,320px)]">
+            {availableOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No options left to add from the library.</p>
+            ) : libraryDialogFilteredOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                {`No options match "${bulkLibrarySearch.trim()}"`}
+              </p>
+            ) : (
+              libraryDialogFilteredOptions.map((option) => (
+                <label
+                  key={option.id}
+                  className="flex items-start gap-2 text-sm cursor-pointer rounded-md p-1.5 hover:bg-muted/60"
+                >
+                  <Checkbox
+                    checked={bulkLibrarySelection.includes(option.id)}
+                    onCheckedChange={(checked) => {
+                      setBulkLibrarySelection((prev) =>
+                        checked === true
+                          ? prev.includes(option.id)
+                            ? prev
+                            : [...prev, option.id]
+                          : prev.filter((id) => id !== option.id),
+                      );
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setBulkFromLibraryOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBulkAddExistingFromLibrary}
+              disabled={bulkLibrarySelection.length === 0}
+            >
+              Add{bulkLibrarySelection.length ? ` (${bulkLibrarySelection.length})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

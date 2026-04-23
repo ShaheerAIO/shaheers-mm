@@ -16,6 +16,7 @@ import type {
   Tag,
   ExcelMenuData,
 } from '@/types/menu';
+import { parseVisibilityFromRow, parseDaySchedules, serializeDaySchedules } from '@/lib/visibility';
 
 // Sheet names as they appear in the Excel file
 const SHEET_NAMES = {
@@ -61,11 +62,6 @@ const parseString = (value: unknown): string => {
   return String(value);
 };
 
-// Visibility columns default to true when the cell is absent (backward-compat)
-const parseVisibility = (value: unknown): boolean => {
-  if (value === null || value === undefined || value === '') return true;
-  return parseBoolean(value);
-};
 
 // Parse Menu sheet
 const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
@@ -95,6 +91,17 @@ const parseCategories = (sheet: XLSX.WorkSheet): Category[] => {
     tagIds: parseString(row['tagIds']),
     menuIds: parseString(row['menuIds']),
     sortOrder: parseNumber(row['sortOrder']),
+    visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
+    visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
+    visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
+    visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
+    visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
+    visibilityDoordash:  row['visibilityDoordash']  !== undefined ? parseBoolean(row['visibilityDoordash'])  : true,
+    daySchedules: serializeDaySchedules(
+      parseDaySchedules(
+        parseString(row['daySchedules']) || undefined,
+      )
+    ),
   }));
 };
 
@@ -122,7 +129,11 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     minLimit: parseNumber(row['minLimit']),
     maxLimit: parseNumber(row['maxLimit']),
     noMaxLimit: parseBoolean(row['noMaxLimit']),
-    stationIds: parseString(row['stationIds']),
+    stationIds: parseString(row['stationIds'])
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => { const n = parseInt(t, 10); return !isNaN(n) && n > 0 && String(n) === t; })
+      .join(','),
     preparationTime: parseNumber(row['preparationTime']),
     calories: parseNumber(row['calories']),
     tagIds: parseString(row['tagIds']),
@@ -132,13 +143,15 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
     addonIds: parseString(row['addonIds']),
     isSpecialRequest: parseBoolean(row['isSpecialRequest']),
-    visibilityPos: parseVisibility(row['visibilityPos']),
-    visibilityKiosk: parseVisibility(row['visibilityKiosk']),
-    visibilityOnline: parseVisibility(row['visibilityOnline']),
-    visibilityThirdParty: parseVisibility(row['visibilityThirdParty']),
-    availableDays: parseString(row['availableDays']),
-    availableTimeStart: parseString(row['availableTimeStart']),
-    availableTimeEnd: parseString(row['availableTimeEnd']),
+    ...parseVisibilityFromRow(row),
+    daySchedules: serializeDaySchedules(
+      parseDaySchedules(
+        parseString(row['daySchedules']) || undefined,
+        parseString(row['availableDays'])     || undefined,
+        parseString(row['availableTimeStart']) || undefined,
+        parseString(row['availableTimeEnd'])   || undefined,
+      )
+    ),
   }));
 };
 
@@ -232,6 +245,7 @@ const parseModifiers = (sheet: XLSX.WorkSheet): Modifier[] => {
     modifierIds: parseString(row['modifierIds']),
     isSizeModifier: parseBoolean(row['isSizeModifier']),
     onPrem: parseBoolean(row['onPrem']),
+    ...parseVisibilityFromRow(row),
   }));
 };
 
@@ -245,6 +259,7 @@ const parseModifierOptions = (sheet: XLSX.WorkSheet): ModifierOption[] => {
     parentModifierId: parseNumber(row['parentModifierId']),
     isStockAvailable: parseBoolean(row['isStockAvailable']),
     isSizeModifier: parseBoolean(row['isSizeModifier']),
+    ...parseVisibilityFromRow(row),
   }));
 };
 
@@ -258,25 +273,30 @@ const parseModifierModifierOptions = (sheet: XLSX.WorkSheet): ModifierModifierOp
     maxLimit: parseNumber(row['maxLimit']),
     optionDisplayName: parseString(row['optionDisplayName']),
     sortOrder: parseNumber(row['sortOrder']),
+    maxQtyPerOption: row['maxQtyPerOption'] !== undefined ? parseNumber(row['maxQtyPerOption']) : 1,
   }));
 };
 
 // Parse Allergen sheet
 const parseAllergens = (sheet: XLSX.WorkSheet): Allergen[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-  return data.map((row) => ({
-    id: parseNumber(row['id']),
-    name: parseString(row['name']),
-  }));
+  return data
+    .map((row) => ({
+      id: parseNumber(row['id']),
+      name: parseString(row['name']),
+    }))
+    .filter((a) => a.id > 0 && a.name.trim().length > 0);
 };
 
 // Parse Tag sheet
 const parseTags = (sheet: XLSX.WorkSheet): Tag[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-  return data.map((row) => ({
-    id: parseNumber(row['id']),
-    name: parseString(row['name']),
-  }));
+  return data
+    .map((row) => ({
+      id: parseNumber(row['id']),
+      name: parseString(row['name']),
+    }))
+    .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };
 
 /**

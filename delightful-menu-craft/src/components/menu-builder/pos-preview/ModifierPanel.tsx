@@ -102,6 +102,8 @@ function isMeaningfulOptionalLabel(value: string | undefined): boolean {
   if (!t) return false;
   const lower = t.toLowerCase();
   if (lower === 'false' || lower === 'true') return false;
+  // Legacy / noisy default; don't show as a rule line in POS
+  if (lower === 'select any') return false;
   return true;
 }
 
@@ -194,6 +196,7 @@ export function ModifierPanel({
       maxLimit: 0,
       optionDisplayName: o.optionName,
       sortOrder: idx,
+      maxQtyPerOption: 1,
       option: o,
     }));
   };
@@ -214,6 +217,41 @@ export function ModifierPanel({
         return { ...prev, [modifierId]: [] };
       }
       return { ...prev, [modifierId]: [optionId] };
+    });
+  };
+
+  /** Increment an option by one occurrence (for maxQtyPerOption > 1). */
+  const incrementOption = (
+    modifierId: number,
+    optionId: number,
+    multiSelect: boolean,
+    maxQty: number, // 0 = unlimited
+  ) => {
+    setSelectedOptions((prev) => {
+      const current = prev[modifierId] ?? [];
+      const currentCount = current.filter((id) => id === optionId).length;
+      // At cap — do nothing
+      if (maxQty > 0 && currentCount >= maxQty) return prev;
+      if (!multiSelect) {
+        // Single-select: if a different option is already chosen, replace it
+        const otherIds = current.filter((id) => id !== optionId);
+        if (otherIds.length > 0) {
+          return { ...prev, [modifierId]: [optionId] };
+        }
+      }
+      return { ...prev, [modifierId]: [...current, optionId] };
+    });
+  };
+
+  /** Decrement an option by one occurrence. */
+  const decrementOption = (modifierId: number, optionId: number) => {
+    setSelectedOptions((prev) => {
+      const current = prev[modifierId] ?? [];
+      const idx = current.lastIndexOf(optionId);
+      if (idx === -1) return prev;
+      const next = [...current];
+      next.splice(idx, 1);
+      return { ...prev, [modifierId]: next };
     });
   };
 
@@ -333,15 +371,23 @@ export function ModifierPanel({
         )}
 
         <div className="flex flex-wrap gap-2">
-          {currentOptions.map(({ modifierOptionId, option, isDefaultSelected }) => {
+          {currentOptions.map(
+            ({ modifierOptionId, option, isDefaultSelected, maxQtyPerOption = 1, maxLimit }) => {
+            const surcharge = typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
             const isPizza = mod.pizzaSelection;
             const activeSelections = selectedOptions[mod.id];
             const pizzaSide = pizzaSides[modifierOptionId];
+            const isMultiQty = !isPizza && maxQtyPerOption !== 1;
+            const qty = isMultiQty
+              ? (activeSelections?.filter((id) => id === modifierOptionId).length ?? 0)
+              : 0;
             const isSelected = isPizza
               ? pizzaSide !== undefined
-              : activeSelections !== undefined
-                ? activeSelections.includes(modifierOptionId)
-                : isDefaultSelected;
+              : isMultiQty
+                ? qty > 0
+                : activeSelections !== undefined
+                  ? activeSelections.includes(modifierOptionId)
+                  : isDefaultSelected;
 
             return (
               <button
@@ -350,19 +396,27 @@ export function ModifierPanel({
                 onClick={() =>
                   isPizza
                     ? togglePizzaOption(mod.id, modifierOptionId)
-                    : toggleOption(mod.id, modifierOptionId, mod.multiSelect)
+                    : isMultiQty
+                      ? incrementOption(mod.id, modifierOptionId, mod.multiSelect, maxQtyPerOption)
+                      : toggleOption(mod.id, modifierOptionId, mod.multiSelect)
                 }
                 className={cn(
-                  `${POS_TILE_FRAME} flex items-center justify-center px-2.5 text-xs font-semibold text-center transition-all border relative`,
+                  `${POS_TILE_FRAME} flex flex-col items-center justify-center gap-0.5 px-2 py-1 text-xs font-semibold text-center transition-all border relative`,
                   isSelected
                     ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
                     : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
                 )}
                 style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
               >
-                <span className="line-clamp-2 leading-tight px-0.5">
+                <span className="line-clamp-2 leading-tight px-0.5 min-h-0">
                   {option?.posDisplayName || option?.optionName}
                 </span>
+                {surcharge > 0 ? (
+                  <span className="text-[10px] font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums leading-none shrink-0">
+                    +${surcharge.toFixed(2)}
+                  </span>
+                ) : null}
+                {/* Pizza side badge */}
                 {isPizza && pizzaSide && (
                   <span
                     className={cn(
@@ -371,6 +425,26 @@ export function ModifierPanel({
                     )}
                   >
                     {SIDE_SHORT[pizzaSide]}
+                  </span>
+                )}
+                {/* Multi-qty count badge */}
+                {isMultiQty && qty > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-0.5 rounded-full bg-orange-500 text-[9px] font-bold flex items-center justify-center text-white leading-none pointer-events-none">
+                    ×{qty}
+                  </span>
+                )}
+                {/* Decrement button — span with role to avoid nested <button> invalidity */}
+                {isMultiQty && qty > 0 && (
+                  <span
+                    role="button"
+                    aria-label="Decrease quantity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      decrementOption(mod.id, modifierOptionId);
+                    }}
+                    className="absolute bottom-1 left-1 w-[18px] h-[18px] rounded-full bg-zinc-700 hover:bg-zinc-500 border border-zinc-600 flex items-center justify-center text-white transition-colors cursor-pointer"
+                  >
+                    <Minus className="w-2.5 h-2.5" />
                   </span>
                 )}
               </button>

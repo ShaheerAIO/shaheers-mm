@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { Plus, GripVertical, Pencil, Search, X, Library, Trash2, FolderPlus } from 'lucide-react';
+import { Plus, GripVertical, Pencil, Search, X, Library, Trash2, FolderPlus, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
 import { AddItemsModal } from './AddItemsModal';
+import { defaultVisibility, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +16,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+
+const SUBCAT_PALETTE = [
+  '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6',
+  '#8b5cf6', '#ec4899', '#ef4444', '#06b6d4', '#84cc16',
+  '#f59e0b', '#10b981', '#6366f1', '#d946ef', '#0ea5e9',
+];
+
+function pickSubcatColor(siblingColors: string[]): string {
+  const used = new Set(siblingColors.map((c) => c.toLowerCase()));
+  const unused = SUBCAT_PALETTE.filter((c) => !used.has(c.toLowerCase()));
+  const pool = unused.length > 0 ? unused : SUBCAT_PALETTE;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 interface CategoryColumnProps {
   category: Category;
@@ -31,10 +45,10 @@ export function CategoryColumn({
   isExpanded,
   onExpand,
 }: CategoryColumnProps) {
-  const { 
-    selectedItemId, 
-    setSelectedItem, 
-    addItem, 
+  const {
+    selectedItemId,
+    setSelectedItem,
+    addItem,
     addCategoryItem,
     removeCategoryItem,
     deleteCategory,
@@ -42,6 +56,7 @@ export function CategoryColumn({
     getNextId,
     categoryItems,
     updateCategory,
+    setEditingCategory,
   } = useMenuStore();
   const [activeSubcat, setActiveSubcat] = useState<number | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -53,6 +68,12 @@ export function CategoryColumn({
   const [subcatToDelete, setSubcatToDelete] = useState<Category | null>(null);
   const [editingSubcatId, setEditingSubcatId] = useState<number | null>(null);
   const [subcatDraftName, setSubcatDraftName] = useState('');
+
+  // Accent color: active subcategory color when one is selected, otherwise root category color
+  const accentColor = useMemo(() => {
+    if (!activeSubcat) return category.color?.trim() || '#f97316';
+    return subcategories.find((s) => s.id === activeSubcat)?.color?.trim() || category.color?.trim() || '#f97316';
+  }, [activeSubcat, category.color, subcategories]);
 
   // Reset temp name when category changes
   useEffect(() => {
@@ -149,13 +170,8 @@ export function CategoryColumn({
       inheritModifiersFromCategory: true,
       addonIds: '',
       isSpecialRequest: false,
-      visibilityPos: true,
-      visibilityKiosk: true,
-      visibilityOnline: true,
-      visibilityThirdParty: true,
-      availableDays: '',
-      availableTimeStart: '',
-      availableTimeEnd: '',
+      ...defaultVisibility(),
+      daySchedules: serializeDaySchedules(defaultDaySchedules()),
     };
     
     // Add the item
@@ -198,18 +214,26 @@ export function CategoryColumn({
   };
 
   const handleAddSubcategory = () => {
+    const siblingColors = subcategories.map((s) => s.color).filter(Boolean) as string[];
     const newSubcat: Category = {
       id: getNextId('categories'),
       categoryName: 'New Subcategory',
       posDisplayName: 'New Subcategory',
       kdsDisplayName: 'New Subcategory',
-      color: category.color,
+      color: pickSubcatColor(siblingColors),
       image: '',
       kioskImage: '',
       parentCategoryId: category.id,
       tagIds: '',
       menuIds: category.menuIds,
       sortOrder: subcategories.length,
+      visibilityPos: true,
+      visibilityKiosk: true,
+      visibilityQr: true,
+      visibilityWebsite: true,
+      visibilityMobileApp: true,
+      visibilityDoordash: true,
+      daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
     addCategory(newSubcat);
     setActiveSubcat(newSubcat.id);
@@ -290,8 +314,15 @@ export function CategoryColumn({
 
   return (
     <>
-      <div className="category-column expanded">
-        <div className="category-header flex items-center justify-between">
+      <div
+        className="category-column expanded"
+        style={{
+          borderLeftColor: accentColor,
+          borderRightColor: accentColor,
+          boxShadow: `0 0 0 1px ${accentColor}33, 0 0 18px ${accentColor}40`,
+        }}
+      >
+        <div className="category-header flex items-center justify-between group">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
             <input
@@ -339,6 +370,13 @@ export function CategoryColumn({
           <div className="flex items-center gap-1 flex-shrink-0 ml-2">
             <span className="text-xs text-muted-foreground">{items.length}</span>
             <button
+              onClick={(e) => { e.stopPropagation(); setEditingCategory(category.id); }}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+              title="Edit category settings"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={() => setShowDeleteConfirm(true)}
               className="p-1 text-muted-foreground hover:text-destructive transition-colors"
               title="Delete category"
@@ -349,12 +387,12 @@ export function CategoryColumn({
         </div>
 
         {/* Subcategory Tabs */}
-        <div className="flex gap-1 px-3 py-2 border-b border-panel-border overflow-x-auto items-center">
+        <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-panel-border items-center">
           {subcategories.length > 0 && (
             <button
               onClick={() => setActiveSubcat(null)}
               className={cn(
-                "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0",
+                "px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap",
                 !activeSubcat 
                   ? "bg-primary text-primary-foreground" 
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -363,15 +401,17 @@ export function CategoryColumn({
               All
             </button>
           )}
-          {subcategories.map((subcat) => (
+          {subcategories.map((subcat) => {
+            const isActive = activeSubcat === subcat.id;
+            const chipColor = subcat.color?.trim() || '#f97316';
+            return (
             <div
               key={subcat.id}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 group/tab min-w-0 max-w-[200px]",
-                activeSubcat === subcat.id 
-                  ? "bg-primary text-primary-foreground" 
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors group/tab min-w-0 max-w-[200px]",
+                isActive ? "text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
+              style={isActive ? { backgroundColor: chipColor } : undefined}
             >
               {editingSubcatId === subcat.id ? (
                 <input
@@ -413,13 +453,26 @@ export function CategoryColumn({
                     onClick={(e) => startSubcategoryRename(subcat, e)}
                     className={cn(
                       "flex-shrink-0 p-0.5 rounded transition-opacity",
-                      activeSubcat === subcat.id
-                        ? "text-primary-foreground/80 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
+                      isActive
+                        ? "text-white/80 hover:text-white opacity-0 group-hover/tab:opacity-100"
                         : "text-muted-foreground/80 hover:text-foreground opacity-0 group-hover/tab:opacity-100"
                     )}
                     title="Rename subcategory"
                   >
                     <Pencil className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setEditingCategory(subcat.id); }}
+                    className={cn(
+                      "flex-shrink-0 p-0.5 rounded transition-opacity",
+                      isActive
+                        ? "text-white/80 hover:text-white opacity-0 group-hover/tab:opacity-100"
+                        : "text-muted-foreground/80 hover:text-foreground opacity-0 group-hover/tab:opacity-100"
+                    )}
+                    title="Edit subcategory settings"
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
                   </button>
                 </>
               )}
@@ -429,8 +482,8 @@ export function CategoryColumn({
                   onClick={(e) => handleDeleteSubcategory(subcat, e)}
                   className={cn(
                     "leading-none transition-opacity flex-shrink-0",
-                    activeSubcat === subcat.id
-                      ? "text-primary-foreground/70 hover:text-primary-foreground opacity-0 group-hover/tab:opacity-100"
+                    isActive
+                      ? "text-white/70 hover:text-white opacity-0 group-hover/tab:opacity-100"
                       : "text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/tab:opacity-100"
                   )}
                   title="Delete subcategory"
@@ -439,10 +492,10 @@ export function CategoryColumn({
                 </button>
               )}
             </div>
-          ))}
+          );})}
           <button
             onClick={handleAddSubcategory}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap flex-shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
             title="Add subcategory"
           >
             <FolderPlus className="w-3.5 h-3.5" />

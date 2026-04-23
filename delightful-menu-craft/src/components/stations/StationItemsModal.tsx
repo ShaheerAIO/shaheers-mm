@@ -14,22 +14,28 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
 interface StationItemsModalProps {
-  stationId: string;
+  stationId: number;
   isOpen: boolean;
   onClose: () => void;
 }
 
 export function StationItemsModal({ stationId, isOpen, onClose }: StationItemsModalProps) {
-  const { items, bulkSetItemsForStation } = useMenuStore();
+  const { items, stations, bulkSetItemsForStation } = useMenuStore();
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const stationLabel =
+    stations.find((s) => s.id === stationId)?.name ?? `Station ${stationId}`;
 
   // Initialize selected items when modal opens or station/items change
   const initialSelectedIds = useMemo(() => {
     const set = new Set<number>();
-    items.forEach(item => {
+    items.forEach((item) => {
       const ids = item.stationIds
-        ? item.stationIds.split(',').map(id => id.trim()).filter(Boolean)
+        ? item.stationIds
+            .split(',')
+            .map((id) => parseInt(id.trim(), 10))
+            .filter((n) => !isNaN(n) && n > 0)
         : [];
       if (ids.includes(stationId)) {
         set.add(item.id);
@@ -89,7 +95,7 @@ export function StationItemsModal({ stationId, isOpen, onClose }: StationItemsMo
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[520px] flex flex-col max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Manage Items for Station {stationId}</DialogTitle>
+          <DialogTitle>Manage Items for {stationLabel}</DialogTitle>
           <DialogDescription>
             Select which items should be assigned to this station.
           </DialogDescription>
