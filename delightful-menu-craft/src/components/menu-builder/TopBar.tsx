@@ -1,16 +1,9 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, Pencil, Check, X, Plus, Trash2 } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Upload, Download, FilePlus, X, Plus, Trash2, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { RIGHT_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
+import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
 export function TopBar() {
   const { 
@@ -34,26 +27,38 @@ export function TopBar() {
     exportData,
     isDataLoaded,
     startFresh,
-    updateMenu,
     addMenu,
     deleteMenu,
     getNextId,
     selectedItemId,
     isCreatingModifier,
     isCreatingOption,
+    editingMenuId,
+    setEditingMenu,
   } = useMenuStore();
 
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
+    (editingMenuId ? CATEGORY_PANEL_WIDTH_PX : 0) +
     (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [confirmDeleteMenuOpen, setConfirmDeleteMenuOpen] = useState(false);
-  const [renamingMenu, setRenamingMenu] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
+  const [menuDropdownOpen, setMenuDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  const menuDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!menuDropdownRef.current?.contains(e.target as Node)) {
+        setMenuDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuDropdownOpen]);
 
   const handleNewClick = () => {
     if (isDataLoaded) {
@@ -61,21 +66,6 @@ export function TopBar() {
     } else {
       startFresh();
     }
-  };
-
-  const commitRename = () => {
-    const trimmed = renameValue.trim();
-    if (trimmed && selectedMenuId != null) {
-      updateMenu(selectedMenuId, { menuName: trimmed, posDisplayName: trimmed });
-    }
-    setRenamingMenu(false);
-  };
-
-  const startRename = () => {
-    const current = menus.find((m) => m.id === selectedMenuId);
-    setRenameValue(current?.menuName ?? '');
-    setRenamingMenu(true);
-    setTimeout(() => renameInputRef.current?.select(), 0);
   };
 
   const handleAddMenu = () => {
@@ -91,6 +81,13 @@ export function TopBar() {
       posButtonColor: '#f97316',
       picture: '',
       sortOrder,
+      visibilityPos: true,
+      visibilityKiosk: true,
+      visibilityQr: true,
+      visibilityWebsite: true,
+      visibilityMobileApp: true,
+      visibilityDoordash: true,
+      daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     });
     setSelectedMenu(id);
   };
@@ -196,104 +193,87 @@ export function TopBar() {
 
       {/* Menu Selector */}
       <div className="flex items-center gap-2 min-w-0">
-        {renamingMenu ? (
-          <div className="flex items-center gap-1">
-            <input
-              ref={renameInputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
-                if (e.key === 'Escape') setRenamingMenu(false);
-              }}
-              className="w-40 px-2 py-1 text-sm rounded-md border border-ring bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              autoFocus
-            />
-            <button
-              onMouseDown={(e) => { e.preventDefault(); commitRename(); }}
-              className="p-1 text-emerald-400 hover:text-emerald-300"
-              title="Save"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onMouseDown={(e) => { e.preventDefault(); setRenamingMenu(false); }}
-              className="p-1 text-zinc-500 hover:text-zinc-300"
-              title="Cancel"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div
-              className={cn(
-                'relative min-w-0 flex-1',
-                panelWidth > 0 ? 'w-40 max-w-[220px]' : 'w-56 max-w-[360px]',
-              )}
-            >
-              <Select
-                value={selectedMenuId?.toString() || ''}
-                onValueChange={(val) => setSelectedMenu(val ? parseInt(val) : null)}
-                disabled={!isDataLoaded}
-              >
-                <SelectTrigger
-                  className={cn(
-                    'w-full h-9 text-sm pr-16 [&>span]:text-left [&>span]:truncate',
-                    panelWidth > 0 ? '[&>span]:max-w-[75%]' : '[&>span]:max-w-[calc(100%-2.75rem)]',
-                  )}
-                >
-                  <SelectValue placeholder={isDataLoaded ? "Select menu" : "Import data first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {menus.map((menu) => (
-                    <SelectItem key={menu.id} value={menu.id.toString()}>
-                      {menu.menuName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {/* Custom menu dropdown */}
+        <div ref={menuDropdownRef} className="relative">
+          <button
+            type="button"
+            disabled={!isDataLoaded}
+            onClick={() => setMenuDropdownOpen((o) => !o)}
+            className={cn(
+              'flex items-center gap-2 h-9 px-3 rounded-md border border-border text-sm transition-colors min-w-[160px] max-w-[240px]',
+              isDataLoaded
+                ? 'bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer'
+                : 'bg-muted text-muted-foreground cursor-not-allowed',
+              menuDropdownOpen && 'border-ring ring-1 ring-ring',
+            )}
+          >
+            <span className="flex-1 text-left truncate">
+              {selectedMenuId != null
+                ? (menus.find((m) => m.id === selectedMenuId)?.menuName ?? 'Select menu')
+                : isDataLoaded ? 'Select menu' : 'Import data first'}
+            </span>
+            <ChevronDown className={cn('w-4 h-4 shrink-0 text-muted-foreground transition-transform', menuDropdownOpen && 'rotate-180')} />
+          </button>
 
-              {selectedMenuId != null && isDataLoaded && (
+          {menuDropdownOpen && isDataLoaded && (
+            <div className="absolute top-full mt-1 right-0 z-50 min-w-[220px] bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+              {menus.sort((a, b) => a.sortOrder - b.sortOrder).map((menu) => {
+                const isSelected = menu.id === selectedMenuId;
+                const isEditing = menu.id === editingMenuId;
+                return (
+                  <div
+                    key={menu.id}
+                    className={cn(
+                      'group flex items-center gap-1 px-3 py-2 text-sm',
+                      isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="flex-1 text-left truncate"
+                      onClick={() => { setSelectedMenu(menu.id); setMenuDropdownOpen(false); }}
+                    >
+                      {menu.menuName}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setEditingMenu(isEditing ? null : menu.id); setMenuDropdownOpen(false); }}
+                      className={cn(
+                        'shrink-0 p-1 rounded transition-colors',
+                        isEditing
+                          ? 'text-primary'
+                          : 'text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground',
+                      )}
+                      title="Menu settings"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                    {menus.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setSelectedMenu(menu.id); setMenuDropdownOpen(false); setConfirmDeleteMenuOpen(true); }}
+                        className="shrink-0 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-colors"
+                        title="Delete menu"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="border-t border-border">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    startRename();
-                  }}
-                  className="absolute right-8 top-1/2 -translate-y-1/2 z-10 h-6 w-6 inline-flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors"
-                  title="Rename menu"
-                  aria-label="Rename menu"
+                  onClick={() => { handleAddMenu(); setMenuDropdownOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" />
+                  Add menu
                 </button>
-              )}
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleAddMenu}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-              title="Add another menu"
-            >
-              <Plus className="w-4 h-4" />
-              Add menu
-            </button>
-
-            {selectedMenuId != null && isDataLoaded && menus.length > 1 && (
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteMenuOpen(true)}
-                className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-white/5 transition-colors"
-                title="Delete this menu"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Delete current menu */}

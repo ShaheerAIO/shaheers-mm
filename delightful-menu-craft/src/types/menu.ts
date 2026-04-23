@@ -10,6 +10,15 @@ export interface Menu {
   posButtonColor: string;
   picture: string;
   sortOrder: number;
+  // Channel visibility
+  visibilityPos: boolean;
+  visibilityKiosk: boolean;
+  visibilityQr: boolean;
+  visibilityWebsite: boolean;
+  visibilityMobileApp: boolean;
+  visibilityDoordash: boolean;
+  // Scheduling — JSON-encoded DayScheduleMap
+  daySchedules: string;
 }
 
 // Sheet 2: Category

@@ -18,6 +18,7 @@ export function CategoryColumns() {
     getNextId,
     selectedItemId,
     editingCategoryId,
+    editingMenuId,
     isCreatingModifier,
     isCreatingOption,
   } = useMenuStore();
@@ -25,6 +26,7 @@ export function CategoryColumns() {
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
     (editingCategoryId ? CATEGORY_PANEL_WIDTH_PX : 0) +
+    (editingMenuId ? CATEGORY_PANEL_WIDTH_PX : 0) +
     (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 

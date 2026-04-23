@@ -21,7 +21,7 @@ const SHEET_NAMES = {
 
 // Column headers for each sheet (matching Excel exactly)
 const HEADERS = {
-  MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder'],
+  MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules'],
   CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules'],
   ITEM: [
     'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture',

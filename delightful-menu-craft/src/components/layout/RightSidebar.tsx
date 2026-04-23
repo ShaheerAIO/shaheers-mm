@@ -4,6 +4,7 @@ import { ItemDetailPanel } from '@/components/menu-builder/ItemDetailPanel';
 import { CreateModifierPanel } from '@/components/menu-builder/CreateModifierPanel';
 import { CreateOptionPanel } from '@/components/menu-builder/CreateOptionPanel';
 import { CategoryDetailPanel } from '@/components/categories/CategoryDetailPanel';
+import { MenuDetailPanel } from '@/components/menu-builder/MenuDetailPanel';
 import { cn } from '@/lib/utils';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
@@ -19,11 +20,17 @@ export function RightSidebar() {
     editingCategoryId,
     setEditingCategory,
     categories,
+    editingMenuId,
+    setEditingMenu,
+    menus,
   } = useMenuStore();
 
   const selectedItem = items.find(i => i.id === selectedItemId);
   const editingCategory = editingCategoryId != null
     ? categories.find(c => c.id === editingCategoryId) ?? null
+    : null;
+  const editingMenu = editingMenuId != null
+    ? menus.find(m => m.id === editingMenuId) ?? null
     : null;
 
   const handleBackdropClick = () => {
@@ -31,7 +38,7 @@ export function RightSidebar() {
     setIsCreatingModifier(false);
   };
 
-  if (!selectedItem && !editingCategory) return null;
+  if (!selectedItem && !editingCategory && !editingMenu) return null;
 
   const panelStyle = { width: RIGHT_PANEL_WIDTH_PX } as const;
   const categoryPanelStyle = { width: CATEGORY_PANEL_WIDTH_PX } as const;
@@ -48,6 +55,27 @@ export function RightSidebar() {
 
       {/* Sidebars container - sits on the right, panels stack left-to-right */}
       <div className="fixed top-0 right-0 h-screen flex z-50">
+        {/* Menu Detail Panel */}
+        {editingMenu && !selectedItem && !editingCategory && (
+          <aside
+            style={categoryPanelStyle}
+            className="h-full bg-panel-bg border-l border-panel-border flex flex-col shrink-0"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-panel-border flex-shrink-0">
+              <span className="text-sm font-medium truncate">{editingMenu.menuName}</span>
+              <button
+                onClick={() => setEditingMenu(null)}
+                className="p-1.5 rounded-md hover:bg-muted transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <MenuDetailPanel menu={editingMenu} />
+            </div>
+          </aside>
+        )}
+
         {/* Category Detail Panel - shown when editing a category and no item selected */}
         {editingCategory && !selectedItem && (
           <aside

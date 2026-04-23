@@ -73,6 +73,15 @@ const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
     posButtonColor: parseString(row['posButtonColor']),
     picture: parseString(row['picture']),
     sortOrder: parseNumber(row['sortOrder']),
+    visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
+    visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
+    visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
+    visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
+    visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
+    visibilityDoordash:  row['visibilityDoordash']  !== undefined ? parseBoolean(row['visibilityDoordash'])  : true,
+    daySchedules: serializeDaySchedules(
+      parseDaySchedules(parseString(row['daySchedules']) || undefined)
+    ),
   }));
 };
 

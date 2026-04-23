@@ -57,6 +57,7 @@ interface MenuState {
   selectedItemId: number | null;
   selectedModifierId: number | null;
   editingCategoryId: number | null;
+  editingMenuId: number | null;
   isDataLoaded: boolean;
   isCreatingModifier: boolean;
   isCreatingOption: boolean;
@@ -95,6 +96,7 @@ interface MenuState {
   setSelectedItem: (id: number | null) => void;
   setSelectedModifier: (id: number | null) => void;
   setEditingCategory: (id: number | null) => void;
+  setEditingMenu: (id: number | null) => void;
   setIsCreatingModifier: (value: boolean) => void;
   setIsCreatingOption: (value: boolean) => void;
   setPendingOption: (option: { optionName: string; posDisplayName: string; isStockAvailable: boolean; isSizeModifier: boolean; } | null) => void;
@@ -204,6 +206,7 @@ export const useMenuStore = create<MenuState>()(
       selectedItemId: null,
       selectedModifierId: null,
       editingCategoryId: null,
+      editingMenuId: null,
       isDataLoaded: false,
       isCreatingModifier: false,
       isCreatingOption: false,
@@ -242,9 +245,10 @@ export const useMenuStore = create<MenuState>()(
         ),
       setSelectedMenu: (id) => set({ selectedMenuId: id, selectedCategoryId: null, selectedItemId: null }),
       setSelectedCategory: (id) => set({ selectedCategoryId: id }),
-      setSelectedItem: (id) => set({ selectedItemId: id, editingCategoryId: null }),
+      setSelectedItem: (id) => set({ selectedItemId: id, editingCategoryId: null, editingMenuId: null }),
       setSelectedModifier: (id) => set({ selectedModifierId: id }),
-      setEditingCategory: (id) => set({ editingCategoryId: id, selectedItemId: null }),
+      setEditingCategory: (id) => set({ editingCategoryId: id, selectedItemId: null, editingMenuId: null }),
+      setEditingMenu: (id) => set({ editingMenuId: id, selectedItemId: null, editingCategoryId: null }),
       setIsCreatingModifier: (value) => set({ isCreatingModifier: value }),
       setIsCreatingOption: (value) => set({ isCreatingOption: value }),
       setPendingOption: (option) => set({ pendingOption: option }),
@@ -724,7 +728,7 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 6,
+      version: 7,
       migrate(persisted: unknown, fromVersion: number) {
         const state = persisted as Record<string, unknown>;
 
@@ -877,6 +881,24 @@ export const useMenuStore = create<MenuState>()(
             state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
               daySchedules: serializeDaySchedules(defaultDaySchedules()),
               ...cat,
+            }));
+          }
+        }
+
+        if (fromVersion < 7) {
+          // Add visibility fields + daySchedules to all Menu records
+          const { serializeDaySchedules, defaultDaySchedules } =
+            require('@/lib/visibility') as typeof import('@/lib/visibility');
+          if (Array.isArray(state.menus)) {
+            state.menus = (state.menus as Record<string, unknown>[]).map((menu) => ({
+              visibilityPos: true,
+              visibilityKiosk: true,
+              visibilityQr: true,
+              visibilityWebsite: true,
+              visibilityMobileApp: true,
+              visibilityDoordash: true,
+              daySchedules: serializeDaySchedules(defaultDaySchedules()),
+              ...menu,
             }));
           }
         }
