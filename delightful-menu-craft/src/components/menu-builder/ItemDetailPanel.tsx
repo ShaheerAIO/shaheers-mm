@@ -295,7 +295,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: draft.inheritModifiersFromCategory,
       preparationTime: draft.preparationTime,
       calories: draft.calories,
-      stationIds: stationDraft.join(','),
+      stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
       visibilityQr: draft.visibilityQr,

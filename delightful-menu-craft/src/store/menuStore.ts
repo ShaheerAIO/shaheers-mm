@@ -230,13 +230,12 @@ export const useMenuStore = create<MenuState>()(
       stations: [],
 
       // UI Actions
-      setActiveTab: (tab) => set({ activeTab: tab, selectedItemId: null }),
+      setActiveTab: (tab) => set({ activeTab: tab }),
       setViewMode: (mode) =>
         set(
           mode === 'pos-preview'
             ? {
                 viewMode: mode,
-                selectedItemId: null,
                 selectedModifierId: null,
                 isCreatingModifier: false,
                 isCreatingOption: false,
