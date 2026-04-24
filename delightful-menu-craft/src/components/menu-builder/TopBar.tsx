@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, X, Plus, Trash2, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { Upload, Download, FilePlus, X, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -224,7 +224,7 @@ export function TopBar() {
                   <div
                     key={menu.id}
                     className={cn(
-                      'group flex items-center gap-1 px-3 py-2 text-sm',
+                      'flex items-center gap-1 px-3 py-2 text-sm',
                       isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground',
                     )}
                   >
@@ -242,17 +242,17 @@ export function TopBar() {
                         'shrink-0 p-1 rounded transition-colors',
                         isEditing
                           ? 'text-primary'
-                          : 'text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground',
+                          : 'text-muted-foreground hover:text-foreground',
                       )}
                       title="Menu settings"
                     >
-                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <Pencil className="w-3.5 h-3.5" />
                     </button>
                     {menus.length > 1 && (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setSelectedMenu(menu.id); setMenuDropdownOpen(false); setConfirmDeleteMenuOpen(true); }}
-                        className="shrink-0 p-1 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-colors"
+                        className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
                         title="Delete menu"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

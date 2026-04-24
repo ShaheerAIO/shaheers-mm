@@ -1414,38 +1414,34 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
         </div>
 
-        {/* Save/Discard buttons */}
-        <div className={cn(
-          "p-4 border-t border-border bg-panel-bg flex gap-2 transition-opacity",
-          hasChanges ? "opacity-100" : "opacity-50 pointer-events-none"
-        )}>
-          <button
-            onClick={handleDiscard}
-            disabled={!hasChanges}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Discard
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            Save Changes
-          </button>
-        </div>
-
-        <div className="p-3 border-t border-border bg-panel-bg flex-shrink-0">
+        {/* Footer actions */}
+        <div className="px-4 py-2.5 border-t border-border bg-panel-bg flex items-center justify-between gap-2 flex-shrink-0">
           <button
             type="button"
             onClick={handleDeleteModifier}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md text-destructive hover:bg-destructive/10 transition-colors"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete modifier
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
           </button>
+          <div className={cn("flex items-center gap-2 transition-opacity", hasChanges ? "opacity-100" : "opacity-40 pointer-events-none")}>
+            <button
+              onClick={handleDiscard}
+              disabled={!hasChanges}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-muted transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Discard
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!hasChanges}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save
+            </button>
+          </div>
         </div>
       </div>
 

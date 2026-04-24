@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { Plus, GripVertical, Pencil, Search, X, Library, Trash2, FolderPlus, SlidersHorizontal } from 'lucide-react';
+import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
@@ -322,7 +322,7 @@ export function CategoryColumn({
           boxShadow: `0 0 0 1px ${accentColor}33, 0 0 18px ${accentColor}40`,
         }}
       >
-        <div className="category-header flex items-center justify-between group">
+        <div className="category-header flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
             <input
@@ -358,23 +358,15 @@ export function CategoryColumn({
                 {category.categoryName}
               </span>
             )}
-            {!isEditingName && (
-              <button
-                onClick={() => setIsEditingName(true)}
-                className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
-            )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0 ml-2">
             <span className="text-xs text-muted-foreground">{items.length}</span>
             <button
               onClick={(e) => { e.stopPropagation(); setEditingCategory(category.id); }}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
               title="Edit category settings"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <Pencil className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -408,7 +400,7 @@ export function CategoryColumn({
             <div
               key={subcat.id}
               className={cn(
-                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors group/tab min-w-0 max-w-[200px]",
+                "flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors min-w-0 max-w-[200px]",
                 isActive ? "text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
               style={isActive ? { backgroundColor: chipColor } : undefined}
@@ -450,29 +442,16 @@ export function CategoryColumn({
                   </button>
                   <button
                     type="button"
-                    onClick={(e) => startSubcategoryRename(subcat, e)}
-                    className={cn(
-                      "flex-shrink-0 p-0.5 rounded transition-opacity",
-                      isActive
-                        ? "text-white/80 hover:text-white opacity-0 group-hover/tab:opacity-100"
-                        : "text-muted-foreground/80 hover:text-foreground opacity-0 group-hover/tab:opacity-100"
-                    )}
-                    title="Rename subcategory"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
                     onClick={(e) => { e.stopPropagation(); setEditingCategory(subcat.id); }}
                     className={cn(
-                      "flex-shrink-0 p-0.5 rounded transition-opacity",
+                      "flex-shrink-0 p-0.5 rounded transition-colors",
                       isActive
-                        ? "text-white/80 hover:text-white opacity-0 group-hover/tab:opacity-100"
-                        : "text-muted-foreground/80 hover:text-foreground opacity-0 group-hover/tab:opacity-100"
+                        ? "text-white/80 hover:text-white"
+                        : "text-muted-foreground/80 hover:text-foreground"
                     )}
                     title="Edit subcategory settings"
                   >
-                    <SlidersHorizontal className="w-3 h-3" />
+                    <Pencil className="w-3 h-3" />
                   </button>
                 </>
               )}
@@ -481,10 +460,10 @@ export function CategoryColumn({
                   type="button"
                   onClick={(e) => handleDeleteSubcategory(subcat, e)}
                   className={cn(
-                    "leading-none transition-opacity flex-shrink-0",
+                    "leading-none transition-colors flex-shrink-0",
                     isActive
-                      ? "text-white/70 hover:text-white opacity-0 group-hover/tab:opacity-100"
-                      : "text-muted-foreground/60 hover:text-destructive opacity-0 group-hover/tab:opacity-100"
+                      ? "text-white/70 hover:text-white"
+                      : "text-muted-foreground/60 hover:text-destructive"
                   )}
                   title="Delete subcategory"
                 >
@@ -537,7 +516,7 @@ export function CategoryColumn({
               key={item.id}
               onClick={() => handleItemClick(item.id)}
               className={cn(
-                "item-row flex items-center justify-between group",
+                "item-row flex items-center justify-between",
                 selectedItemId === item.id && "selected",
                 item.stockStatus === 'outOfStock' && "is-86"
               )}
@@ -552,7 +531,7 @@ export function CategoryColumn({
                 </span>
                 <button
                   onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
                   title="Remove from category"
                 >
                   <X className="w-3.5 h-3.5" />
