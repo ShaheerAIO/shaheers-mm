@@ -3,11 +3,6 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import {
   Upload,
-  Menu,
-  ChevronRight,
-  Lock,
-  Clock,
-  User,
   Search,
   Filter,
   UtensilsCrossed,
@@ -73,16 +68,27 @@ export function POSPreview() {
   const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions } =
     useMenuStore();
 
-  // Clock
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const timeStr = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
   // POS mode toggle
   const [posMode, setPosMode] = useState<PosMode>('tsr');
+
+  // Search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearchToggle = () => {
+    if (searchOpen) {
+      setSearchOpen(false);
+      setSearchQuery('');
+    } else {
+      setSearchOpen(true);
+    }
+  };
+
+  const handleSetPosMode = (mode: PosMode) => {
+    setPosMode(mode);
+    setSearchOpen(false);
+    setSearchQuery('');
+  };
 
   // Local ticket state
   const [ticketLines, setTicketLines] = useState<TicketLine[]>([]);
@@ -197,47 +203,6 @@ export function POSPreview() {
         'border border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-shell))] text-[hsl(var(--pos-text))]',
       )}
     >
-      {/* ── Top bar ── */}
-      <header className="flex items-center justify-between gap-4 px-3 py-2.5 shrink-0 border-b border-[hsl(var(--pos-shell-border))] bg-[hsl(var(--pos-shell-elevated))]">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            type="button"
-            className="p-1.5 rounded-md text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-            aria-label="Menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div
-            className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-violet-500 via-purple-600 to-violet-800"
-            aria-hidden
-          />
-          <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
-        </div>
-
-        <div className="text-sm font-medium tabular-nums text-zinc-200">{timeStr}</div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          <button
-            type="button"
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-zinc-600 text-zinc-300 text-xs font-medium hover:bg-white/5"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            Lock screen
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[hsl(var(--pos-primary))] text-white text-xs font-medium hover:bg-[hsl(var(--pos-primary-hover))]"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Take break</span>
-          </button>
-          <div className="flex items-center gap-1.5 pl-2 sm:border-l border-zinc-700 text-zinc-300">
-            <User className="w-4 h-4 shrink-0" />
-            <span className="text-xs sm:text-sm truncate max-w-[100px]">John Doe</span>
-          </div>
-        </div>
-      </header>
-
       {/* ── Body ── */}
       <div className="flex flex-1 min-h-0">
         {/* ── Left: ticket ── */}
@@ -440,7 +405,7 @@ export function POSPreview() {
               <div className="flex rounded-lg border border-[hsl(var(--pos-shell-border))] overflow-hidden shrink-0">
                 <button
                   type="button"
-                  onClick={() => setPosMode('qsr')}
+                  onClick={() => handleSetPosMode('qsr')}
                   className={cn(
                     'px-3 py-1.5 text-xs font-semibold transition-colors',
                     posMode === 'qsr'
@@ -452,7 +417,7 @@ export function POSPreview() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPosMode('tsr')}
+                  onClick={() => handleSetPosMode('tsr')}
                   className={cn(
                     'px-3 py-1.5 text-xs font-semibold transition-colors border-l border-[hsl(var(--pos-shell-border))]',
                     posMode === 'tsr'
@@ -466,9 +431,24 @@ export function POSPreview() {
             </div>
 
             <div className="flex items-center gap-1">
+              {searchOpen && (
+                <input
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && handleSearchToggle()}
+                  placeholder="Search items…"
+                  className="w-36 h-7 px-2 text-xs rounded bg-zinc-800 border border-zinc-600 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
+                />
+              )}
               <button
                 type="button"
-                className="p-2 rounded-lg text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
+                onClick={handleSearchToggle}
+                className={cn(
+                  'p-2 rounded-lg hover:bg-white/5 transition-colors',
+                  searchOpen ? 'text-zinc-200' : 'text-zinc-500 hover:text-zinc-300',
+                )}
                 aria-label="Search"
               >
                 <Search className="w-4 h-4" />
@@ -526,12 +506,13 @@ export function POSPreview() {
                   }}
                 />
               ) : (
-                <QSRMenuPanel onAddToTicket={handleQsrItemClick} />
+                <QSRMenuPanel onAddToTicket={handleQsrItemClick} searchQuery={searchQuery} />
               )
             ) : (
               <TSRMenuPanel
                 onAddToTicket={addToTicket}
                 onTicketBlockChange={handleModifierTicketBlock}
+                searchQuery={searchQuery}
               />
             )}
           </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import type { Station } from '@/types/menu';
 import { Upload, Radio, Plus, Pencil, Trash2, Save } from 'lucide-react';
@@ -72,10 +72,15 @@ export function StationsContent() {
     return map;
   };
 
-  useMemo(() => {
+  // Re-initialize selections when the station catalog changes (add/delete station).
+  // We intentionally do NOT include `items` here: saving Station A updates the store,
+  // which would otherwise reset Station B's unsaved checkbox state.
+  // The component unmounts when switching tabs anyway, so stale data is not a concern.
+  const stationCatalogKey = effectiveStations.map((s) => s.id).join('|');
+  useEffect(() => {
     setStationSelections(buildInitialSelections());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, effectiveStations.map((s) => s.id).join('|')]);
+  }, [stationCatalogKey]);
 
   const filteredItems = useMemo(() => {
     const base = [...items].sort((a, b) => a.itemName.localeCompare(b.itemName));

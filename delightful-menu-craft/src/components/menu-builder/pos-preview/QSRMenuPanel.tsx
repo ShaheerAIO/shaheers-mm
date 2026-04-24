@@ -8,9 +8,10 @@ import { isVisibleOnChannel } from '@/lib/visibility';
 
 interface QSRMenuPanelProps {
   onAddToTicket: (item: Item) => void;
+  searchQuery?: string;
 }
 
-export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
+export function QSRMenuPanel({ onAddToTicket, searchQuery = '' }: QSRMenuPanelProps) {
   const { categories, items, categoryItems, selectedMenuId } = useMenuStore();
 
   const rootCategories = useMemo(() => {
@@ -60,10 +61,19 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
     });
   }, [rootCategories, categories, categoryItems, items]);
 
+  const q = searchQuery.trim().toLowerCase();
+
   return (
     <div className="flex gap-3 h-full min-h-0">
       {menuColumns.map(({ category, flatItems }) => {
         const accent = category.color || '#f97316';
+        const visibleItems = q
+          ? flatItems.filter(
+              (item) =>
+                item.itemName.toLowerCase().includes(q) ||
+                (item.posDisplayName || '').toLowerCase().includes(q),
+            )
+          : flatItems;
         return (
           <div
             key={category.id}
@@ -85,11 +95,11 @@ export function QSRMenuPanel({ onAddToTicket }: QSRMenuPanelProps) {
                 'overflow-x-visible overflow-y-hidden',
               )}
             >
-              {flatItems.map((item) => (
+              {visibleItems.map((item) => (
                 <ItemTile key={item.id} item={item} accent={accent} onClick={() => onAddToTicket(item)} />
               ))}
 
-              {flatItems.length === 0 && (
+              {visibleItems.length === 0 && (
                 <p className="text-[10px] text-zinc-600 text-center py-4 w-full min-w-[118px] sm:min-w-[128px]">
                   Empty
                 </p>

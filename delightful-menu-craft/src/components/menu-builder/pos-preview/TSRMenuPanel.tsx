@@ -11,11 +11,12 @@ import { isVisibleOnChannel } from '@/lib/visibility';
 interface TSRMenuPanelProps {
   onAddToTicket: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
   onTicketBlockChange?: (blocked: boolean) => void;
+  searchQuery?: string;
 }
 
 type DrillLevel = 'categories' | 'subcategories' | 'items' | 'modifiers';
 
-export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPanelProps) {
+export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery = '' }: TSRMenuPanelProps) {
   const { categories, items, categoryItems, selectedMenuId, itemModifiers } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -99,6 +100,45 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
   const activeItem = items.find((i) => i.id === activeItemId) ?? null;
   const accentColor = activeSubcategory?.color || activeCategory?.color || '#f97316';
 
+  // Flat list of all POS-visible items in the selected menu, for search
+  const allMenuItems = useMemo(() => {
+    if (!selectedMenuId) return [];
+    const menuCatIds = new Set(
+      categories
+        .filter((c) => {
+          const ids = c.menuIds?.split(',').map((id) => parseInt(id.trim())).filter((id) => !isNaN(id)) ?? [];
+          return ids.includes(selectedMenuId);
+        })
+        .map((c) => c.id),
+    );
+    const seen = new Set<number>();
+    const result: Array<{ item: Item; categoryName: string; accentColor: string }> = [];
+    for (const ci of [...categoryItems].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      if (!menuCatIds.has(ci.categoryId)) continue;
+      if (seen.has(ci.itemId)) continue;
+      seen.add(ci.itemId);
+      const item = items.find((i) => i.id === ci.itemId);
+      if (!item || !isVisibleOnChannel(item, 'visibilityPos')) continue;
+      const cat = categories.find((c) => c.id === ci.categoryId);
+      result.push({
+        item,
+        categoryName: cat?.posDisplayName || cat?.categoryName || '',
+        accentColor: cat?.color || '#f97316',
+      });
+    }
+    return result;
+  }, [selectedMenuId, categories, categoryItems, items]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return allMenuItems.filter(
+      ({ item }) =>
+        item.itemName.toLowerCase().includes(q) ||
+        (item.posDisplayName || '').toLowerCase().includes(q),
+    );
+  }, [allMenuItems, searchQuery]);
+
   const breadcrumbs = useMemo(() => {
     const crumbs: { label: string; onClick: () => void }[] = [];
     if (activeCategory) {
@@ -165,10 +205,12 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
     setActiveItemId(null);
   };
 
+  const isSearchActive = searchQuery.trim().length > 0;
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Breadcrumb / back bar */}
-      {breadcrumbs.length > 0 && (
+      {/* Breadcrumb / back bar — hidden during search */}
+      {breadcrumbs.length > 0 && !isSearchActive && (
         <div className="flex items-center gap-1.5 px-3 py-2 border-b border-zinc-800/60 shrink-0 overflow-x-auto">
           <button
             type="button"
@@ -198,7 +240,46 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
         </div>
       )}
 
-      {/* Content area — top-aligned so subcategory buttons stay above their items */}
+      {/* Search results — override drill-down when query is active (modifier panel still takes priority) */}
+      {isSearchActive && !activeItemId ? (
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5">
+          {searchResults.length === 0 ? (
+            <p className="text-zinc-500 text-sm text-center py-8">No items match "{searchQuery}"</p>
+          ) : (
+            searchResults.map(({ item, categoryName, accentColor: accent }) => {
+              const unavailable = item.stockStatus !== 'inStock';
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleItemClick(item)}
+                  disabled={unavailable}
+                  className={cn(
+                    'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left transition-colors',
+                    'bg-[hsl(var(--pos-menu-tile))] border border-zinc-700/80',
+                    'hover:border-zinc-500 hover:bg-zinc-800/80 active:scale-[0.98]',
+                    unavailable && 'opacity-45 cursor-not-allowed',
+                  )}
+                  style={{ borderLeftWidth: 3, borderLeftColor: accent }}
+                >
+                  <div className="min-w-0">
+                    <div className={cn('text-sm font-medium text-zinc-100 truncate', unavailable && 'line-through')}>
+                      {item.posDisplayName || item.itemName}
+                    </div>
+                    {categoryName && (
+                      <div className="text-[10px] text-zinc-500 truncate">{categoryName}</div>
+                    )}
+                  </div>
+                  <span className="text-xs font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums shrink-0">
+                    ${item.itemPrice.toFixed(2)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+      /* Content area — top-aligned so subcategory buttons stay above their items */
       <div
         className={cn(
           'flex-1 min-h-0 flex flex-col justify-start',
@@ -321,6 +402,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange }: TSRMenuPane
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
