@@ -98,8 +98,9 @@ export function CategoryColumns() {
       visibilityDoordash: true,
       daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
-    
+
     addCategory(newCategory);
+    setSelectedCategory(newCategory.id);
   };
 
   const handleCategoryClick = (categoryId: number) => {
