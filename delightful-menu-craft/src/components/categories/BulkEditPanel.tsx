@@ -375,7 +375,7 @@ export function BulkEditPanel({ selectedItemIds, onClearSelection }: BulkEditPan
                     >
                       {isAdd && <span className="font-bold">+</span>}
                       {isRemove && <span className="font-bold">−</span>}
-                      {station.name}
+                      Station {station.id}
                     </button>
                   );
                 })}

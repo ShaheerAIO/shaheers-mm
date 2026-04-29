@@ -24,8 +24,7 @@ export function StationItemsModal({ stationId, isOpen, onClose }: StationItemsMo
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const stationLabel =
-    stations.find((s) => s.id === stationId)?.name ?? `Station ${stationId}`;
+  const stationLabel = `Station ${stationId}`;
 
   // Initialize selected items when modal opens or station/items change
   const initialSelectedIds = useMemo(() => {

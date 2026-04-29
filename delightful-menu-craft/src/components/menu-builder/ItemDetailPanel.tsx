@@ -97,7 +97,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     getNextId,
     setIsCreatingModifier,
     stations,
-    addStation,
   } = useMenuStore();
 
   // Get nested child modifiers for a given modifier
@@ -183,7 +182,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
       : []
   );
-  const [newStationName, setNewStationName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
   const [pendingDeleteTagId, setPendingDeleteTagId] = useState<number | null>(null);
@@ -482,16 +480,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       }
       return [...prev, stationId];
     });
-  };
-
-  const handleAddStationInline = () => {
-    const trimmed = newStationName.trim();
-    if (!trimmed) return;
-    // Find existing station by name (case-insensitive) or create a new one
-    const existing = stations.find((s) => s.name.toLowerCase() === trimmed.toLowerCase());
-    const stationId = existing ? existing.id : addStation(trimmed);
-    setStationDraft((prev) => (prev.includes(stationId) ? prev : [...prev, stationId]));
-    setNewStationName('');
   };
 
   return (
@@ -1237,7 +1225,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     </span>
                   )}
                   {stationDraft.map((id) => {
-                    const label = stations.find((s) => s.id === id)?.name ?? `Station ${id}`;
+                    const st = stations.find((s) => s.id === id);
                     return (
                       <button
                         key={id}
@@ -1245,7 +1233,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                         onClick={() => handleToggleStation(id)}
                         className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
                       >
-                        <span>{label}</span>
+                        <span>Station {id}{st?.label ? ` — ${st.label}` : ''}</span>
                         <span className="text-[10px] leading-none">✕</span>
                       </button>
                     );
@@ -1262,28 +1250,13 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                           checked={stationDraft.includes(station.id)}
                           onCheckedChange={() => handleToggleStation(station.id)}
                         />
-                        <span className="text-muted-foreground">{station.name}</span>
+                        <span className="text-muted-foreground">
+                          Station {station.id}{station.label ? ` — ${station.label}` : ''}
+                        </span>
                       </label>
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    type="text"
-                    value={newStationName}
-                    onChange={(e) => setNewStationName(e.target.value)}
-                    placeholder="Add station name..."
-                    className="input-field flex-1 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddStationInline}
-                    className="btn-add px-2 py-1 text-xs"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add
-                  </button>
-                </div>
               </div>
             </AccordionContent>
           </AccordionItem>

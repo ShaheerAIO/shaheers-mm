@@ -215,7 +215,7 @@ export interface Tag {
 
 export interface Station {
   id: number;
-  name: string;
+  label?: string; // display-only; never exported
 }
 
 // =============================================================================

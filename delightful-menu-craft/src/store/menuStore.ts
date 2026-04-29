@@ -156,8 +156,9 @@ interface MenuState {
   deleteTag: (id: number) => void;
   
   // Actions - Stations
-  addStation: (name?: string) => number;
-  renameStation: (id: number, newName: string) => void;
+  addStation: () => number;
+  renumberStation: (oldId: number, newId: number) => boolean;
+  relabelStation: (id: number, label: string) => void;
   deleteStation: (id: number) => void;
   assignItemToStation: (itemId: number, stationId: number) => void;
   unassignItemFromStation: (itemId: number, stationId: number) => void;
@@ -293,7 +294,7 @@ export const useMenuStore = create<MenuState>()(
         });
         const stations: Station[] = Array.from(numericIdSet)
           .sort((a, b) => a - b)
-          .map((id) => ({ id, name: `Station ${id}` }));
+          .map((id) => ({ id }));
 
         set({
           menus: data.menus,
@@ -606,23 +607,39 @@ export const useMenuStore = create<MenuState>()(
       }),
 
       // Station Actions
-      addStation: (name) => {
+      addStation: () => {
         const state = get();
         const id = getNextStationId(state.stations);
-        const stationName = name?.trim() || `Station ${id}`;
         set((s) => ({
-          stations: [...s.stations, { id, name: stationName }].sort((a, b) => a.id - b.id),
+          stations: [...s.stations, { id }].sort((a, b) => a.id - b.id),
         }));
         return id;
       },
 
-      renameStation: (id, newName) => set((state) => {
-        const name = newName.trim();
-        if (!name) return state;
-        return {
-          stations: state.stations.map((s) => (s.id === id ? { ...s, name } : s)),
-        };
-      }),
+      renumberStation: (oldId, newId) => {
+        const state = get();
+        if (newId <= 0 || state.stations.some((s) => s.id === newId)) return false;
+        set((s) => ({
+          stations: s.stations
+            .map((st) => (st.id === oldId ? { id: newId } : st))
+            .sort((a, b) => a.id - b.id),
+          items: s.items.map((item) => {
+            const ids = item.stationIds
+              ? item.stationIds
+                  .split(',')
+                  .map((p) => parseInt(p.trim(), 10))
+                  .filter((n) => !isNaN(n) && n > 0)
+                  .map((n) => (n === oldId ? newId : n))
+              : [];
+            return { ...item, stationIds: serializeStationIdsCsv(ids) };
+          }),
+        }));
+        return true;
+      },
+
+      relabelStation: (id, label) => set((state) => ({
+        stations: state.stations.map((s) => (s.id === id ? { ...s, label: label.trim() || undefined } : s)),
+      })),
 
       deleteStation: (id) => set((state) => ({
         stations: state.stations.filter((s) => s.id !== id),
@@ -654,11 +671,16 @@ export const useMenuStore = create<MenuState>()(
         let categories = [...state.categories];
         let stations = [...state.stations];
 
-        const resolveOrCreateStation = (name: string): number => {
-          const found = stations.find((s) => s.name.toLowerCase() === name.toLowerCase());
-          if (found) return found.id;
+        const resolveOrCreateStation = (nameOrId: string): number => {
+          const parsed = parseInt(nameOrId, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            if (!stations.find((s) => s.id === parsed)) {
+              stations = [...stations, { id: parsed }].sort((a, b) => a.id - b.id);
+            }
+            return parsed;
+          }
           const id = getNextStationId(stations);
-          stations = [...stations, { id, name }].sort((a, b) => a.id - b.id);
+          stations = [...stations, { id }].sort((a, b) => a.id - b.id);
           return id;
         };
 
