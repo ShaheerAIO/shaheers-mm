@@ -188,6 +188,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [newAllergenName, setNewAllergenName] = useState('');
   const [showAllergenInput, setShowAllergenInput] = useState(false);
   const [pendingDeleteAllergenId, setPendingDeleteAllergenId] = useState<number | null>(null);
+  const [newStationName, setNewStationName] = useState('');
 
   // Reset draft state when item changes
   useEffect(() => {
