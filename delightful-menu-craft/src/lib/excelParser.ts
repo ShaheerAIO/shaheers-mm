@@ -16,7 +16,7 @@ import type {
   Tag,
   ExcelMenuData,
 } from '@/types/menu';
-import { parseVisibilityFromRow, parseDaySchedules, serializeDaySchedules } from '@/lib/visibility';
+import { parseVisibilityFromRow, parseDaySchedules, serializeDaySchedules, parseGroupSchedules, serializeGroupSchedules } from '@/lib/visibility';
 
 // Sheet names as they appear in the Excel file
 const SHEET_NAMES = {
@@ -82,6 +82,10 @@ const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
     daySchedules: serializeDaySchedules(
       parseDaySchedules(parseString(row['daySchedules']) || undefined)
     ),
+    daySchedulesByGroup: serializeGroupSchedules(parseGroupSchedules(
+      parseString(row['daySchedulesByGroup']) || undefined,
+      parseString(row['daySchedules']) || undefined,
+    )),
   }));
 };
 
@@ -111,6 +115,10 @@ const parseCategories = (sheet: XLSX.WorkSheet): Category[] => {
         parseString(row['daySchedules']) || undefined,
       )
     ),
+    daySchedulesByGroup: serializeGroupSchedules(parseGroupSchedules(
+      parseString(row['daySchedulesByGroup']) || undefined,
+      parseString(row['daySchedules']) || undefined,
+    )),
   }));
 };
 
@@ -161,6 +169,10 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
         parseString(row['availableTimeEnd'])   || undefined,
       )
     ),
+    daySchedulesByGroup: serializeGroupSchedules(parseGroupSchedules(
+      parseString(row['daySchedulesByGroup']) || undefined,
+      parseString(row['daySchedules']) || undefined,
+    )),
   }));
 };
 
@@ -254,6 +266,7 @@ const parseModifiers = (sheet: XLSX.WorkSheet): Modifier[] => {
     modifierIds: parseString(row['modifierIds']),
     isSizeModifier: parseBoolean(row['isSizeModifier']),
     onPrem: parseBoolean(row['onPrem']),
+    modType: parseString(row['modType']),
     ...parseVisibilityFromRow(row),
   }));
 };
@@ -304,6 +317,9 @@ const parseTags = (sheet: XLSX.WorkSheet): Tag[] => {
     .map((row) => ({
       id: parseNumber(row['id']),
       name: parseString(row['name']),
+      icon: parseString(row['icon']) || undefined,
+      color: parseString(row['color']) || undefined,
+      isSystem: row['isSystem'] === true || row['isSystem'] === 'true' || undefined,
     }))
     .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };

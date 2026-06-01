@@ -21,7 +21,7 @@ import {
 import type { Item, ModifierModifierOption } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
-import { ModifierPanel } from './pos-preview/ModifierPanel';
+import { ModifierPanel, itemHasPopupModifiers } from './pos-preview/ModifierPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,9 +135,8 @@ export function POSPreview() {
   // otherwise fast-adds to ticket. Reads fresh state from the store directly
   // to avoid any stale-closure issues with React's render snapshot.
   const handleQsrItemClick = (item: Item) => {
-    const { itemModifiers: freshItemModifiers } = useMenuStore.getState();
-    const hasModifiers = freshItemModifiers.some((im) => im.itemId === item.id);
-    if (!hasModifiers) {
+    const { itemModifiers: freshItemModifiers, modifiers: freshModifiers } = useMenuStore.getState();
+    if (!itemHasPopupModifiers(item.id, freshItemModifiers, freshModifiers)) {
       addToTicket(item, {}, 1);
       return;
     }

@@ -22,6 +22,11 @@ import type {
   AiPatch,
 } from '@/types/menu';
 
+// System tags are always present in the store and cannot be deleted.
+export const SYSTEM_TAGS: Tag[] = [
+  { id: 1, name: 'Contains Alcohol', icon: 'Wine', color: '#ef4444', isSystem: true },
+];
+
 const parseStationIdsCsv = (csv: string | undefined): number[] => {
   if (!csv?.trim()) return [];
   return csv
@@ -227,7 +232,7 @@ export const useMenuStore = create<MenuState>()(
       modifierOptions: [],
       modifierModifierOptions: [],
       allergens: [],
-      tags: [],
+      tags: [...SYSTEM_TAGS],
       stations: [],
 
       // UI Actions
@@ -310,7 +315,11 @@ export const useMenuStore = create<MenuState>()(
           modifierOptions: data.modifierOptions,
           modifierModifierOptions: data.modifierModifierOptions,
           allergens: data.allergens,
-          tags: data.tags,
+          tags: (() => {
+            const importedIds = new Set(data.tags.map((t) => t.id));
+            const missing = SYSTEM_TAGS.filter((st) => !importedIds.has(st.id));
+            return [...data.tags, ...missing];
+          })(),
           stations,
           isDataLoaded: true,
           selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
@@ -588,6 +597,7 @@ export const useMenuStore = create<MenuState>()(
         tags: state.tags.map((t) => (t.id === id ? { ...t, ...updates } : t)),
       })),
       deleteTag: (id) => set((state) => {
+        if (state.tags.find((t) => t.id === id)?.isSystem) return state;
         const idStr = String(id);
         return {
           tags: state.tags.filter((t) => t.id !== id),
@@ -749,7 +759,7 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 7,
+      version: 10,
       migrate(persisted: unknown, fromVersion: number) {
         const state = persisted as Record<string, unknown>;
 
@@ -921,6 +931,46 @@ export const useMenuStore = create<MenuState>()(
               daySchedules: serializeDaySchedules(defaultDaySchedules()),
               ...menu,
             }));
+          }
+        }
+
+        if (fromVersion < 8) {
+          const { parseGroupSchedules, serializeGroupSchedules } =
+            require('@/lib/visibility') as typeof import('@/lib/visibility');
+          const migrate = (entity: Record<string, unknown>) => {
+            if (entity.daySchedulesByGroup) return entity;
+            return {
+              ...entity,
+              daySchedulesByGroup: serializeGroupSchedules(
+                parseGroupSchedules(
+                  undefined,
+                  typeof entity.daySchedules === 'string' ? entity.daySchedules : undefined,
+                ),
+              ),
+            };
+          };
+          if (Array.isArray(state.items))      state.items      = (state.items      as Record<string, unknown>[]).map(migrate);
+          if (Array.isArray(state.categories)) state.categories = (state.categories as Record<string, unknown>[]).map(migrate);
+          if (Array.isArray(state.menus))      state.menus      = (state.menus      as Record<string, unknown>[]).map(migrate);
+        }
+
+        if (fromVersion < 9) {
+          // Seed system tags (e.g. Alcohol) into any existing persisted store
+          const tags = Array.isArray(state.tags) ? (state.tags as Record<string, unknown>[]) : [];
+          const existingIds = new Set(tags.map((t) => t.id));
+          const missing = SYSTEM_TAGS.filter((st) => !existingIds.has(st.id));
+          state.tags = [...tags, ...missing];
+        }
+
+        if (fromVersion < 10) {
+          // Backfill modType from isOptional for modifiers created before push-modifier support
+          if (Array.isArray(state.modifiers)) {
+            state.modifiers = (state.modifiers as Record<string, unknown>[]).map((m) => {
+              if (m.modType) return m;
+              const iso = typeof m.isOptional === 'string' ? m.isOptional : '';
+              const modType = iso === 'Required' || iso === 'Select one' ? 'Required' : 'Optional';
+              return { ...m, modType };
+            });
           }
         }
 

@@ -3,15 +3,16 @@ import { ChevronDown } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import {
-  parseDaySchedules,
-  serializeDaySchedules,
-  buildDaysSummary,
-  defaultDaySchedules,
   VISIBILITY_CHANNELS,
   DAYS,
-  type DayScheduleMap,
+  parseGroupSchedules,
+  serializeGroupSchedules,
+  buildGroupSchedulesSummary,
+  defaultGroupSchedules,
+  type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
+  type VisibilityGroup,
 } from '@/lib/visibility';
 import type { Menu } from '@/types/menu';
 
@@ -24,7 +25,7 @@ type Draft = {
   menuName: string;
   posDisplayName: string;
   posButtonColor: string;
-  daySchedules: DayScheduleMap;
+  daySchedulesByGroup: ChannelGroupSchedules;
 } & VisDraft;
 
 function buildAvailabilitySummary(draft: Draft): string {
@@ -35,7 +36,7 @@ function buildAvailabilitySummary(draft: Draft): string {
   if (channels.length === VISIBILITY_CHANNELS.length) parts.push('All channels');
   else if (channels.length === 0) parts.push('Hidden');
   else parts.push(channels.join(', '));
-  parts.push(buildDaysSummary(draft.daySchedules));
+  parts.push(buildGroupSchedulesSummary(draft.daySchedulesByGroup));
   return parts.join('  ·  ');
 }
 
@@ -71,7 +72,7 @@ export function MenuDetailPanel({ menu }: Props) {
     visibilityWebsite: menu.visibilityWebsite ?? true,
     visibilityMobileApp: menu.visibilityMobileApp ?? true,
     visibilityDoordash: menu.visibilityDoordash ?? true,
-    daySchedules: parseDaySchedules(menu.daySchedules),
+    daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
   }));
 
   const [openGroup, setOpenGroup] = useState<'onPrem' | 'offPrem' | null>(null);
@@ -90,7 +91,7 @@ export function MenuDetailPanel({ menu }: Props) {
       visibilityWebsite: menu.visibilityWebsite ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,
       visibilityDoordash: menu.visibilityDoordash ?? true,
-      daySchedules: parseDaySchedules(menu.daySchedules),
+      daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
     });
     setOpenGroup(null);
     setExpandedDay(null);
@@ -108,12 +109,12 @@ export function MenuDetailPanel({ menu }: Props) {
     draft.visibilityWebsite !== (menu.visibilityWebsite ?? true) ||
     draft.visibilityMobileApp !== (menu.visibilityMobileApp ?? true) ||
     draft.visibilityDoordash !== (menu.visibilityDoordash ?? true) ||
-    serializeDaySchedules(draft.daySchedules) !== (menu.daySchedules || serializeDaySchedules(defaultDaySchedules()));
+    serializeGroupSchedules(draft.daySchedulesByGroup) !== (menu.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules()));
 
   const handleSave = () => {
     updateMenu(menu.id, {
       ...draft,
-      daySchedules: serializeDaySchedules(draft.daySchedules),
+      daySchedulesByGroup: serializeGroupSchedules(draft.daySchedulesByGroup),
     });
   };
 
@@ -128,7 +129,7 @@ export function MenuDetailPanel({ menu }: Props) {
       visibilityWebsite: menu.visibilityWebsite ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,
       visibilityDoordash: menu.visibilityDoordash ?? true,
-      daySchedules: parseDaySchedules(menu.daySchedules),
+      daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
     });
     setOpenGroup(null);
     setExpandedDay(null);
@@ -197,8 +198,8 @@ export function MenuDetailPanel({ menu }: Props) {
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Availability</p>
             <p className="text-[10px] text-muted-foreground mb-2 leading-snug">{buildAvailabilitySummary(draft)}</p>
 
-            {/* Channel dropdowns */}
-            <div className="space-y-1.5 mb-3">
+            {/* Channel dropdowns — schedule editor lives inside each expanded group */}
+            <div className="space-y-1.5">
               {CHANNEL_GROUPS.map((group) => {
                 const isOpen = openGroup === group.id;
                 const active = group.channels.filter((c) => draft[c.key]);
@@ -206,11 +207,19 @@ export function MenuDetailPanel({ menu }: Props) {
                   active.length === 0 ? 'None' :
                   active.length === group.channels.length ? 'All' :
                   active.map((c) => c.label).join(', ');
+                const groupKey = group.label as VisibilityGroup;
+                const groupSched = draft.daySchedulesByGroup[groupKey];
                 return (
                   <div key={group.id}>
                     <button
                       type="button"
-                      onClick={() => setOpenGroup(isOpen ? null : group.id)}
+                      onClick={() => {
+                        const next = isOpen ? null : group.id;
+                        setOpenGroup(next);
+                        setExpandedDay(null);
+                        setBulkStart('');
+                        setBulkEnd('');
+                      }}
                       className={cn(
                         'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
                         isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
@@ -225,177 +234,145 @@ export function MenuDetailPanel({ menu }: Props) {
                       </span>
                     </button>
                     {isOpen && (
-                      <div className="mt-0.5 rounded-md border border-border divide-y divide-border overflow-hidden">
-                        {group.channels.map(({ key, label }) => {
-                          const checked = draft[key];
-                          return (
-                            <label
-                              key={key}
-                              className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
-                            >
-                              <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))}
-                                className="accent-primary cursor-pointer"
-                              />
-                            </label>
-                          );
-                        })}
+                      <div className="mt-0.5 rounded-md border border-border overflow-hidden">
+                        {/* Channel checkboxes */}
+                        <div className="divide-y divide-border">
+                          {group.channels.map(({ key, label }) => {
+                            const checked = draft[key];
+                            return (
+                              <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                                <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                                <input type="checkbox" checked={checked} onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))} className="accent-primary cursor-pointer" />
+                              </label>
+                            );
+                          })}
+                        </div>
+
+                        {/* Schedule for this group */}
+                        <div className="border-t border-border px-3 py-2 space-y-2 bg-muted/20">
+                          {/* Bulk hours */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                              {(bulkStart || bulkEnd) && (
+                                <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground">From</span>
+                              <input type="time" value={bulkStart} onChange={(e) => setBulkStart(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
+                              <span className="text-[10px] text-muted-foreground">To</span>
+                              <input type="time" value={bulkEnd} onChange={(e) => setBulkEnd(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
+                              <button
+                                type="button"
+                                disabled={!bulkStart && !bulkEnd}
+                                onClick={() => {
+                                  setDraft((prev) => {
+                                    const next = { ...prev.daySchedulesByGroup[groupKey] };
+                                    for (const d of DAYS) {
+                                      if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
+                                    }
+                                    return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
+                                  });
+                                }}
+                                className="text-[10px] px-2 py-1 rounded border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
+                              >Apply</button>
+                            </div>
+                          </div>
+
+                          {/* Day toggles */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                              <button
+                                type="button"
+                                className="text-[10px] text-primary hover:underline"
+                                onClick={() => {
+                                  const allEnabled = DAYS.every((d) => groupSched[d].enabled);
+                                  setDraft((prev) => {
+                                    const next = { ...prev.daySchedulesByGroup[groupKey] };
+                                    for (const d of DAYS) next[d] = { ...next[d], enabled: !allEnabled };
+                                    return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
+                                  });
+                                }}
+                              >
+                                {DAYS.every((d) => groupSched[d].enabled) ? 'All days' : 'Select all'}
+                              </button>
+                            </div>
+                            <div className="flex gap-1 flex-wrap">
+                              {DAYS.map((day) => {
+                                const sched = groupSched[day];
+                                const isExpanded = expandedDay === day;
+                                const hasTime = sched.start || sched.end;
+                                return (
+                                  <button
+                                    key={day}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!sched.enabled) {
+                                        setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [day]: { ...sched, enabled: true } } } }));
+                                        setExpandedDay(day);
+                                      } else if (isExpanded) {
+                                        setExpandedDay(null);
+                                      } else {
+                                        setExpandedDay(day);
+                                      }
+                                    }}
+                                    className={cn(
+                                      'px-2 py-1 rounded text-[11px] font-medium transition-colors border min-w-[30px] text-center',
+                                      sched.enabled
+                                        ? isExpanded ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/30' : 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-muted/50 text-muted-foreground border-border',
+                                    )}
+                                  >
+                                    {day.slice(0, 1)}{sched.enabled && hasTime ? '·' : ''}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {expandedDay && groupSched[expandedDay].enabled && (
+                              <div className="mt-2 p-2.5 rounded-md border border-border bg-muted/30 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-medium">{expandedDay} hours</p>
+                                  <div className="flex gap-2">
+                                    {(groupSched[expandedDay].start || groupSched[expandedDay].end) && (
+                                      <button type="button" className="text-[10px] text-muted-foreground hover:underline"
+                                        onClick={() => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: '', end: '' } } } }))}>
+                                        Clear
+                                      </button>
+                                    )}
+                                    <button type="button" className="text-[10px] text-destructive hover:underline"
+                                      onClick={() => {
+                                        setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { enabled: false, start: '', end: '' } } } }));
+                                        setExpandedDay(null);
+                                      }}>
+                                      Disable
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-muted-foreground">From</span>
+                                  <input type="time" value={groupSched[expandedDay].start}
+                                    onChange={(e) => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: e.target.value } } } }))}
+                                    className="input-field h-7 text-xs flex-1 min-w-0" />
+                                  <span className="text-[10px] text-muted-foreground">To</span>
+                                  <input type="time" value={groupSched[expandedDay].end}
+                                    onChange={(e) => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], end: e.target.value } } } }))}
+                                    className="input-field h-7 text-xs flex-1 min-w-0" />
+                                </div>
+                                {!groupSched[expandedDay].start && !groupSched[expandedDay].end && (
+                                  <p className="text-[10px] text-muted-foreground">All hours (no restriction)</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
                 );
               })}
-            </div>
-
-            {/* Bulk hours */}
-            <div className="mb-2">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Hours (all days)</p>
-                {(bulkStart || bulkEnd) && (
-                  <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">From</span>
-                <input type="time" value={bulkStart} onChange={(e) => setBulkStart(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
-                <span className="text-[10px] text-muted-foreground">To</span>
-                <input type="time" value={bulkEnd} onChange={(e) => setBulkEnd(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
-                <button
-                  type="button"
-                  disabled={!bulkStart && !bulkEnd}
-                  onClick={() => {
-                    setDraft((prev) => {
-                      const next = { ...prev.daySchedules };
-                      for (const d of DAYS) {
-                        if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
-                      }
-                      return { ...prev, daySchedules: next };
-                    });
-                  }}
-                  className="text-[10px] px-2 py-1 rounded border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-
-            {/* Per-day toggles */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Days</p>
-                <button
-                  type="button"
-                  className="text-[10px] text-primary hover:underline"
-                  onClick={() => {
-                    const allEnabled = DAYS.every((d) => draft.daySchedules[d].enabled);
-                    setDraft((prev) => {
-                      const next = { ...prev.daySchedules };
-                      for (const d of DAYS) next[d] = { ...next[d], enabled: !allEnabled };
-                      return { ...prev, daySchedules: next };
-                    });
-                  }}
-                >
-                  {DAYS.every((d) => draft.daySchedules[d].enabled) ? 'All days' : 'Select all'}
-                </button>
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                {DAYS.map((day) => {
-                  const sched = draft.daySchedules[day];
-                  const isExpanded = expandedDay === day;
-                  const hasTime = sched.start || sched.end;
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => {
-                        if (!sched.enabled) {
-                          setDraft((prev) => ({ ...prev, daySchedules: { ...prev.daySchedules, [day]: { ...sched, enabled: true } } }));
-                          setExpandedDay(day);
-                        } else if (isExpanded) {
-                          setExpandedDay(null);
-                        } else {
-                          setExpandedDay(day);
-                        }
-                      }}
-                      className={cn(
-                        'px-2 py-1 rounded text-[11px] font-medium transition-colors border min-w-[30px] text-center',
-                        sched.enabled
-                          ? isExpanded
-                            ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/30'
-                            : 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-muted/50 text-muted-foreground border-border',
-                      )}
-                    >
-                      {day.slice(0, 1)}{sched.enabled && hasTime ? '·' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {expandedDay && draft.daySchedules[expandedDay].enabled && (
-                <div className="mt-2 p-2.5 rounded-md border border-border bg-muted/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium">{expandedDay} hours</p>
-                    <div className="flex gap-2">
-                      {(draft.daySchedules[expandedDay].start || draft.daySchedules[expandedDay].end) && (
-                        <button
-                          type="button"
-                          className="text-[10px] text-muted-foreground hover:underline"
-                          onClick={() => setDraft((prev) => ({
-                            ...prev,
-                            daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], start: '', end: '' } },
-                          }))}
-                        >
-                          Clear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="text-[10px] text-destructive hover:underline"
-                        onClick={() => {
-                          setDraft((prev) => ({
-                            ...prev,
-                            daySchedules: { ...prev.daySchedules, [expandedDay]: { enabled: false, start: '', end: '' } },
-                          }));
-                          setExpandedDay(null);
-                        }}
-                      >
-                        Disable
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">From</span>
-                    <input
-                      type="time"
-                      value={draft.daySchedules[expandedDay].start}
-                      onChange={(e) => setDraft((prev) => ({
-                        ...prev,
-                        daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], start: e.target.value } },
-                      }))}
-                      className="input-field h-7 text-xs flex-1 min-w-0"
-                    />
-                    <span className="text-[10px] text-muted-foreground">To</span>
-                    <input
-                      type="time"
-                      value={draft.daySchedules[expandedDay].end}
-                      onChange={(e) => setDraft((prev) => ({
-                        ...prev,
-                        daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], end: e.target.value } },
-                      }))}
-                      className="input-field h-7 text-xs flex-1 min-w-0"
-                    />
-                  </div>
-                  {!draft.daySchedules[expandedDay].start && !draft.daySchedules[expandedDay].end && (
-                    <p className="text-[10px] text-muted-foreground">All hours (no restriction)</p>
-                  )}
-                </div>
-              )}
             </div>
           </section>
         </div>

@@ -478,7 +478,7 @@ export function CategoryColumn({
             title="Add subcategory"
           >
             <FolderPlus className="w-3.5 h-3.5" />
-            <span>Add</span>
+            <span>Add Subcategory</span>
           </button>
         </div>
 

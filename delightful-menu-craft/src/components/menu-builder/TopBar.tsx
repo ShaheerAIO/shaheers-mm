@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
-import { Upload, Download, FilePlus, X, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
+import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,8 +46,10 @@ export function TopBar() {
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [confirmDeleteMenuOpen, setConfirmDeleteMenuOpen] = useState(false);
   const [menuDropdownOpen, setMenuDropdownOpen] = useState(false);
+  const [fileDropdownOpen, setFileDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuDropdownRef = useRef<HTMLDivElement>(null);
+  const fileDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuDropdownOpen) return;
@@ -59,6 +61,17 @@ export function TopBar() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuDropdownOpen]);
+
+  useEffect(() => {
+    if (!fileDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!fileDropdownRef.current?.contains(e.target as Node)) {
+        setFileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [fileDropdownOpen]);
 
   const handleNewClick = () => {
     if (isDataLoaded) {
@@ -134,8 +147,8 @@ export function TopBar() {
       style={{ paddingRight: `calc(1rem + ${panelWidth}px)` }}
     >
       <div className="flex items-center gap-3 flex-shrink-0">
-        {/* New/Import/Export Buttons */}
-        <div className="flex items-center gap-2">
+        {/* File Dropdown (New / Import / Export) */}
+        <div ref={fileDropdownRef} className="relative">
           <input
             ref={fileInputRef}
             type="file"
@@ -144,32 +157,51 @@ export function TopBar() {
             className="hidden"
           />
           <button
-            onClick={handleNewClick}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <FilePlus className="w-4 h-4" />
-            New
-          </button>
-          <button
-            onClick={handleImportClick}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={!isDataLoaded}
+            type="button"
+            onClick={() => setFileDropdownOpen((o) => !o)}
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors",
-              isDataLoaded 
-                ? "border-border hover:bg-accent hover:text-accent-foreground" 
-                : "border-border/50 text-muted-foreground cursor-not-allowed"
+              'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors',
+              fileDropdownOpen && 'border-ring ring-1 ring-ring',
             )}
           >
-            <Download className="w-4 h-4" />
-            Export
+            File
+            <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', fileDropdownOpen && 'rotate-180')} />
           </button>
+
+          {fileDropdownOpen && (
+            <div className="absolute top-full mt-1 left-0 z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { setFileDropdownOpen(false); handleNewClick(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+              >
+                <FilePlus className="w-4 h-4 text-muted-foreground" />
+                New
+              </button>
+              <button
+                type="button"
+                onClick={() => { setFileDropdownOpen(false); handleImportClick(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+              >
+                <Upload className="w-4 h-4 text-muted-foreground" />
+                Import
+              </button>
+              <button
+                type="button"
+                disabled={!isDataLoaded}
+                onClick={() => { setFileDropdownOpen(false); handleExport(); }}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                  isDataLoaded
+                    ? 'text-foreground hover:bg-muted'
+                    : 'text-muted-foreground cursor-not-allowed',
+                )}
+              >
+                <Download className="w-4 h-4 text-muted-foreground" />
+                Export
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="w-px h-6 bg-border mx-2" />

@@ -249,7 +249,10 @@ export function ModifierLibraryContent() {
                     onClick={() => setSelectedModifier(modifier.id)}
                     className="min-w-0 flex-1 text-left cursor-pointer"
                   >
-                  <div className="font-medium text-sm">{modifier.modifierName}</div>
+                  <div className="font-medium text-sm flex items-center gap-1.5">
+                    {modifier.modifierName}
+                    <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     {directOptionCount > 0 ? (
                       <span>{directOptionCount} options</span>
@@ -463,6 +466,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       modifier.addNested,
     ),
   );
+  const [openChannelGroup, setOpenChannelGroup] = useState<string | null>(null);
 
   // Baseline only when switching which modifier is open — not on every join-table update.
   useLayoutEffect(() => {
@@ -1303,31 +1307,56 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
           </div>}
 
           {/* Channel Visibility */}
-          <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+          <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
             <Label className="section-header">Channel Visibility</Label>
-            {Object.entries(getChannelsByGroup()).map(([group, channels]) => (
-              <div key={group} className="space-y-1.5">
-                <p className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">{group}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {channels.map(({ key, label }) => (
+            <div className="space-y-1.5">
+              {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
+                const isOpen = openChannelGroup === group;
+                const active = channels.filter(c => draft[c.key as VisibilityChannelKey]);
+                const triggerLabel =
+                  active.length === 0 ? 'None' :
+                  active.length === channels.length ? 'All' :
+                  active.map(c => c.label).join(', ');
+                return (
+                  <div key={group}>
                     <button
-                      key={key}
                       type="button"
-                      onClick={() => setDraft(d => ({ ...d, [key]: !d[key as VisibilityChannelKey] }))}
+                      onClick={() => setOpenChannelGroup(isOpen ? null : group)}
                       className={cn(
-                        "flex items-center justify-between px-3 py-2 rounded-md border text-sm font-medium transition-colors",
-                        draft[key as VisibilityChannelKey]
-                          ? "bg-primary/10 border-primary/30 text-primary"
-                          : "bg-muted/50 border-border text-muted-foreground line-through"
+                        'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                        isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
                       )}
                     >
-                      <span>{label}</span>
-                      <span className="text-xs">{draft[key as VisibilityChannelKey] ? '✓' : '✕'}</span>
+                      <span className="font-medium text-foreground">{group}</span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className={cn(active.length > 0 && active.length < channels.length && 'text-primary')}>
+                          {triggerLabel}
+                        </span>
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
+                      </span>
                     </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+                    {isOpen && (
+                      <div className="mt-0.5 rounded-md border border-border divide-y divide-border overflow-hidden">
+                        {channels.map(({ key, label }) => {
+                          const checked = draft[key as VisibilityChannelKey];
+                          return (
+                            <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                              <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setDraft(d => ({ ...d, [key]: !d[key as VisibilityChannelKey] }))}
+                                className="accent-primary cursor-pointer"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Pizza & Size Settings */}

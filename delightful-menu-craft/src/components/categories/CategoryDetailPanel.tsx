@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Check, X, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { TagIconPicker } from '@/components/tags/TagIconPicker';
+import { resolveTagIcon } from '@/lib/tagIcons';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import {
-  parseDaySchedules,
-  serializeDaySchedules,
-  buildDaysSummary,
-  defaultDaySchedules,
   VISIBILITY_CHANNELS,
   DAYS,
-  type DayScheduleMap,
+  parseGroupSchedules,
+  serializeGroupSchedules,
+  buildGroupSchedulesSummary,
+  defaultGroupSchedules,
+  type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
+  type VisibilityGroup,
 } from '@/lib/visibility';
 import type { Category } from '@/types/menu';
 
@@ -25,7 +29,7 @@ type Draft = {
   posDisplayName: string;
   kdsDisplayName: string;
   color: string;
-  daySchedules: DayScheduleMap;
+  daySchedulesByGroup: ChannelGroupSchedules;
 } & VisDraft;
 
 function parseIds(csv: string | undefined): number[] {
@@ -45,7 +49,7 @@ function buildAvailabilitySummary(draft: Draft): string {
   if (channels.length === VISIBILITY_CHANNELS.length) parts.push('All channels');
   else if (channels.length === 0) parts.push('Hidden');
   else parts.push(channels.join(', '));
-  parts.push(buildDaysSummary(draft.daySchedules));
+  parts.push(buildGroupSchedulesSummary(draft.daySchedulesByGroup));
   return parts.join('  ·  ');
 }
 
@@ -59,6 +63,7 @@ export function CategoryDetailPanel({ category }: Props) {
     tags,
     updateCategory,
     addTag,
+    updateTag,
     deleteTag,
     getNextId,
   } = useMenuStore();
@@ -76,7 +81,7 @@ export function CategoryDetailPanel({ category }: Props) {
     visibilityWebsite: category.visibilityWebsite ?? true,
     visibilityMobileApp: category.visibilityMobileApp ?? true,
     visibilityDoordash: category.visibilityDoordash ?? true,
-    daySchedules: parseDaySchedules(category.daySchedules),
+    daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
   }));
 
   const [tagIds, setTagIds] = useState<Set<number>>(() => new Set(parseIds(category.tagIds)));
@@ -103,7 +108,7 @@ export function CategoryDetailPanel({ category }: Props) {
       visibilityWebsite: category.visibilityWebsite ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
       visibilityDoordash: category.visibilityDoordash ?? true,
-      daySchedules: parseDaySchedules(category.daySchedules),
+      daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));
     setMenuIds(new Set(parseIds(category.menuIds)));
@@ -127,14 +132,14 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.visibilityWebsite !== (category.visibilityWebsite ?? true) ||
     draft.visibilityMobileApp !== (category.visibilityMobileApp ?? true) ||
     draft.visibilityDoordash !== (category.visibilityDoordash ?? true) ||
-    serializeDaySchedules(draft.daySchedules) !== (category.daySchedules || serializeDaySchedules(defaultDaySchedules())) ||
+    serializeGroupSchedules(draft.daySchedulesByGroup) !== (category.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
     serializeIds(tagIds) !== serializeIds(new Set(parseIds(category.tagIds))) ||
     serializeIds(menuIds) !== serializeIds(new Set(parseIds(category.menuIds)));
 
   const handleSave = () => {
     updateCategory(category.id, {
       ...draft,
-      daySchedules: serializeDaySchedules(draft.daySchedules),
+      daySchedulesByGroup: serializeGroupSchedules(draft.daySchedulesByGroup),
       tagIds: serializeIds(tagIds),
       menuIds: serializeIds(menuIds),
     });
@@ -152,7 +157,7 @@ export function CategoryDetailPanel({ category }: Props) {
       visibilityWebsite: category.visibilityWebsite ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
       visibilityDoordash: category.visibilityDoordash ?? true,
-      daySchedules: parseDaySchedules(category.daySchedules),
+      daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));
     setMenuIds(new Set(parseIds(category.menuIds)));
@@ -237,79 +242,125 @@ export function CategoryDetailPanel({ category }: Props) {
             </div>
           </section>
 
-          {/* Availability — channels + schedule */}
+          {/* Availability — channels + per-group schedule */}
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Availability</p>
             <p className="text-[10px] text-muted-foreground mb-2 leading-snug">{buildAvailabilitySummary(draft)}</p>
 
-            {/* Channels — two dropdowns: On-Prem and Off-Prem */}
+            {/* Channel dropdowns — schedule editor lives inside each expanded group */}
             {(() => {
               const GROUPS = [
-                {
-                  id: 'onPrem' as const,
-                  label: 'On-Prem',
-                  channels: [
-                    { key: 'visibilityPos' as VisibilityChannelKey, label: 'POS' },
-                    { key: 'visibilityKiosk' as VisibilityChannelKey, label: 'Kiosk' },
-                  ],
-                },
-                {
-                  id: 'offPrem' as const,
-                  label: 'Off-Prem',
-                  channels: [
-                    { key: 'visibilityQr' as VisibilityChannelKey, label: 'QR Code' },
-                    { key: 'visibilityWebsite' as VisibilityChannelKey, label: 'Website' },
-                    { key: 'visibilityMobileApp' as VisibilityChannelKey, label: 'Mobile App' },
-                    { key: 'visibilityDoordash' as VisibilityChannelKey, label: 'DoorDash' },
-                  ],
-                },
+                { id: 'onPrem' as const, label: 'On-Prem' as VisibilityGroup, channels: [
+                  { key: 'visibilityPos' as VisibilityChannelKey, label: 'POS' },
+                  { key: 'visibilityKiosk' as VisibilityChannelKey, label: 'Kiosk' },
+                ]},
+                { id: 'offPrem' as const, label: 'Off-Prem' as VisibilityGroup, channels: [
+                  { key: 'visibilityQr' as VisibilityChannelKey, label: 'QR Code' },
+                  { key: 'visibilityWebsite' as VisibilityChannelKey, label: 'Website' },
+                  { key: 'visibilityMobileApp' as VisibilityChannelKey, label: 'Mobile App' },
+                  { key: 'visibilityDoordash' as VisibilityChannelKey, label: 'DoorDash' },
+                ]},
               ];
               return (
-                <div className="space-y-1.5 mb-3">
+                <div className="space-y-1.5">
                   {GROUPS.map((group) => {
                     const isOpen = openGroup === group.id;
                     const active = group.channels.filter((c) => draft[c.key]);
-                    const triggerLabel =
-                      active.length === 0 ? 'None' :
-                      active.length === group.channels.length ? 'All' :
-                      active.map((c) => c.label).join(', ');
+                    const triggerLabel = active.length === 0 ? 'None' : active.length === group.channels.length ? 'All' : active.map((c) => c.label).join(', ');
+                    const groupKey = group.label;
+                    const groupSched = draft.daySchedulesByGroup[groupKey];
                     return (
                       <div key={group.id}>
                         <button
                           type="button"
-                          onClick={() => setOpenGroup(isOpen ? null : group.id)}
-                          className={cn(
-                            'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
-                            isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
-                          )}
+                          onClick={() => { const next = isOpen ? null : group.id; setOpenGroup(next); setExpandedDay(null); setBulkStart(''); setBulkEnd(''); }}
+                          className={cn('w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors', isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50')}
                         >
                           <span className="font-medium text-foreground">{group.label}</span>
                           <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <span className={cn(active.length > 0 && active.length < group.channels.length && 'text-primary')}>
-                              {triggerLabel}
-                            </span>
+                            <span className={cn(active.length > 0 && active.length < group.channels.length && 'text-primary')}>{triggerLabel}</span>
                             <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
                           </span>
                         </button>
                         {isOpen && (
-                          <div className="mt-0.5 rounded-md border border-border divide-y divide-border overflow-hidden">
-                            {group.channels.map(({ key, label }) => {
-                              const checked = draft[key];
-                              return (
-                                <label
-                                  key={key}
-                                  className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors"
-                                >
-                                  <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))}
-                                    className="accent-primary cursor-pointer"
-                                  />
-                                </label>
-                              );
-                            })}
+                          <div className="mt-0.5 rounded-md border border-border overflow-hidden">
+                            <div className="divide-y divide-border">
+                              {group.channels.map(({ key, label }) => {
+                                const checked = draft[key];
+                                return (
+                                  <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                                    <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                                    <input type="checkbox" checked={checked} onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))} className="accent-primary cursor-pointer" />
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="border-t border-border px-3 py-2 space-y-2 bg-muted/20">
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                                  {(bulkStart || bulkEnd) && <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-muted-foreground">From</span>
+                                  <input type="time" value={bulkStart} onChange={(e) => setBulkStart(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
+                                  <span className="text-[10px] text-muted-foreground">To</span>
+                                  <input type="time" value={bulkEnd} onChange={(e) => setBulkEnd(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
+                                  <button type="button" disabled={!bulkStart && !bulkEnd}
+                                    onClick={() => { setDraft((prev) => { const next = { ...prev.daySchedulesByGroup[groupKey] }; for (const d of DAYS) { if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd }; } return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } }; }); }}
+                                    className="text-[10px] px-2 py-1 rounded border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap">Apply</button>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                                  <button type="button" className="text-[10px] text-primary hover:underline"
+                                    onClick={() => { const allEnabled = DAYS.every((d) => groupSched[d].enabled); setDraft((prev) => { const next = { ...prev.daySchedulesByGroup[groupKey] }; for (const d of DAYS) next[d] = { ...next[d], enabled: !allEnabled }; return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } }; }); }}>
+                                    {DAYS.every((d) => groupSched[d].enabled) ? 'All days' : 'Select all'}
+                                  </button>
+                                </div>
+                                <div className="flex gap-1 flex-wrap">
+                                  {DAYS.map((day) => {
+                                    const sched = groupSched[day];
+                                    const isExpanded = expandedDay === day;
+                                    const hasTime = sched.start || sched.end;
+                                    return (
+                                      <button key={day} type="button"
+                                        onClick={() => { if (!sched.enabled) { setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [day]: { ...sched, enabled: true } } } })); setExpandedDay(day); } else if (isExpanded) { setExpandedDay(null); } else { setExpandedDay(day); } }}
+                                        className={cn('px-2 py-1 rounded text-[11px] font-medium transition-colors border min-w-[30px] text-center', sched.enabled ? (isExpanded ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/30' : 'bg-primary text-primary-foreground border-primary') : 'bg-muted/50 text-muted-foreground border-border')}>
+                                        {day.slice(0, 1)}{sched.enabled && hasTime ? '·' : ''}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {expandedDay && groupSched[expandedDay].enabled && (
+                                  <div className="mt-2 p-2.5 rounded-md border border-border bg-muted/30 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-xs font-medium">{expandedDay} hours</p>
+                                      <div className="flex gap-2">
+                                        {(groupSched[expandedDay].start || groupSched[expandedDay].end) && (
+                                          <button type="button" className="text-[10px] text-muted-foreground hover:underline"
+                                            onClick={() => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: '', end: '' } } } }))}>Clear</button>
+                                        )}
+                                        <button type="button" className="text-[10px] text-destructive hover:underline"
+                                          onClick={() => { setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { enabled: false, start: '', end: '' } } } })); setExpandedDay(null); }}>Disable</button>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] text-muted-foreground">From</span>
+                                      <input type="time" value={groupSched[expandedDay].start}
+                                        onChange={(e) => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: e.target.value } } } }))}
+                                        className="input-field h-7 text-xs flex-1 min-w-0" />
+                                      <span className="text-[10px] text-muted-foreground">To</span>
+                                      <input type="time" value={groupSched[expandedDay].end}
+                                        onChange={(e) => setDraft((prev) => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], end: e.target.value } } } }))}
+                                        className="input-field h-7 text-xs flex-1 min-w-0" />
+                                    </div>
+                                    {!groupSched[expandedDay].start && !groupSched[expandedDay].end && <p className="text-[10px] text-muted-foreground">All hours (no restriction)</p>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -318,154 +369,6 @@ export function CategoryDetailPanel({ category }: Props) {
                 </div>
               );
             })()}
-
-            {/* Bulk hours */}
-            <div className="mb-2">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Hours (all days)</p>
-                {(bulkStart || bulkEnd) && (
-                  <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>
-                    Clear
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">From</span>
-                <input type="time" value={bulkStart} onChange={(e) => setBulkStart(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
-                <span className="text-[10px] text-muted-foreground">To</span>
-                <input type="time" value={bulkEnd} onChange={(e) => setBulkEnd(e.target.value)} className="input-field h-7 text-xs flex-1 min-w-0" />
-                <button
-                  type="button"
-                  disabled={!bulkStart && !bulkEnd}
-                  onClick={() => {
-                    setDraft((prev) => {
-                      const next = { ...prev.daySchedules };
-                      for (const d of DAYS) {
-                        if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
-                      }
-                      return { ...prev, daySchedules: next };
-                    });
-                  }}
-                  className="text-[10px] px-2 py-1 rounded border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-
-            {/* Per-day toggles */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Days</p>
-                <button
-                  type="button"
-                  className="text-[10px] text-primary hover:underline"
-                  onClick={() => {
-                    const allEnabled = DAYS.every((d) => draft.daySchedules[d].enabled);
-                    setDraft((prev) => {
-                      const next = { ...prev.daySchedules };
-                      for (const d of DAYS) next[d] = { ...next[d], enabled: !allEnabled };
-                      return { ...prev, daySchedules: next };
-                    });
-                  }}
-                >
-                  {DAYS.every((d) => draft.daySchedules[d].enabled) ? 'All days' : 'Select all'}
-                </button>
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                {DAYS.map((day) => {
-                  const sched = draft.daySchedules[day];
-                  const isExpanded = expandedDay === day;
-                  const hasTime = sched.start || sched.end;
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => {
-                        if (!sched.enabled) {
-                          setDraft((prev) => ({ ...prev, daySchedules: { ...prev.daySchedules, [day]: { ...sched, enabled: true } } }));
-                          setExpandedDay(day);
-                        } else if (isExpanded) {
-                          setExpandedDay(null);
-                        } else {
-                          setExpandedDay(day);
-                        }
-                      }}
-                      className={cn(
-                        'px-2 py-1 rounded text-[11px] font-medium transition-colors border min-w-[30px] text-center',
-                        sched.enabled
-                          ? isExpanded
-                            ? 'bg-primary text-primary-foreground border-primary ring-2 ring-primary/30'
-                            : 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-muted/50 text-muted-foreground border-border',
-                      )}
-                    >
-                      {day.slice(0, 1)}{sched.enabled && hasTime ? '·' : ''}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {expandedDay && draft.daySchedules[expandedDay].enabled && (
-                <div className="mt-2 p-2.5 rounded-md border border-border bg-muted/30 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium">{expandedDay} hours</p>
-                    <div className="flex gap-2">
-                      {(draft.daySchedules[expandedDay].start || draft.daySchedules[expandedDay].end) && (
-                        <button
-                          type="button"
-                          className="text-[10px] text-muted-foreground hover:underline"
-                          onClick={() => setDraft((prev) => ({
-                            ...prev,
-                            daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], start: '', end: '' } },
-                          }))}
-                        >
-                          Clear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="text-[10px] text-destructive hover:underline"
-                        onClick={() => {
-                          setDraft((prev) => ({
-                            ...prev,
-                            daySchedules: { ...prev.daySchedules, [expandedDay]: { enabled: false, start: '', end: '' } },
-                          }));
-                          setExpandedDay(null);
-                        }}
-                      >
-                        Disable
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">From</span>
-                    <input
-                      type="time"
-                      value={draft.daySchedules[expandedDay].start}
-                      onChange={(e) => setDraft((prev) => ({
-                        ...prev,
-                        daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], start: e.target.value } },
-                      }))}
-                      className="input-field h-7 text-xs flex-1 min-w-0"
-                    />
-                    <span className="text-[10px] text-muted-foreground">To</span>
-                    <input
-                      type="time"
-                      value={draft.daySchedules[expandedDay].end}
-                      onChange={(e) => setDraft((prev) => ({
-                        ...prev,
-                        daySchedules: { ...prev.daySchedules, [expandedDay]: { ...prev.daySchedules[expandedDay], end: e.target.value } },
-                      }))}
-                      className="input-field h-7 text-xs flex-1 min-w-0"
-                    />
-                  </div>
-                  {!draft.daySchedules[expandedDay].start && !draft.daySchedules[expandedDay].end && (
-                    <p className="text-[10px] text-muted-foreground">All hours (no restriction)</p>
-                  )}
-                </div>
-              )}
-            </div>
           </section>
 
           {/* Tags */}
@@ -477,37 +380,98 @@ export function CategoryDetailPanel({ category }: Props) {
               {validTags.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No tags exist yet.</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {validTags.map((tag) => {
-                    const isAssigned = tagIds.has(tag.id);
-                    const isPendingDelete = pendingDeleteTagId === tag.id;
-                    if (isPendingDelete) {
+                <TooltipProvider delayDuration={900}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {validTags.map((tag) => {
+                      const isAssigned = tagIds.has(tag.id);
+                      const isPendingDelete = pendingDeleteTagId === tag.id;
+                      const TagIcon = resolveTagIcon(tag.icon);
+
+                      if (isPendingDelete) {
+                        return (
+                          <span key={tag.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-destructive/10 border-destructive/40 text-destructive">
+                            <span>Delete "{tag.name}"?</span>
+                            <button type="button" onClick={() => { deleteTag(tag.id); setTagIds((s) => { const n = new Set(s); n.delete(tag.id); return n; }); setPendingDeleteTagId(null); }} className="font-bold hover:opacity-70"><Check className="w-3 h-3" /></button>
+                            <button type="button" onClick={() => setPendingDeleteTagId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+                          </span>
+                        );
+                      }
+
+                      // Icon tile — big colored square; controls stay inside bounds
+                      if (TagIcon) {
+                        const bgColor = tag.color || '#6366f1';
+                        return (
+                          <Tooltip key={tag.id}>
+                            <div className="group relative">
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={cn(
+                                    'w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer select-none transition-opacity',
+                                    isAssigned ? 'opacity-100' : 'opacity-35 hover:opacity-60',
+                                  )}
+                                  style={{ backgroundColor: bgColor }}
+                                  onClick={() => setTagIds((s) => { const n = new Set(s); isAssigned ? n.delete(tag.id) : n.add(tag.id); return n; })}
+                                >
+                                  <TagIcon className="w-[18px] h-[18px] text-white drop-shadow-sm" />
+                                </div>
+                              </TooltipTrigger>
+                              <div className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity flex items-start justify-end p-0.5">
+                                <div className="pointer-events-auto flex gap-0.5">
+                                  <TagIconPicker
+                                    icon={tag.icon}
+                                    color={tag.color}
+                                    onChangeIcon={(iconName) => updateTag(tag.id, { icon: iconName })}
+                                    onChangeColor={(color) => updateTag(tag.id, { color })}
+                                    triggerClassName="w-4 h-4 rounded bg-black/30 hover:bg-black/50 flex items-center justify-center text-white"
+                                  />
+                                  {!tag.isSystem && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); setPendingDeleteTagId(tag.id); }}
+                                      className="w-4 h-4 rounded bg-black/30 hover:bg-black/50 flex items-center justify-center text-white"
+                                      title="Delete tag globally"
+                                    >
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <TooltipContent side="bottom" className="text-xs px-2 py-1">
+                              {tag.name}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      }
+
+                      // Text chip — existing style when no icon
                       return (
-                        <span key={tag.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-destructive/10 border-destructive/40 text-destructive">
-                          <span>Delete "{tag.name}"?</span>
-                          <button type="button" onClick={() => { deleteTag(tag.id); setTagIds((s) => { const n = new Set(s); n.delete(tag.id); return n; }); setPendingDeleteTagId(null); }} className="font-bold hover:opacity-70"><Check className="w-3 h-3" /></button>
-                          <button type="button" onClick={() => setPendingDeleteTagId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+                        <span
+                          key={tag.id}
+                          onClick={() => setTagIds((s) => { const n = new Set(s); isAssigned ? n.delete(tag.id) : n.add(tag.id); return n; })}
+                          className={cn(
+                            'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
+                            isAssigned ? 'bg-muted border-primary/40 text-foreground' : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30',
+                          )}
+                        >
+                          {isAssigned && <Check className="w-2.5 h-2.5 shrink-0 text-primary" />}
+                          <span>{tag.name}</span>
+                          <TagIconPicker
+                            icon={tag.icon}
+                            color={tag.color}
+                            onChangeIcon={(iconName) => updateTag(tag.id, { icon: iconName })}
+                            onChangeColor={(color) => updateTag(tag.id, { color })}
+                          />
+                          {!tag.isSystem && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setPendingDeleteTagId(tag.id); }} className="ml-0.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          )}
                         </span>
                       );
-                    }
-                    return (
-                      <span
-                        key={tag.id}
-                        onClick={() => setTagIds((s) => { const n = new Set(s); isAssigned ? n.delete(tag.id) : n.add(tag.id); return n; })}
-                        className={cn(
-                          'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
-                          isAssigned ? 'bg-muted border-primary/40 text-foreground' : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30',
-                        )}
-                      >
-                        {isAssigned && <Check className="w-2.5 h-2.5 shrink-0 text-primary" />}
-                        <span>{tag.name}</span>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setPendingDeleteTagId(tag.id); }} className="ml-0.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
-                          <Trash2 className="w-2.5 h-2.5" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
+                    })}
+                  </div>
+                </TooltipProvider>
               )}
               {showTagInput ? (
                 <div className="flex items-center gap-2">

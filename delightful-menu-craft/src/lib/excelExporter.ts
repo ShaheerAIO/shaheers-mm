@@ -21,8 +21,8 @@ const SHEET_NAMES = {
 
 // Column headers for each sheet (matching Excel exactly)
 const HEADERS = {
-  MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules'],
-  CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules'],
+  MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules', 'daySchedulesByGroup'],
+  CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder', 'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash', 'daySchedules', 'daySchedulesByGroup'],
   ITEM: [
     'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture',
     'onlineImage', 'landscapeImage', 'thirdPartyImage', 'kioskItemImage', 'itemPrice',
@@ -31,7 +31,7 @@ const HEADERS = {
     'stationIds', 'preparationTime', 'calories', 'tagIds', 'inheritTagsFromCategory',
     'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
     'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite',
-    'visibilityMobileApp', 'visibilityDoordash', 'daySchedules',
+    'visibilityMobileApp', 'visibilityDoordash', 'daySchedules', 'daySchedulesByGroup',
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
   CATEGORY_MODIFIER_GROUPS: ['modifierGroupId', 'categoryId', 'sortOrder'],
@@ -45,7 +45,7 @@ const HEADERS = {
     'minSelector', 'maxSelector', 'noMaxSelection', 'prefix', 'pizzaSelection', 'price',
     'parentModifierId', 'offPrem', 'modifierIds', 'isSizeModifier', 'onPrem',
     'visibilityPos', 'visibilityKiosk', 'visibilityQr', 'visibilityWebsite',
-    'visibilityMobileApp', 'visibilityDoordash',
+    'visibilityMobileApp', 'visibilityDoordash', 'modType',
   ],
   MODIFIER_OPTION: [
     'id', 'optionName', 'posDisplayName', 'parentModifierId', 'isStockAvailable', 'isSizeModifier',
@@ -54,7 +54,7 @@ const HEADERS = {
   ],
   MODIFIER_MODIFIER_OPTIONS: ['modifierId', 'modifierOptionId', 'isDefaultSelected', 'maxLimit', 'optionDisplayName', 'sortOrder', 'maxQtyPerOption'],
   ALLERGEN: ['id', 'name'],
-  TAG: ['id', 'name'],
+  TAG: ['id', 'name', 'icon', 'color', 'isSystem'],
 };
 
 // Convert data array to worksheet with headers

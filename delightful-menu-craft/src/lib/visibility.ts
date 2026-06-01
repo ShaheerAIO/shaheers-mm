@@ -14,12 +14,12 @@ import type { Item, Modifier, ModifierOption } from '@/types/menu';
 // ---------------------------------------------------------------------------
 
 export const VISIBILITY_CHANNELS = [
-  { key: 'visibilityPos',        label: 'POS',        group: 'In-Store' },
-  { key: 'visibilityKiosk',      label: 'Kiosk',      group: 'In-Store' },
-  { key: 'visibilityQr',         label: 'QR Code',    group: 'Online'   },
-  { key: 'visibilityWebsite',    label: 'Website',    group: 'Online'   },
-  { key: 'visibilityMobileApp',  label: 'Mobile App', group: 'Online'   },
-  { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Online'   },
+  { key: 'visibilityPos',        label: 'POS',        group: 'On-Prem'  },
+  { key: 'visibilityKiosk',      label: 'Kiosk',      group: 'On-Prem'  },
+  { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem' },
+  { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem' },
+  { key: 'visibilityMobileApp',  label: 'Mobile App', group: 'Off-Prem' },
+  { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Off-Prem' },
 ] as const;
 
 export type VisibilityChannelKey = typeof VISIBILITY_CHANNELS[number]['key'];
@@ -282,6 +282,66 @@ export function parseVisibilityFromRow(
     visibilityMobileApp:  parseBool(row['visibilityMobileApp'], legacyOnline),
     visibilityDoordash:   parseBool(row['visibilityDoordash'],  legacyThirdParty),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-channel-group schedules
+// ---------------------------------------------------------------------------
+
+/** A schedule map for each visibility group (On-Prem / Off-Prem). */
+export type ChannelGroupSchedules = Record<VisibilityGroup, DayScheduleMap>;
+
+/** Both groups start fully enabled with no time restriction. */
+export function defaultGroupSchedules(): ChannelGroupSchedules {
+  return {
+    'On-Prem': defaultDaySchedules(),
+    'Off-Prem': defaultDaySchedules(),
+  };
+}
+
+/**
+ * Parse a ChannelGroupSchedules from the `daySchedulesByGroup` JSON string.
+ * If that field is absent/invalid, falls back to copying the legacy single
+ * `daySchedules` value to both groups so old data migrates transparently.
+ */
+export function parseGroupSchedules(
+  raw: string | undefined | null,
+  fallbackSingle?: string | undefined,
+): ChannelGroupSchedules {
+  if (raw && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof parsed === 'object' && parsed !== null) {
+        const onPrem  = parsed['On-Prem'];
+        const offPrem = parsed['Off-Prem'];
+        if (onPrem !== undefined || offPrem !== undefined) {
+          return {
+            'On-Prem':  parseDaySchedules(onPrem  !== undefined ? JSON.stringify(onPrem)  : undefined),
+            'Off-Prem': parseDaySchedules(offPrem !== undefined ? JSON.stringify(offPrem) : undefined),
+          };
+        }
+      }
+    } catch {
+      // fall through
+    }
+  }
+  const single = parseDaySchedules(fallbackSingle);
+  return { 'On-Prem': single, 'Off-Prem': { ...single } };
+}
+
+export function serializeGroupSchedules(map: ChannelGroupSchedules): string {
+  return JSON.stringify(map);
+}
+
+/**
+ * Short summary for accordion headers.
+ * Returns one summary when both groups share the same schedule,
+ * or "On-Prem: … · Off-Prem: …" when they differ.
+ */
+export function buildGroupSchedulesSummary(map: ChannelGroupSchedules): string {
+  const on  = buildDaysSummary(map['On-Prem']);
+  const off = buildDaysSummary(map['Off-Prem']);
+  return on === off ? on : `On-Prem: ${on} · Off-Prem: ${off}`;
 }
 
 /**

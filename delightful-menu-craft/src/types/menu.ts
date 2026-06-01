@@ -19,6 +19,8 @@ export interface Menu {
   visibilityDoordash: boolean;
   // Scheduling — JSON-encoded DayScheduleMap
   daySchedules: string;
+  // Per-group scheduling — JSON-encoded ChannelGroupSchedules (On-Prem / Off-Prem)
+  daySchedulesByGroup?: string;
 }
 
 // Sheet 2: Category
@@ -43,6 +45,7 @@ export interface Category {
   visibilityDoordash: boolean;
   // Scheduling — JSON-encoded DayScheduleMap (same format as Item)
   daySchedules: string;
+  daySchedulesByGroup?: string;
 }
 
 // Sheet 3: Item
@@ -87,6 +90,7 @@ export interface Item {
   // Scheduling — JSON-encoded DayScheduleMap (see visibility.ts)
   // Each day key present = day enabled; start/end = "" means no time restriction.
   daySchedules: string;
+  daySchedulesByGroup?: string;
 }
 
 // Sheet 4: Item Modifiers (join table)
@@ -166,6 +170,7 @@ export interface Modifier {
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
+  modType?: string; // 'Optional' | 'Required' | 'Push Optional'
 }
 
 // Sheet 11: Modifier Option
@@ -207,6 +212,9 @@ export interface Allergen {
 export interface Tag {
   id: number;
   name: string;
+  icon?: string;     // lucide icon name, e.g. "Wine"
+  color?: string;    // hex color, e.g. "#ef4444"
+  isSystem?: boolean; // true = seeded by the app, cannot be deleted
 }
 
 // =============================================================================

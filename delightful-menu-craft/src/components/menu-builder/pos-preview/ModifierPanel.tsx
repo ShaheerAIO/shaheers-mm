@@ -11,6 +11,27 @@ import type {
 } from '@/types/menu';
 import { POS_TILE_FRAME } from './posTileStyles';
 
+/** Canonical modifier behavior type. Checks modType first, falls back to isOptional string for legacy data. */
+export function getEffectiveModType(mod: Modifier): 'Required' | 'Push Optional' | 'Optional' {
+  if (mod.modType === 'Push Optional' || mod.isOptional === 'Push Optional') return 'Push Optional';
+  if (mod.modType === 'Required' || mod.isOptional === 'Required' || mod.isOptional === 'Select one') return 'Required';
+  return 'Optional';
+}
+
+/** True if the item has any modifier that should trigger the modifier popup (Required or Push Optional). */
+export function itemHasPopupModifiers(
+  itemId: number,
+  itemModifiers: ItemModifier[],
+  modifiers: Modifier[],
+): boolean {
+  return itemModifiers
+    .filter((im) => im.itemId === itemId)
+    .some((im) => {
+      const mod = modifiers.find((m) => m.id === im.modifierId);
+      return mod ? getEffectiveModType(mod) !== 'Optional' : false;
+    });
+}
+
 /** ItemModifiers often list nested mods explicitly; hide any mod that is a child of another linked mod. */
 function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifier[]): Modifier[] {
   if (linked.length <= 1) return linked;
@@ -201,16 +222,23 @@ export function ModifierPanel({
     }));
   };
 
-  const toggleOption = (modifierId: number, optionId: number, multiSelect: boolean) => {
+  const toggleOption = (
+    modifierId: number,
+    optionId: number,
+    multiSelect: boolean,
+    maxSelector: number,
+    noMaxSelection: boolean,
+  ) => {
+    // Treat as multi-select if the flag is set, if there's no max, or if max > 1
+    const isMultiSelect = multiSelect || noMaxSelection || maxSelector > 1;
     setSelectedOptions((prev) => {
       const current = prev[modifierId] ?? [];
-      if (multiSelect) {
-        return {
-          ...prev,
-          [modifierId]: current.includes(optionId)
-            ? current.filter((id) => id !== optionId)
-            : [...current, optionId],
-        };
+      if (isMultiSelect) {
+        if (current.includes(optionId)) {
+          return { ...prev, [modifierId]: current.filter((id) => id !== optionId) };
+        }
+        if (!noMaxSelection && maxSelector > 0 && current.length >= maxSelector) return prev;
+        return { ...prev, [modifierId]: [...current, optionId] };
       }
       // Single-select: second click on the same option clears selection
       if (current.length === 1 && current[0] === optionId) {
@@ -226,13 +254,18 @@ export function ModifierPanel({
     optionId: number,
     multiSelect: boolean,
     maxQty: number, // 0 = unlimited
+    maxSelector: number,
+    noMaxSelection: boolean,
   ) => {
+    const isMultiSelect = multiSelect || noMaxSelection || maxSelector > 1;
     setSelectedOptions((prev) => {
       const current = prev[modifierId] ?? [];
       const currentCount = current.filter((id) => id === optionId).length;
-      // At cap — do nothing
+      // Per-option cap
       if (maxQty > 0 && currentCount >= maxQty) return prev;
-      if (!multiSelect) {
+      // Total-selections cap
+      if (!noMaxSelection && maxSelector > 0 && current.length >= maxSelector) return prev;
+      if (!isMultiSelect) {
         // Single-select: if a different option is already chosen, replace it
         const otherIds = current.filter((id) => id !== optionId);
         if (otherIds.length > 0) {
@@ -314,7 +347,7 @@ export function ModifierPanel({
 
       const count = selectedOptions[mod.id]?.length ?? 0;
       const minReq =
-        mod.isOptional === 'Required' || mod.isOptional === 'Select one'
+        getEffectiveModType(mod) === 'Required'
           ? Math.max(mod.minSelector, 1)
           : mod.minSelector;
       const maxReq = mod.noMaxSelection ? Number.POSITIVE_INFINITY : mod.maxSelector;
@@ -344,11 +377,11 @@ export function ModifierPanel({
     const currentOptions = getOptions(mod.id);
     return (
       <div>
-        {isMeaningfulOptionalLabel(mod.isOptional) && (
-          <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-wider font-medium">
-            {mod.isOptional}
-          </p>
-        )}
+        {(() => {
+          const et = getEffectiveModType(mod);
+          const label = et === 'Push Optional' ? 'Pre-selected' : isMeaningfulOptionalLabel(mod.isOptional) ? mod.isOptional : null;
+          return label ? <p className="text-[10px] text-zinc-600 mb-2 uppercase tracking-wider font-medium">{label}</p> : null;
+        })()}
 
         {mod.pizzaSelection && (
           <div className="flex gap-1.5 mb-2">
@@ -388,23 +421,31 @@ export function ModifierPanel({
                 : activeSelections !== undefined
                   ? activeSelections.includes(modifierOptionId)
                   : isDefaultSelected;
+            const atMax =
+              !mod.noMaxSelection &&
+              mod.maxSelector > 0 &&
+              (activeSelections?.length ?? 0) >= mod.maxSelector;
+            const isBlockedByMax = !isSelected && !isPizza && atMax;
 
             return (
               <button
                 key={modifierOptionId}
                 type="button"
+                disabled={isBlockedByMax}
                 onClick={() =>
                   isPizza
                     ? togglePizzaOption(mod.id, modifierOptionId)
                     : isMultiQty
-                      ? incrementOption(mod.id, modifierOptionId, mod.multiSelect, maxQtyPerOption)
-                      : toggleOption(mod.id, modifierOptionId, mod.multiSelect)
+                      ? incrementOption(mod.id, modifierOptionId, mod.multiSelect, maxQtyPerOption, mod.maxSelector, mod.noMaxSelection)
+                      : toggleOption(mod.id, modifierOptionId, mod.multiSelect, mod.maxSelector, mod.noMaxSelection)
                 }
                 className={cn(
                   `${POS_TILE_FRAME} flex flex-col items-center justify-center gap-0.5 px-2 py-1 text-xs font-semibold text-center transition-all border relative`,
                   isSelected
                     ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
-                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
+                    : isBlockedByMax
+                      ? 'bg-zinc-800/40 border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+                      : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
                 )}
                 style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
               >
@@ -506,11 +547,11 @@ export function ModifierPanel({
                 <span className="line-clamp-3 leading-tight px-0.5">
                   {child.posDisplayName || child.modifierName}
                 </span>
-                {isMeaningfulOptionalLabel(child.isOptional) && (
-                  <span className="text-[9px] text-zinc-500 font-normal line-clamp-1">
-                    {child.isOptional}
-                  </span>
-                )}
+                {(() => {
+                  const et = getEffectiveModType(child);
+                  const label = et === 'Push Optional' ? 'Pre-selected' : isMeaningfulOptionalLabel(child.isOptional) ? child.isOptional : null;
+                  return label ? <span className="text-[9px] text-zinc-500 font-normal line-clamp-1">{label}</span> : null;
+                })()}
               </button>
             );
           })}

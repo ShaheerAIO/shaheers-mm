@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import { ChevronRight } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
-import { ModifierPanel } from './ModifierPanel';
+import { ModifierPanel, itemHasPopupModifiers } from './ModifierPanel';
 import { POS_TILE_FRAME } from './posTileStyles';
 import { isVisibleOnChannel } from '@/lib/visibility';
 
@@ -17,7 +17,7 @@ interface TSRMenuPanelProps {
 type DrillLevel = 'categories' | 'subcategories' | 'items' | 'modifiers';
 
 export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery = '' }: TSRMenuPanelProps) {
-  const { categories, items, categoryItems, selectedMenuId, itemModifiers } = useMenuStore();
+  const { categories, items, categoryItems, selectedMenuId, itemModifiers, modifiers } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<number | null>(null);
@@ -192,8 +192,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
   };
 
   const handleItemClick = (item: Item) => {
-    const hasModifiers = itemModifiers.some((im) => im.itemId === item.id);
-    if (!hasModifiers) {
+    if (!itemHasPopupModifiers(item.id, itemModifiers, modifiers)) {
       onAddToTicket(item, {}, 1);
       return;
     }
