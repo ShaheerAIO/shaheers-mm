@@ -109,8 +109,8 @@ export interface CategoryModifierGroup {
 
 // Sheet 6: Category Modifiers (join table)
 export interface CategoryModifier {
-  modifierGroupId: number;
-  itemId: number;
+  modifierId: number;
+  categoryId: number;
   sortOrder: number;
 }
 

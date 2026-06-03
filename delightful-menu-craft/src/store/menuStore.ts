@@ -144,14 +144,29 @@ interface MenuState {
   // Actions - Join Tables
   addItemModifier: (itemModifier: ItemModifier) => void;
   removeItemModifier: (modifierId: number, itemId: number) => void;
+  reorderItemModifiers: (itemId: number, fromModifierId: number, toModifierId: number) => void;
   addModifierModifierOption: (mmo: ModifierModifierOption) => void;
   updateModifierModifierOption: (modifierId: number, optionId: number, updates: Partial<ModifierModifierOption>) => void;
   removeModifierModifierOption: (modifierId: number, optionId: number) => void;
+  reorderModifierOptions: (modifierId: number, fromIndex: number, toIndex: number) => void;
   
   // Actions - Category Items (for assigning items to categories)
   addCategoryItem: (categoryItem: CategoryItem) => void;
   removeCategoryItem: (id: number) => void;
-  
+
+  // Actions - Category Modifiers
+  addCategoryModifier: (categoryId: number, modifierId: number) => void;
+  removeCategoryModifier: (categoryId: number, modifierId: number) => void;
+  applyCategoryModifiersToOptInItems: (categoryId: number) => void;
+  applyCategoryModifiersToAllItems: (categoryId: number) => void;
+
+  // Actions - Modifier Groups
+  addModifierGroup: (group: ModifierGroup) => void;
+  updateModifierGroup: (id: number, updates: Partial<ModifierGroup>) => void;
+  deleteModifierGroup: (id: number) => void;
+  addCategoryModifierGroup: (categoryId: number, groupId: number) => void;
+  removeCategoryModifierGroup: (categoryId: number, groupId: number) => void;
+
   // Actions - Allergens & Tags
   addAllergen: (allergen: Allergen) => void;
   updateAllergen: (id: number, updates: Partial<Allergen>) => void;
@@ -176,7 +191,7 @@ interface MenuState {
   bulkUpdateItems: (ids: number[], transform: (item: Item) => Partial<Item>) => void;
 
   // Helper - Get next ID
-  getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'allergens' | 'tags'>) => number;
+  getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'modifierGroups' | 'allergens' | 'tags'>) => number;
 }
 
 // Helper to generate next ID
@@ -547,6 +562,25 @@ export const useMenuStore = create<MenuState>()(
           (im) => !(im.modifierId === modifierId && im.itemId === itemId)
         ),
       })),
+      reorderItemModifiers: (itemId, fromModifierId, toModifierId) =>
+        set((state) => {
+          const rest = state.itemModifiers.filter((im) => im.itemId !== itemId);
+          const ordered = state.itemModifiers
+            .filter((im) => im.itemId === itemId)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+
+          const fromIdx = ordered.findIndex((im) => im.modifierId === fromModifierId);
+          const toIdx = ordered.findIndex((im) => im.modifierId === toModifierId);
+
+          if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return {};
+
+          const reordered = [...ordered];
+          const [moved] = reordered.splice(fromIdx, 1);
+          reordered.splice(toIdx, 0, moved);
+          const updated = reordered.map((im, idx) => ({ ...im, sortOrder: idx }));
+
+          return { itemModifiers: [...rest, ...updated] };
+        }),
       
       // Join Table Actions - Modifier Modifier Options
       addModifierModifierOption: (mmo) => set((state) => ({ 
@@ -564,6 +598,28 @@ export const useMenuStore = create<MenuState>()(
           (mmo) => !(mmo.modifierId === modifierId && mmo.modifierOptionId === optionId)
         ),
       })),
+      reorderModifierOptions: (modifierId, fromIndex, toIndex) =>
+        set((state) => {
+          const rest = state.modifierModifierOptions.filter(
+            (mmo) => mmo.modifierId !== modifierId
+          );
+          const ordered = state.modifierModifierOptions
+            .filter((mmo) => mmo.modifierId === modifierId)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+
+          if (
+            fromIndex < 0 || toIndex < 0 ||
+            fromIndex >= ordered.length || toIndex >= ordered.length ||
+            fromIndex === toIndex
+          ) return {};
+
+          const reordered = [...ordered];
+          const [moved] = reordered.splice(fromIndex, 1);
+          reordered.splice(toIndex, 0, moved);
+          const updated = reordered.map((mmo, idx) => ({ ...mmo, sortOrder: idx }));
+
+          return { modifierModifierOptions: [...rest, ...updated] };
+        }),
       
       // Category Items Actions
       addCategoryItem: (categoryItem) => set((state) => ({ 
@@ -572,7 +628,125 @@ export const useMenuStore = create<MenuState>()(
       removeCategoryItem: (id) => set((state) => ({
         categoryItems: state.categoryItems.filter((ci) => ci.id !== id),
       })),
-      
+
+      // Category Modifier Actions
+      addCategoryModifier: (categoryId, modifierId) => set((state) => {
+        const exists = state.categoryModifiers.some(
+          (cm) => cm.categoryId === categoryId && cm.modifierId === modifierId
+        );
+        if (exists) return {};
+        const maxOrder = state.categoryModifiers
+          .filter((cm) => cm.categoryId === categoryId)
+          .reduce((m, cm) => Math.max(m, cm.sortOrder), -1);
+        return {
+          categoryModifiers: [
+            ...state.categoryModifiers,
+            { categoryId, modifierId, sortOrder: maxOrder + 1 },
+          ],
+        };
+      }),
+      removeCategoryModifier: (categoryId, modifierId) => set((state) => ({
+        categoryModifiers: state.categoryModifiers.filter(
+          (cm) => !(cm.categoryId === categoryId && cm.modifierId === modifierId)
+        ),
+      })),
+      applyCategoryModifiersToOptInItems: (categoryId) => set((state) => {
+        const catMods = state.categoryModifiers.filter((cm) => cm.categoryId === categoryId);
+        if (catMods.length === 0) return {};
+        const itemIdsInCategory = state.categoryItems
+          .filter((ci) => ci.categoryId === categoryId)
+          .map((ci) => ci.itemId);
+        const optInItemIds = itemIdsInCategory.filter((itemId) => {
+          const item = state.items.find((i) => i.id === itemId);
+          return item?.inheritModifiersFromCategory === true;
+        });
+        const newLinks: typeof state.itemModifiers = [];
+        for (const itemId of optInItemIds) {
+          const existingMods = new Set(
+            state.itemModifiers.filter((im) => im.itemId === itemId).map((im) => im.modifierId)
+          );
+          const maxOrder = state.itemModifiers
+            .filter((im) => im.itemId === itemId)
+            .reduce((m, im) => Math.max(m, im.sortOrder), -1);
+          let order = maxOrder;
+          for (const cm of catMods) {
+            if (!existingMods.has(cm.modifierId)) {
+              order += 1;
+              newLinks.push({ itemId, modifierId: cm.modifierId, sortOrder: order });
+            }
+          }
+        }
+        if (newLinks.length === 0) return {};
+        return { itemModifiers: [...state.itemModifiers, ...newLinks] };
+      }),
+      applyCategoryModifiersToAllItems: (categoryId) => set((state) => {
+        const catMods = state.categoryModifiers.filter((cm) => cm.categoryId === categoryId);
+        if (catMods.length === 0) return {};
+        const itemIdsInCategory = state.categoryItems
+          .filter((ci) => ci.categoryId === categoryId)
+          .map((ci) => ci.itemId);
+        const newLinks: typeof state.itemModifiers = [];
+        const updatedItems = state.items.map((item) => {
+          if (itemIdsInCategory.includes(item.id)) {
+            return { ...item, inheritModifiersFromCategory: true };
+          }
+          return item;
+        });
+        for (const itemId of itemIdsInCategory) {
+          const existingMods = new Set(
+            state.itemModifiers.filter((im) => im.itemId === itemId).map((im) => im.modifierId)
+          );
+          const maxOrder = state.itemModifiers
+            .filter((im) => im.itemId === itemId)
+            .reduce((m, im) => Math.max(m, im.sortOrder), -1);
+          let order = maxOrder;
+          for (const cm of catMods) {
+            if (!existingMods.has(cm.modifierId)) {
+              order += 1;
+              newLinks.push({ itemId, modifierId: cm.modifierId, sortOrder: order });
+            }
+          }
+        }
+        return {
+          items: updatedItems,
+          itemModifiers: [...state.itemModifiers, ...newLinks],
+        };
+      }),
+
+      // Modifier Group CRUD
+      addModifierGroup: (group) => set((state) => ({
+        modifierGroups: [...state.modifierGroups, group],
+      })),
+      updateModifierGroup: (id, updates) => set((state) => ({
+        modifierGroups: state.modifierGroups.map((mg) => (mg.id === id ? { ...mg, ...updates } : mg)),
+      })),
+      deleteModifierGroup: (id) => set((state) => ({
+        modifierGroups: state.modifierGroups.filter((mg) => mg.id !== id),
+        categoryModifierGroups: state.categoryModifierGroups.filter((cmg) => cmg.modifierGroupId !== id),
+      })),
+
+      // Category Modifier Group Actions
+      addCategoryModifierGroup: (categoryId, groupId) => set((state) => {
+        const exists = state.categoryModifierGroups.some(
+          (cmg) => cmg.categoryId === categoryId && cmg.modifierGroupId === groupId
+        );
+        if (exists) return {};
+        const maxOrder = state.categoryModifierGroups
+          .filter((cmg) => cmg.categoryId === categoryId)
+          .reduce((m, cmg) => Math.max(m, cmg.sortOrder), -1);
+        return {
+          categoryModifierGroups: [
+            ...state.categoryModifierGroups,
+            { categoryId, modifierGroupId: groupId, sortOrder: maxOrder + 1 },
+          ],
+        };
+      }),
+      removeCategoryModifierGroup: (categoryId, groupId) => set((state) => ({
+        categoryModifierGroups: state.categoryModifierGroups.filter(
+          (cmg) => !(cmg.categoryId === categoryId && cmg.modifierGroupId === groupId)
+        ),
+      })),
+
       // Allergen Actions
       addAllergen: (allergen) => set((state) => ({ allergens: [...state.allergens, allergen] })),
       updateAllergen: (id, updates) => set((state) => ({

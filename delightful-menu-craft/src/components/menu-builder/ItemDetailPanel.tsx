@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -88,9 +88,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const {
     updateItem,
     modifiers,
+    modifierGroups,
     modifierOptions,
     modifierModifierOptions,
     itemModifiers,
+    categoryModifiers,
+    categoryItems,
     addItemModifier,
     removeItemModifier,
     tags,
@@ -103,6 +106,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     getNextId,
     setIsCreatingModifier,
     stations,
+    reorderModifierOptions,
+    reorderItemModifiers,
   } = useMenuStore();
 
   // Get nested child modifiers for a given modifier
@@ -196,6 +201,13 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [showAllergenInput, setShowAllergenInput] = useState(false);
   const [pendingDeleteAllergenId, setPendingDeleteAllergenId] = useState<number | null>(null);
   const [newStationName, setNewStationName] = useState('');
+  const [optionDragState, setOptionDragState] = useState<{ modifierId: number; index: number } | null>(null);
+  const [optionDragOverState, setOptionDragOverState] = useState<{ modifierId: number; index: number } | null>(null);
+  const [modDragId, setModDragId] = useState<number | null>(null);
+  const [modDragOverId, setModDragOverId] = useState<number | null>(null);
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [groupPickerSearch, setGroupPickerSearch] = useState('');
+  const groupPickerRef = useRef<HTMLDivElement>(null);
 
   // Reset draft state when item changes
   useEffect(() => {
@@ -241,6 +253,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   useEffect(() => {
     setItemNameDrivesPosKds(namesInitiallyLinked(item));
   }, [item.id, item.itemName, item.posDisplayName, item.kdsName]);
+
+  useEffect(() => {
+    if (!groupPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (groupPickerRef.current && !groupPickerRef.current.contains(e.target as Node)) {
+        setGroupPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [groupPickerOpen]);
 
   const originalStationIds = useMemo(
     () =>
@@ -402,6 +425,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     return modifiers.filter(m => !allAttachedModifierIds.includes(m.id));
   }, [modifiers, allAttachedModifierIds]);
 
+  const inheritedCategoryModifiers = useMemo(() => {
+    if (!item.inheritModifiersFromCategory) return [];
+    const catEntry = categoryItems.find((ci) => ci.itemId === item.id);
+    if (!catEntry) return [];
+    return categoryModifiers
+      .filter((cm) => cm.categoryId === catEntry.categoryId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((cm) => modifiers.find((m) => m.id === cm.modifierId))
+      .filter((m): m is NonNullable<typeof m> => m !== undefined);
+  }, [item.id, item.inheritModifiersFromCategory, categoryItems, categoryModifiers, modifiers]);
+
   // Get options for a modifier
   const getModifierOptions = (modifierId: number) => {
     const optionAssignments = modifierModifierOptions
@@ -427,6 +461,18 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     }
   };
 
+  const handleApplyGroup = (groupId: number) => {
+    const group = modifierGroups.find((g) => g.id === groupId);
+    if (!group?.modifierIds) return;
+    const idsToAdd = group.modifierIds
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((id) => !isNaN(id) && id > 0 && !allAttachedModifierIds.includes(id));
+    setPendingModifierIds((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
+    setGroupPickerOpen(false);
+    setGroupPickerSearch('');
+  };
+
   const handleRemoveModifier = (modifierId: number) => {
     // If it's a pending addition, just remove from pending
     if (pendingModifierIds.includes(modifierId)) {
@@ -435,6 +481,63 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       // If it's already saved, add to pending removals
       setPendingRemovedModifierIds([...pendingRemovedModifierIds, modifierId]);
     }
+  };
+
+  const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
+    setOptionDragState({ modifierId, index });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleOptionDragOver = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
+    if (!optionDragState || optionDragState.modifierId !== modifierId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (optionDragOverState?.index !== index || optionDragOverState?.modifierId !== modifierId) {
+      setOptionDragOverState({ modifierId, index });
+    }
+  };
+
+  const handleOptionDrop = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
+    e.preventDefault();
+    if (!optionDragState || optionDragState.modifierId !== modifierId) return;
+    const from = optionDragState.index;
+    const to = index;
+    setOptionDragState(null);
+    setOptionDragOverState(null);
+    if (from !== to) reorderModifierOptions(modifierId, from, to);
+  };
+
+  const handleOptionDragEnd = () => {
+    setOptionDragState(null);
+    setOptionDragOverState(null);
+  };
+
+  const handleModifierDragStart = (e: React.DragEvent<HTMLDivElement>, modifierId: number) => {
+    setModDragId(modifierId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(modifierId));
+  };
+
+  const handleModifierDragOver = (e: React.DragEvent<HTMLDivElement>, modifierId: number) => {
+    if (modDragId === null || modDragId === modifierId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (modDragOverId !== modifierId) setModDragOverId(modifierId);
+  };
+
+  const handleModifierDrop = (e: React.DragEvent<HTMLDivElement>, modifierId: number) => {
+    e.preventDefault();
+    if (modDragId === null || modDragId === modifierId) return;
+    const from = modDragId;
+    setModDragId(null);
+    setModDragOverId(null);
+    reorderItemModifiers(item.id, from, modifierId);
+  };
+
+  const handleModifierDragEnd = () => {
+    setModDragId(null);
+    setModDragOverId(null);
   };
 
   // Parse tag IDs — exclude 0 and negative (Excel blank cells parse to 0)
@@ -868,6 +971,54 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             <AccordionContent>
               <div className="space-y-2">
                 <div className="flex items-center justify-end gap-2">
+                  {/* Apply modifier group picker */}
+                  {modifierGroups.length > 0 && (
+                    <div className="relative" ref={groupPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => { setGroupPickerOpen((o) => !o); setGroupPickerSearch(''); }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-muted/50 transition-colors"
+                        title="Apply modifier group"
+                      >
+                        <Layers className="w-3 h-3" />
+                        Group
+                      </button>
+                      {groupPickerOpen && (
+                        <div className="absolute z-20 right-0 top-full mt-1 w-52 rounded-md border border-border bg-background shadow-md">
+                          <div className="p-1.5 border-b border-border">
+                            <input
+                              type="text"
+                              value={groupPickerSearch}
+                              onChange={(e) => setGroupPickerSearch(e.target.value)}
+                              placeholder="Search groups…"
+                              className="input-field h-7 text-xs w-full"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {modifierGroups
+                              .filter((g) => !groupPickerSearch || g.groupName.toLowerCase().includes(groupPickerSearch.toLowerCase()))
+                              .map((g) => (
+                                <button
+                                  key={g.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                                  onClick={() => handleApplyGroup(g.id)}
+                                >
+                                  <span>{g.groupName}</span>
+                                  <span className="text-muted-foreground/60 text-[10px]">
+                                    {g.modifierIds ? g.modifierIds.split(',').filter(Boolean).length : 0} mods
+                                  </span>
+                                </button>
+                              ))}
+                            {modifierGroups.filter((g) => !groupPickerSearch || g.groupName.toLowerCase().includes(groupPickerSearch.toLowerCase())).length === 0 && (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {availableModifiers.length > 0 && (
                     <Select onValueChange={handleAddModifier}>
                       <SelectTrigger className="w-32">
@@ -907,16 +1058,40 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   />
                 </div>
 
+                {inheritedCategoryModifiers.length > 0 && (
+                  <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/70">
+                      Inherited from category
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {inheritedCategoryModifiers.map((m) => m.modifierName).join('  ·  ')}
+                    </p>
+                  </div>
+                )}
+
                 {attachedModifiers.length > 0 ? (
                   <Accordion type="multiple" className="space-y-1">
               {attachedModifiers.map((modifier) => {
                 const options = getModifierOptions(modifier.id);
                 const isPending = pendingModifierIds.includes(modifier.id);
                 const isPendingRemoval = pendingRemovedModifierIds.includes(modifier.id);
+                const isDraggable = !isPending && !isPendingRemoval;
                 return (
-                  <AccordionItem 
-                    key={modifier.id} 
-                    value={modifier.id.toString()} 
+                  <div
+                    key={modifier.id}
+                    draggable={isDraggable}
+                    onDragStart={isDraggable ? (e) => handleModifierDragStart(e, modifier.id) : undefined}
+                    onDragOver={isDraggable ? (e) => handleModifierDragOver(e, modifier.id) : undefined}
+                    onDrop={isDraggable ? (e) => handleModifierDrop(e, modifier.id) : undefined}
+                    onDragEnd={isDraggable ? handleModifierDragEnd : undefined}
+                    className={cn(
+                      "transition-opacity",
+                      modDragId === modifier.id && "opacity-40",
+                      modDragOverId === modifier.id && "ring-2 ring-primary ring-inset rounded-md",
+                    )}
+                  >
+                  <AccordionItem
+                    value={modifier.id.toString()}
                     className={cn(
                       "border rounded-md",
                       isPending && "border-green-500/50 bg-green-500/5",
@@ -926,6 +1101,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     <AccordionTrigger className="px-3 py-2 text-sm hover:no-underline">
                       <div className="flex items-center justify-between w-full pr-2">
                         <div className="flex items-center gap-2">
+                          {isDraggable && (
+                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0 cursor-grab active:cursor-grabbing" />
+                          )}
                           <span className="flex items-center gap-1.5">
                             {modifier.modifierName}
                             <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
@@ -963,9 +1141,23 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             <span className="bg-purple-500/10 text-purple-600 px-1.5 py-0.5 rounded font-medium">Size</span>
                           )}
                         </div>
-                        {options.map((opt) => (
-                          <div key={opt.modifierOptionId} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
+                        {options.map((opt, optIdx) => (
+                          <div
+                            key={opt.modifierOptionId}
+                            draggable
+                            onDragStart={(e) => handleOptionDragStart(e, modifier.id, optIdx)}
+                            onDragOver={(e) => handleOptionDragOver(e, modifier.id, optIdx)}
+                            onDrop={(e) => handleOptionDrop(e, modifier.id, optIdx)}
+                            onDragEnd={handleOptionDragEnd}
+                            className={cn(
+                              "flex items-center gap-2 text-sm rounded px-1 transition-opacity",
+                              optionDragState?.modifierId === modifier.id && optionDragState?.index === optIdx && "opacity-40",
+                              optionDragOverState?.modifierId === modifier.id && optionDragOverState?.index === optIdx &&
+                                optionDragState?.index !== optIdx && "ring-2 ring-primary ring-inset",
+                            )}
+                          >
+                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 cursor-grab active:cursor-grabbing shrink-0" />
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
                               <span>{opt.option?.optionName || opt.optionDisplayName}</span>
                               {opt.isDefaultSelected && (
                                 <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
@@ -973,7 +1165,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                 </span>
                               )}
                             </div>
-                            <span className="text-muted-foreground">
+                            <span className="text-muted-foreground shrink-0">
                               {opt.maxLimit > 0 ? `+$${opt.maxLimit.toFixed(2)}` : '$0.00'}
                             </span>
                           </div>
@@ -1052,6 +1244,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                       </div>
                     </AccordionContent>
                   </AccordionItem>
+                  </div>
                 );
               })}
             </Accordion>

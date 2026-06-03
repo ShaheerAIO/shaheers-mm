@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Check, X, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -61,11 +61,23 @@ export function CategoryDetailPanel({ category }: Props) {
   const {
     menus,
     tags,
+    items,
+    modifiers,
+    modifierGroups,
+    categoryModifiers,
+    categoryModifierGroups,
+    categoryItems,
     updateCategory,
     addTag,
     updateTag,
     deleteTag,
     getNextId,
+    addCategoryModifier,
+    removeCategoryModifier,
+    applyCategoryModifiersToOptInItems,
+    applyCategoryModifiersToAllItems,
+    addCategoryModifierGroup,
+    removeCategoryModifierGroup,
   } = useMenuStore();
 
   const validTags = tags.filter((t) => t.id > 0 && t.name.trim().length > 0);
@@ -95,6 +107,36 @@ export function CategoryDetailPanel({ category }: Props) {
   const [expandedDay, setExpandedDay] = useState<DayKey | null>(null);
   const [bulkStart, setBulkStart] = useState('');
   const [bulkEnd, setBulkEnd] = useState('');
+  const [modifierDropdownOpen, setModifierDropdownOpen] = useState(false);
+  const [modifierSearch, setModifierSearch] = useState('');
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [applyFeedback, setApplyFeedback] = useState<string | null>(null);
+  const applyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modifierDropdownRef = useRef<HTMLDivElement>(null);
+  const groupDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!groupDropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (groupDropdownRef.current && !groupDropdownRef.current.contains(e.target as Node)) {
+        setGroupDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [groupDropdownOpen]);
+
+  useEffect(() => {
+    if (!modifierDropdownOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (modifierDropdownRef.current && !modifierDropdownRef.current.contains(e.target as Node)) {
+        setModifierDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [modifierDropdownOpen]);
 
   useEffect(() => {
     setDraft({
@@ -119,6 +161,11 @@ export function CategoryDetailPanel({ category }: Props) {
     setExpandedDay(null);
     setBulkStart('');
     setBulkEnd('');
+    setModifierDropdownOpen(false);
+    setModifierSearch('');
+    setGroupDropdownOpen(false);
+    setGroupSearch('');
+    setApplyFeedback(null);
   }, [category.id]);
 
   const isDirty =
@@ -175,6 +222,38 @@ export function CategoryDetailPanel({ category }: Props) {
     setTagIds((prev) => new Set([...prev, id]));
     setNewTagName('');
     setShowTagInput(false);
+  };
+
+  const assignedCatMods = categoryModifiers
+    .filter((cm) => cm.categoryId === category.id)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const assignedModifierIds = new Set(assignedCatMods.map((cm) => cm.modifierId));
+
+  const availableModifiers = modifiers.filter(
+    (m) => !assignedModifierIds.has(m.id) &&
+      (!modifierSearch || m.modifierName.toLowerCase().includes(modifierSearch.toLowerCase()))
+  );
+
+  const itemsInCategory = categoryItems.filter((ci) => ci.categoryId === category.id);
+  const optInCount = itemsInCategory.filter((ci) => {
+    const item = items.find((it) => it.id === ci.itemId);
+    return item?.inheritModifiersFromCategory === true;
+  }).length;
+
+  const assignedCatGroups = categoryModifierGroups
+    .filter((cmg) => cmg.categoryId === category.id)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const assignedGroupIds = new Set(assignedCatGroups.map((cmg) => cmg.modifierGroupId));
+  const availableGroups = modifierGroups.filter(
+    (g) => !assignedGroupIds.has(g.id) &&
+      (!groupSearch || g.groupName.toLowerCase().includes(groupSearch.toLowerCase())),
+  );
+
+  const showApplyFeedback = (msg: string) => {
+    if (applyFeedbackTimer.current) clearTimeout(applyFeedbackTimer.current);
+    setApplyFeedback(msg);
+    applyFeedbackTimer.current = setTimeout(() => setApplyFeedback(null), 2500);
   };
 
   return (
@@ -482,6 +561,232 @@ export function CategoryDetailPanel({ category }: Props) {
               ) : (
                 <button type="button" onClick={() => setShowTagInput(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                   <Plus className="w-3 h-3" /> New tag
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Category Modifiers */}
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Modifiers ({assignedCatMods.length})
+            </p>
+            <div className="space-y-2">
+              {/* Assigned modifier chips */}
+              {assignedCatMods.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedCatMods.map((cm) => {
+                    const mod = modifiers.find((m) => m.id === cm.modifierId);
+                    if (!mod) return null;
+                    return (
+                      <span
+                        key={cm.modifierId}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted border-border text-foreground"
+                      >
+                        {mod.modifierName}
+                        <button
+                          type="button"
+                          onClick={() => removeCategoryModifier(category.id, cm.modifierId)}
+                          className="text-muted-foreground hover:text-destructive ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add modifier dropdown */}
+              <div className="relative" ref={modifierDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => { setModifierDropdownOpen((o) => !o); setModifierSearch(''); }}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                    modifierDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50'
+                  )}
+                >
+                  <span className="text-muted-foreground">Add modifier…</span>
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', modifierDropdownOpen && 'rotate-90')} />
+                </button>
+                {modifierDropdownOpen && (
+                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                    <div className="p-1.5 border-b border-border">
+                      <input
+                        type="text"
+                        value={modifierSearch}
+                        onChange={(e) => setModifierSearch(e.target.value)}
+                        placeholder="Search modifiers…"
+                        className="input-field h-7 text-xs w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {availableModifiers.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">
+                          {modifierSearch ? 'No matches' : 'All modifiers assigned'}
+                        </p>
+                      ) : (
+                        availableModifiers.map((mod) => (
+                          <button
+                            key={mod.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                            onClick={() => {
+                              addCategoryModifier(category.id, mod.id);
+                              setModifierDropdownOpen(false);
+                              setModifierSearch('');
+                            }}
+                          >
+                            <span>{mod.modifierName}</span>
+                            <span className="text-muted-foreground/60">#{mod.id}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk apply buttons */}
+              {assignedCatMods.length > 0 && (
+                <div className="space-y-1.5 pt-0.5">
+                  {applyFeedback && (
+                    <p className="text-[10px] text-green-600 dark:text-green-400 font-medium">{applyFeedback}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyCategoryModifiersToOptInItems(category.id);
+                      showApplyFeedback(`Applied to ${optInCount} opted-in item${optInCount !== 1 ? 's' : ''}`);
+                    }}
+                    disabled={optInCount === 0}
+                    className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Apply to opted-in items
+                    <span className="text-muted-foreground ml-1">({optInCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyCategoryModifiersToAllItems(category.id);
+                      showApplyFeedback(`Applied to all ${itemsInCategory.length} item${itemsInCategory.length !== 1 ? 's' : ''}`);
+                    }}
+                    disabled={itemsInCategory.length === 0}
+                    className="w-full px-3 py-1.5 rounded-md border border-primary/30 text-xs text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Force apply to all items
+                    <span className="text-muted-foreground ml-1 text-[10px]">— sets inherit flag on all</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Category Modifier Groups */}
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Modifier Groups ({assignedCatGroups.length})
+            </p>
+            <div className="space-y-2">
+              {/* Assigned group chips */}
+              {assignedCatGroups.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedCatGroups.map((cmg) => {
+                    const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
+                    if (!grp) return null;
+                    return (
+                      <span
+                        key={cmg.modifierGroupId}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-primary/5 border-primary/20 text-foreground"
+                      >
+                        {grp.groupName}
+                        <button
+                          type="button"
+                          onClick={() => removeCategoryModifierGroup(category.id, cmg.modifierGroupId)}
+                          className="text-muted-foreground hover:text-destructive ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add group dropdown */}
+              <div className="relative" ref={groupDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => { setGroupDropdownOpen((o) => !o); setGroupSearch(''); }}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                    groupDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
+                  )}
+                >
+                  <span className="text-muted-foreground">Add modifier group…</span>
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', groupDropdownOpen && 'rotate-90')} />
+                </button>
+                {groupDropdownOpen && (
+                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                    <div className="p-1.5 border-b border-border">
+                      <input
+                        type="text"
+                        value={groupSearch}
+                        onChange={(e) => setGroupSearch(e.target.value)}
+                        placeholder="Search groups…"
+                        className="input-field h-7 text-xs w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {availableGroups.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">
+                          {groupSearch ? 'No matches' : modifierGroups.length === 0 ? 'No groups yet — create them in the Modifier Library' : 'All groups assigned'}
+                        </p>
+                      ) : (
+                        availableGroups.map((grp) => (
+                          <button
+                            key={grp.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                            onClick={() => {
+                              addCategoryModifierGroup(category.id, grp.id);
+                              setGroupDropdownOpen(false);
+                              setGroupSearch('');
+                            }}
+                          >
+                            <span>{grp.groupName}</span>
+                            <span className="text-muted-foreground/60 text-[10px]">
+                              {grp.modifierIds ? grp.modifierIds.split(',').filter(Boolean).length : 0} mods
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Expand group modifiers into category */}
+              {assignedCatGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    assignedCatGroups.forEach((cmg) => {
+                      const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
+                      if (!grp?.modifierIds) return;
+                      grp.modifierIds.split(',').forEach((idStr) => {
+                        const modId = parseInt(idStr.trim(), 10);
+                        if (!isNaN(modId) && modId > 0) addCategoryModifier(category.id, modId);
+                      });
+                    });
+                    showApplyFeedback('Group modifiers added to category');
+                  }}
+                  className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                >
+                  Expand groups → add to category modifiers
                 </button>
               )}
             </div>

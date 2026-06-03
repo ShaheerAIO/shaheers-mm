@@ -200,8 +200,8 @@ const parseCategoryModifierGroups = (sheet: XLSX.WorkSheet): CategoryModifierGro
 const parseCategoryModifiers = (sheet: XLSX.WorkSheet): CategoryModifier[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
   return data.map((row) => ({
-    modifierGroupId: parseNumber(row['modifierGroupId']),
-    itemId: parseNumber(row['itemId']),
+    modifierId: parseNumber(row['modifierId'] ?? row['modifierGroupId']),
+    categoryId: parseNumber(row['categoryId'] ?? row['itemId']),
     sortOrder: parseNumber(row['sortOrder']),
   }));
 };

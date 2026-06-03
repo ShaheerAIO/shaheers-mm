@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import {
   Plus,
@@ -15,6 +15,9 @@ import {
   ChevronDown,
   List,
   MoreVertical,
+  ArrowUpDown,
+  Layers,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
@@ -28,7 +31,7 @@ import {
 } from '@/lib/visibility';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import type { Modifier, ModifierOption } from '@/types/menu';
+import type { Modifier, ModifierGroup, ModifierOption } from '@/types/menu';
 import {
   Select,
   SelectContent,
@@ -107,30 +110,77 @@ export function ModifierLibraryContent() {
     modifiers,
     modifierOptions,
     modifierModifierOptions,
+    modifierGroups,
     selectedModifierId,
     setSelectedModifier,
     addModifier,
     deleteModifier,
+    addModifierGroup,
+    updateModifierGroup,
+    deleteModifierGroup,
     isDataLoaded,
     getNextId,
   } = useMenuStore();
 
+  const [libView, setLibView] = useState<'modifiers' | 'groups'>('modifiers');
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [groupSearch, setGroupSearch] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
   const [modifierSearch, setModifierSearch] = useState('');
+  const [modifierSort, setModifierSort] = useState<'default' | 'name-asc' | 'name-desc' | 'options-desc' | 'options-asc'>('default');
   const [showOptionsLibrary, setShowOptionsLibrary] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
   const selectedModifier = modifiers.find(m => m.id === selectedModifierId);
+  const selectedGroup = modifierGroups.find(g => g.id === selectedGroupId);
   
-  // Filter modifiers by search query
+  // Filter and sort modifiers
   const filteredModifiers = useMemo(() => {
-    if (!modifierSearch.trim()) return modifiers;
-    const query = modifierSearch.toLowerCase();
-    return modifiers.filter(m =>
-      m.modifierName.toLowerCase().includes(query) ||
-      m.posDisplayName.toLowerCase().includes(query) ||
-      (m.prefix ?? '').toLowerCase().includes(query)
-    );
-  }, [modifiers, modifierSearch]);
+    let result = modifiers.filter(m => {
+      if (!modifierSearch.trim()) return true;
+      const query = modifierSearch.toLowerCase();
+      return (
+        m.modifierName.toLowerCase().includes(query) ||
+        m.posDisplayName.toLowerCase().includes(query) ||
+        (m.prefix ?? '').toLowerCase().includes(query)
+      );
+    });
+
+    if (modifierSort === 'name-asc') {
+      result = [...result].sort((a, b) => a.modifierName.localeCompare(b.modifierName));
+    } else if (modifierSort === 'name-desc') {
+      result = [...result].sort((a, b) => b.modifierName.localeCompare(a.modifierName));
+    } else if (modifierSort === 'options-desc' || modifierSort === 'options-asc') {
+      const count = (m: Modifier) => modifierModifierOptions.filter(mmo => mmo.modifierId === m.id).length;
+      result = [...result].sort((a, b) =>
+        modifierSort === 'options-desc' ? count(b) - count(a) : count(a) - count(b)
+      );
+    }
+
+    return result;
+  }, [modifiers, modifierSearch, modifierSort, modifierModifierOptions]);
+
+  const handleAddGroup = () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    const newGroup: ModifierGroup = {
+      id: getNextId('modifierGroups'),
+      groupName: name,
+      posDisplayName: name,
+      onPrem: true,
+      offPrem: true,
+      modifierIds: '',
+      modifierName: '',
+    };
+    addModifierGroup(newGroup);
+    setSelectedGroupId(newGroup.id);
+    setNewGroupName('');
+  };
+
+  const filteredGroups = modifierGroups.filter((g) => {
+    if (!groupSearch.trim()) return true;
+    return g.groupName.toLowerCase().includes(groupSearch.toLowerCase());
+  });
 
   const handleAddModifier = () => {
     const newModifier: Modifier = {
@@ -178,8 +228,40 @@ export function ModifierLibraryContent() {
   return (
     <>
       <div className="flex h-full">
-        {/* Modifier List */}
+        {/* Modifier / Groups List */}
         <div className="w-[280px] shrink-0 border-r border-panel-border bg-panel-bg flex flex-col">
+          {/* View toggle */}
+          <div className="flex border-b border-panel-border">
+            <button
+              type="button"
+              onClick={() => setLibView('modifiers')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
+                libView === 'modifiers'
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <List className="w-3.5 h-3.5" />
+              Modifiers
+            </button>
+            <button
+              type="button"
+              onClick={() => setLibView('groups')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
+                libView === 'groups'
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              Groups
+            </button>
+          </div>
+
+          {libView === 'modifiers' ? (
+            <>
           <div className="p-4 border-b border-panel-border">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Modifiers</h2>
@@ -219,7 +301,24 @@ export function ModifierLibraryContent() {
               )}
             </div>
           </div>
-          
+
+          {/* Sort */}
+          <div className="px-3 py-1.5 border-b border-panel-border flex items-center gap-2">
+            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Select value={modifierSort} onValueChange={(v) => setModifierSort(v as typeof modifierSort)}>
+              <SelectTrigger className="h-7 text-xs flex-1 border-0 bg-transparent shadow-none focus:ring-0 px-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default order</SelectItem>
+                <SelectItem value="name-asc">Name A → Z</SelectItem>
+                <SelectItem value="name-desc">Name Z → A</SelectItem>
+                <SelectItem value="options-desc">Most options first</SelectItem>
+                <SelectItem value="options-asc">Fewest options first</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex-1 overflow-y-auto scrollbar-thin">
             {filteredModifiers.length === 0 && modifierSearch ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
@@ -300,15 +399,136 @@ export function ModifierLibraryContent() {
               );
             })}
           </div>
+            </>
+          ) : (
+            /* ---- Groups List ---- */
+            <>
+              {/* Create new group */}
+              <div className="p-3 border-b border-panel-border">
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddGroup(); }}
+                    placeholder="New group name…"
+                    className="flex-1 input-field h-7 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddGroup}
+                    disabled={!newGroupName.trim()}
+                    className="btn-add disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
+                </div>
+              </div>
+              {/* Group search */}
+              <div className="px-3 py-2 border-b border-panel-border">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search groups…"
+                    value={groupSearch}
+                    onChange={(e) => setGroupSearch(e.target.value)}
+                    className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  {groupSearch && (
+                    <button
+                      onClick={() => setGroupSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Groups list */}
+              <div className="flex-1 overflow-y-auto scrollbar-thin">
+                {filteredGroups.length === 0 && (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    {modifierGroups.length === 0 ? 'No groups yet. Create one above.' : 'No matches.'}
+                  </div>
+                )}
+                {filteredGroups.map((group) => {
+                  const modCount = group.modifierIds
+                    ? group.modifierIds.split(',').filter((s) => s.trim()).length
+                    : 0;
+                  return (
+                    <div
+                      key={group.id}
+                      className={cn(
+                        'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors hover:bg-item-hover cursor-pointer',
+                        selectedGroupId === group.id && 'bg-item-selected border-l-2 border-l-primary',
+                      )}
+                      onClick={() => setSelectedGroupId(group.id)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{group.groupName}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{modCount} modifier{modCount !== 1 ? 's' : ''}</div>
+                      </div>
+                      <button
+                        type="button"
+                        title="Delete group"
+                        className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmState({
+                            title: 'Delete group?',
+                            description: `"${group.groupName}" will be permanently removed.`,
+                            confirmLabel: 'Delete',
+                            destructive: true,
+                            onConfirm: () => {
+                              deleteModifierGroup(group.id);
+                              if (selectedGroupId === group.id) setSelectedGroupId(null);
+                            },
+                          });
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Modifier Detail */}
+        {/* Detail Panel */}
         <div className="flex-1 bg-background min-h-0 h-full">
-          {selectedModifier ? (
-            <ModifierDetail modifier={selectedModifier} />
+          {libView === 'modifiers' ? (
+            selectedModifier ? (
+              <ModifierDetail modifier={selectedModifier} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                Select a modifier to edit
+              </div>
+            )
+          ) : selectedGroup ? (
+            <ModifierGroupDetail
+              group={selectedGroup}
+              modifiers={modifiers}
+              updateModifierGroup={updateModifierGroup}
+              onDelete={() =>
+                setConfirmState({
+                  title: 'Delete group?',
+                  description: `"${selectedGroup.groupName}" will be permanently removed.`,
+                  confirmLabel: 'Delete',
+                  destructive: true,
+                  onConfirm: () => {
+                    deleteModifierGroup(selectedGroup.id);
+                    setSelectedGroupId(null);
+                  },
+                })
+              }
+            />
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              Select a modifier to edit
+              Select a group to edit
             </div>
           )}
         </div>
@@ -370,6 +590,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     addModifierModifierOption,
     updateModifierModifierOption,
     removeModifierModifierOption,
+    reorderModifierOptions,
     getNextId,
   } = useMenuStore();
   
@@ -382,6 +603,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   /** Which nested child modifier rows are expanded to show their options */
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   /** While true, editing the library name also updates POS. Cleared after editing POS or Prefix. */
   const [modifierNameDrivesPos, setModifierNameDrivesPos] = useState(() =>
     modifierNamesInitiallyLinked(modifier),
@@ -434,6 +657,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setOptionSearch('');
     setExpandedNestedChildIds([]);
     setBulkCreateText('');
+    setDragIndex(null);
+    setDragOverIndex(null);
   }, [modifier.id]);
 
   useEffect(() => {
@@ -736,6 +961,37 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       destructive: true,
       onConfirm: () => { deleteModifier(modifier.id); setSelectedModifier(null); },
     });
+  };
+
+  const isDragDisabled = optionSearch.trim().length > 0;
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (isDragDisabled) { e.preventDefault(); return; }
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (isDragDisabled || dragIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (index !== dragOverIndex) setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (isDragDisabled || dragIndex === null) return;
+    const from = dragIndex;
+    const to = index;
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (from !== to) reorderModifierOptions(modifier.id, from, to);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   /** Options for any modifier id (join table first, then parentModifierId fallback) */
@@ -1202,12 +1458,28 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                   No options match "{optionSearch}"
                 </p>
               ) : null}
-              {filteredOptionAssignments.map((assignment) => (
+              {filteredOptionAssignments.map((assignment, index) => (
                 <div
                   key={assignment.modifierOptionId}
-                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
+                  draggable={!isDragDisabled}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                    dragIndex === index && "opacity-40",
+                    dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
+                  )}
                 >
-                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
+                  <GripVertical
+                    className={cn(
+                      "w-4 h-4 text-muted-foreground",
+                      isDragDisabled
+                        ? "opacity-30 cursor-not-allowed"
+                        : "cursor-grab active:cursor-grabbing",
+                    )}
+                  />
                   <div className="flex-1 min-w-0 space-y-1">
                     <div>
                       <span className="text-sm font-medium">
@@ -1575,5 +1847,248 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modifier Group Detail Panel
+// ---------------------------------------------------------------------------
+interface ModifierGroupDetailProps {
+  group: ModifierGroup;
+  modifiers: Modifier[];
+  updateModifierGroup: (id: number, updates: Partial<ModifierGroup>) => void;
+  onDelete: () => void;
+}
+
+function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }: ModifierGroupDetailProps) {
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(group.groupName);
+  const [editingPosName, setEditingPosName] = useState(false);
+  const [draftPosName, setDraftPosName] = useState(group.posDisplayName);
+  const [modPickerOpen, setModPickerOpen] = useState(false);
+  const [modPickerSearch, setModPickerSearch] = useState('');
+  const modPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDraftName(group.groupName);
+    setDraftPosName(group.posDisplayName);
+    setEditingName(false);
+    setEditingPosName(false);
+  }, [group.id]);
+
+  useLayoutEffect(() => {
+    if (!modPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modPickerRef.current && !modPickerRef.current.contains(e.target as Node)) {
+        setModPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [modPickerOpen]);
+
+  const groupModifierIds = group.modifierIds
+    ? group.modifierIds.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
+    : [];
+  const groupModifiers = groupModifierIds
+    .map((id) => modifiers.find((m) => m.id === id))
+    .filter(Boolean) as Modifier[];
+
+  const availableModifiers = modifiers.filter(
+    (m) =>
+      !groupModifierIds.includes(m.id) &&
+      (!modPickerSearch || m.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())),
+  );
+
+  const addModifierToGroup = (modId: number) => {
+    const newIds = [...groupModifierIds, modId].join(',');
+    updateModifierGroup(group.id, { modifierIds: newIds });
+    setModPickerOpen(false);
+    setModPickerSearch('');
+  };
+
+  const removeModifierFromGroup = (modId: number) => {
+    const newIds = groupModifierIds.filter((id) => id !== modId).join(',');
+    updateModifierGroup(group.id, { modifierIds: newIds });
+  };
+
+  const saveName = () => {
+    const name = draftName.trim();
+    if (name) updateModifierGroup(group.id, { groupName: name });
+    setEditingName(false);
+  };
+
+  const savePosName = () => {
+    updateModifierGroup(group.id, { posDisplayName: draftPosName.trim() || group.groupName });
+    setEditingPosName(false);
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
+      {/* Header */}
+      <div className="p-4 border-b border-panel-border flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          {editingName ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') setEditingName(false);
+                }}
+                className="input-field text-sm font-semibold flex-1"
+              />
+              <button type="button" onClick={saveName} className="p-1 text-primary hover:text-primary/80">
+                <Save className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => setEditingName(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="group flex items-center gap-1.5 text-left w-full"
+              onClick={() => setEditingName(true)}
+            >
+              <span className="font-semibold text-sm truncate">{group.groupName}</span>
+              <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+            </button>
+          )}
+          <div className="text-[10px] text-muted-foreground mt-0.5">#{group.id}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Delete group"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* POS Display Name */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            POS Display Name
+          </p>
+          {editingPosName ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={draftPosName}
+                onChange={(e) => setDraftPosName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') savePosName();
+                  if (e.key === 'Escape') setEditingPosName(false);
+                }}
+                className="input-field text-sm flex-1"
+              />
+              <button type="button" onClick={savePosName} className="p-1 text-primary hover:text-primary/80">
+                <Save className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" onClick={() => setEditingPosName(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="group flex items-center gap-1.5 text-left w-full text-sm"
+              onClick={() => setEditingPosName(true)}
+            >
+              <span className="truncate">{group.posDisplayName || group.groupName}</span>
+              <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+            </button>
+          )}
+        </div>
+
+        {/* Modifiers in this group */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Modifiers ({groupModifiers.length})
+          </p>
+          {groupModifiers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {groupModifiers.map((mod) => (
+                <span
+                  key={mod.id}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted border-border text-foreground"
+                >
+                  {mod.modifierName}
+                  <button
+                    type="button"
+                    onClick={() => removeModifierFromGroup(mod.id)}
+                    className="text-muted-foreground hover:text-destructive ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Add modifier picker */}
+          <div className="relative" ref={modPickerRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setModPickerOpen((o) => !o);
+                setModPickerSearch('');
+              }}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                modPickerOpen
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border bg-muted/30 hover:bg-muted/50',
+              )}
+            >
+              <span className="text-muted-foreground">Add modifier…</span>
+              <ChevronRight
+                className={cn(
+                  'w-3.5 h-3.5 text-muted-foreground transition-transform',
+                  modPickerOpen && 'rotate-90',
+                )}
+              />
+            </button>
+            {modPickerOpen && (
+              <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                <div className="p-1.5 border-b border-border">
+                  <input
+                    type="text"
+                    value={modPickerSearch}
+                    onChange={(e) => setModPickerSearch(e.target.value)}
+                    placeholder="Search modifiers…"
+                    className="input-field h-7 text-xs w-full"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {availableModifiers.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
+                      {modPickerSearch ? 'No matches' : 'All modifiers assigned'}
+                    </p>
+                  ) : (
+                    availableModifiers.map((mod) => (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                        onClick={() => addModifierToGroup(mod.id)}
+                      >
+                        <span>{mod.modifierName}</span>
+                        <span className="text-muted-foreground/60">#{mod.id}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -35,7 +35,7 @@ const HEADERS = {
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
   CATEGORY_MODIFIER_GROUPS: ['modifierGroupId', 'categoryId', 'sortOrder'],
-  CATEGORY_MODIFIERS: ['modifierGroupId', 'itemId', 'sortOrder'],
+  CATEGORY_MODIFIERS: ['modifierId', 'categoryId', 'sortOrder'],
   CATEGORY_ITEMS: ['id', 'categoryId', 'itemId', 'sortOrder'],
   ITEM_MODIFIER_GROUP: ['modifierId', 'groupName', 'sortOrder'],
   MODIFIER_GROUP: ['id', 'groupName', 'posDisplayName', 'onPrem', 'offPrem', 'modifierIds', 'modifierName'],
