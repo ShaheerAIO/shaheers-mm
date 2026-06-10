@@ -14,12 +14,13 @@ import type { Item, Modifier, ModifierOption } from '@/types/menu';
 // ---------------------------------------------------------------------------
 
 export const VISIBILITY_CHANNELS = [
-  { key: 'visibilityPos',        label: 'POS',        group: 'On-Prem'  },
-  { key: 'visibilityKiosk',      label: 'Kiosk',      group: 'On-Prem'  },
-  { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem' },
-  { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem' },
-  { key: 'visibilityMobileApp',  label: 'Mobile App', group: 'Off-Prem' },
-  { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Off-Prem' },
+  { key: 'visibilityPos',        label: 'POS',        group: 'On-Prem',  token: 'Pos'       },
+  { key: 'visibilityKiosk',      label: 'Kiosk',      group: 'On-Prem',  token: 'Kiosk'     },
+  { key: 'visibilityMenuBoard',  label: 'Menu Board', group: 'On-Prem',  token: 'MenuBoard' },
+  { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem', token: 'QR'        },
+  { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem', token: 'Website'  },
+  { key: 'visibilityMobileApp',  label: 'Mobile App', group: 'Off-Prem', token: 'Mpos'     },
+  { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Off-Prem', token: 'Doordash' },
 ] as const;
 
 export type VisibilityChannelKey = typeof VISIBILITY_CHANNELS[number]['key'];
@@ -76,6 +77,7 @@ export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {
   return {
     visibilityPos:        true,
     visibilityKiosk:      true,
+    visibilityMenuBoard:  true,
     visibilityQr:         true,
     visibilityWebsite:    true,
     visibilityMobileApp:  true,
@@ -203,6 +205,8 @@ export function buildDaysSummary(map: DayScheduleMap): string {
 const PLATFORM_TO_KEY: Record<string, VisibilityChannelKey> = {
   pos: 'visibilityPos',
   kiosk: 'visibilityKiosk',
+  menuboard: 'visibilityMenuBoard',
+  mpos: 'visibilityMobileApp', // POS "Mpos" (mobile POS) ≈ our Mobile App
   qr: 'visibilityQr',
   qrcode: 'visibilityQr',
   website: 'visibilityWebsite',
@@ -210,9 +214,44 @@ const PLATFORM_TO_KEY: Record<string, VisibilityChannelKey> = {
   mobile: 'visibilityMobileApp',
   doordash: 'visibilityDoordash',
   doordash3p: 'visibilityDoordash',
-  // Legacy aliases
-  online: 'visibilityQr', // old "Online" maps to QR as the closest match
+  // Legacy / POS aliases
+  online: 'visibilityWebsite', // POS "Online" ordering ≈ Website
+  // POS-only channels with no app equivalent (nugget, catering)
+  // are intentionally not mapped and are ignored on import.
 };
+
+/** Channel keys belonging to a visibility group (derived from VISIBILITY_CHANNELS). */
+const groupChannelKeys = (group: VisibilityGroup): VisibilityChannelKey[] =>
+  VISIBILITY_CHANNELS.filter((c) => c.group === group).map((c) => c.key);
+
+/**
+ * Serialize the 6 boolean channel fields into the POS `visibility` JSON column.
+ * The POS accepts a JSON array of either group tokens (`["OnPrem","OffPrem"]`)
+ * or individual channel tokens (`["Kiosk","QR","Doordash"]`). Per group: when
+ * every channel in the group is on we collapse to the group token; when only
+ * some are on we list those channels individually; when none are on we emit
+ * nothing. Nothing enabled at all → "" (matching empty cells in real POS files).
+ */
+export function serializeVisibility(
+  channels: Partial<Record<VisibilityChannelKey, boolean>>,
+): string {
+  // A channel counts as on unless explicitly false (missing = visible, matching
+  // isVisibleOnChannel), so entities created without visibility fields default
+  // to fully visible.
+  const on = (k: VisibilityChannelKey) => channels[k] !== false;
+  const tokens: string[] = [];
+  for (const group of ['On-Prem', 'Off-Prem'] as VisibilityGroup[]) {
+    const keys = groupChannelKeys(group);
+    const onKeys = keys.filter(on);
+    if (onKeys.length === 0) continue;
+    if (onKeys.length === keys.length) {
+      tokens.push(group === 'On-Prem' ? 'OnPrem' : 'OffPrem');
+    } else {
+      for (const c of VISIBILITY_CHANNELS) if (c.group === group && on(c.key)) tokens.push(c.token);
+    }
+  }
+  return tokens.length ? JSON.stringify(tokens) : '';
+}
 
 const normalizePlatformName = (value: unknown): string =>
   String(value).trim().toLowerCase().replace(/[\s_-]+/g, '');
@@ -239,6 +278,7 @@ export function parseVisibilityFromRow(
         const result: Record<VisibilityChannelKey, boolean> = {
           visibilityPos:        false,
           visibilityKiosk:      false,
+          visibilityMenuBoard:  false,
           visibilityQr:         false,
           visibilityWebsite:    false,
           visibilityMobileApp:  false,
@@ -246,7 +286,17 @@ export function parseVisibilityFromRow(
         };
         let recognizedCount = 0;
         for (const platform of arr) {
-          const key = PLATFORM_TO_KEY[normalizePlatformName(platform)];
+          const norm = normalizePlatformName(platform);
+          // Group tokens expand to every channel in the group.
+          if (norm === 'onprem' || norm === 'offprem') {
+            const group: VisibilityGroup = norm === 'onprem' ? 'On-Prem' : 'Off-Prem';
+            for (const key of groupChannelKeys(group)) {
+              result[key] = true;
+              recognizedCount += 1;
+            }
+            continue;
+          }
+          const key = PLATFORM_TO_KEY[norm];
           if (key) {
             result[key] = true;
             recognizedCount += 1;
@@ -277,6 +327,7 @@ export function parseVisibilityFromRow(
   return {
     visibilityPos:        parseBool(row['visibilityPos']),
     visibilityKiosk:      parseBool(row['visibilityKiosk']),
+    visibilityMenuBoard:  parseBool(row['visibilityMenuBoard']),
     visibilityQr:         parseBool(row['visibilityQr'],        legacyOnline),
     visibilityWebsite:    parseBool(row['visibilityWebsite'],   legacyOnline),
     visibilityMobileApp:  parseBool(row['visibilityMobileApp'], legacyOnline),
@@ -356,6 +407,7 @@ export function parseVisibilityFromScraper(item: {
   visibilityWebsite?: boolean;
   visibilityMobileApp?: boolean;
   visibilityDoordash?: boolean;
+  visibilityMenuBoard?: boolean;
   // legacy names still accepted
   visibilityOnline?: boolean;
   visibilityThirdParty?: boolean;
@@ -365,6 +417,7 @@ export function parseVisibilityFromScraper(item: {
   return {
     visibilityPos:        item.visibilityPos        ?? true,
     visibilityKiosk:      item.visibilityKiosk      ?? true,
+    visibilityMenuBoard:  item.visibilityMenuBoard  ?? true,
     visibilityQr:         item.visibilityQr         ?? online,
     visibilityWebsite:    item.visibilityWebsite     ?? online,
     visibilityMobileApp:  item.visibilityMobileApp  ?? online,

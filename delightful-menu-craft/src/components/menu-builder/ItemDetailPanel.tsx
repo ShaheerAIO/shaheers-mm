@@ -45,7 +45,12 @@ interface DraftState {
   posDisplayName: string;
   kdsName: string;
   itemPrice: number;
+  doordashPrice: number;
+  uberEatsPrice: number;
+  grubHubPrice: number;
   itemDescription: string;
+  salesTax: boolean;
+  takeoutException: boolean;
   stockStatus: string;
   orderQuantityLimit: boolean;
   minLimit: number;
@@ -56,6 +61,7 @@ interface DraftState {
   calories: number;
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -108,6 +114,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     stations,
     reorderModifierOptions,
     reorderItemModifiers,
+    taxRate,
   } = useMenuStore();
 
   // Get nested child modifiers for a given modifier
@@ -158,7 +165,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     posDisplayName: item.posDisplayName,
     kdsName: item.kdsName ?? item.itemName,
     itemPrice: item.itemPrice,
+    doordashPrice: item.doordashPrice ?? 0,
+    uberEatsPrice: item.uberEatsPrice ?? 0,
+    grubHubPrice: item.grubHubPrice ?? 0,
     itemDescription: item.itemDescription,
+    salesTax: item.salesTax ?? true,
+    takeoutException: item.takeoutException ?? false,
     stockStatus: item.stockStatus,
     orderQuantityLimit: item.orderQuantityLimit ?? false,
     minLimit: item.minLimit ?? 0,
@@ -170,6 +182,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     ...defaultVisibility(),
     visibilityPos: item.visibilityPos ?? true,
     visibilityKiosk: item.visibilityKiosk ?? true,
+    visibilityMenuBoard: item.visibilityMenuBoard ?? true,
     visibilityQr: item.visibilityQr ?? true,
     visibilityWebsite: item.visibilityWebsite ?? true,
     visibilityMobileApp: item.visibilityMobileApp ?? true,
@@ -186,6 +199,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
+  // 3PO delivery price inputs — empty string means "unset" (0).
+  const fmt3po = (v: number | undefined) => (v ? v.toFixed(2) : '');
+  const [doordashInput, setDoordashInput] = useState(fmt3po(item.doordashPrice));
+  const [uberEatsInput, setUberEatsInput] = useState(fmt3po(item.uberEatsPrice));
+  const [grubHubInput, setGrubHubInput] = useState(fmt3po(item.grubHubPrice));
   const [pendingModifierIds, setPendingModifierIds] = useState<number[]>([]);
   const [pendingRemovedModifierIds, setPendingRemovedModifierIds] = useState<number[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
@@ -208,6 +226,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerSearch, setGroupPickerSearch] = useState('');
   const groupPickerRef = useRef<HTMLDivElement>(null);
+  const [namesExpanded, setNamesExpanded] = useState(false);
 
   // Reset draft state when item changes
   useEffect(() => {
@@ -216,7 +235,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: item.posDisplayName,
       kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
+      doordashPrice: item.doordashPrice ?? 0,
+      uberEatsPrice: item.uberEatsPrice ?? 0,
+      grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
+      salesTax: item.salesTax ?? true,
+      takeoutException: item.takeoutException ?? false,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
       minLimit: item.minLimit ?? 0,
@@ -228,6 +252,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
+      visibilityMenuBoard: item.visibilityMenuBoard ?? true,
       visibilityQr: item.visibilityQr ?? true,
       visibilityWebsite: item.visibilityWebsite ?? true,
       visibilityMobileApp: item.visibilityMobileApp ?? true,
@@ -238,6 +263,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setBulkStart('');
     setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
+    setDoordashInput(fmt3po(item.doordashPrice));
+    setUberEatsInput(fmt3po(item.uberEatsPrice));
+    setGrubHubInput(fmt3po(item.grubHubPrice));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setExpandedNestedChildIds([]);
@@ -247,6 +275,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         : []
     );
     setNewStationName('');
+    setNamesExpanded(false);
   }, [item.id]);
 
   // Keep "item name drives POS/KDS" in sync with saved data after save; reset when switching items
@@ -286,7 +315,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.posDisplayName !== item.posDisplayName ||
       draft.kdsName !== (item.kdsName ?? item.itemName) ||
       draft.itemPrice !== item.itemPrice ||
+      draft.doordashPrice !== (item.doordashPrice ?? 0) ||
+      draft.uberEatsPrice !== (item.uberEatsPrice ?? 0) ||
+      draft.grubHubPrice !== (item.grubHubPrice ?? 0) ||
       draft.itemDescription !== item.itemDescription ||
+      draft.salesTax !== (item.salesTax ?? true) ||
+      draft.takeoutException !== (item.takeoutException ?? false) ||
       draft.stockStatus !== item.stockStatus ||
       draft.orderQuantityLimit !== (item.orderQuantityLimit ?? false) ||
       draft.minLimit !== (item.minLimit ?? 0) ||
@@ -297,6 +331,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.calories !== item.calories ||
       draft.visibilityPos !== (item.visibilityPos ?? true) ||
       draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
+      draft.visibilityMenuBoard !== (item.visibilityMenuBoard ?? true) ||
       draft.visibilityQr !== (item.visibilityQr ?? true) ||
       draft.visibilityWebsite !== (item.visibilityWebsite ?? true) ||
       draft.visibilityMobileApp !== (item.visibilityMobileApp ?? true) ||
@@ -315,7 +350,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: draft.posDisplayName,
       kdsName: draft.kdsName,
       itemPrice: draft.itemPrice,
+      doordashPrice: draft.doordashPrice,
+      uberEatsPrice: draft.uberEatsPrice,
+      grubHubPrice: draft.grubHubPrice,
       itemDescription: draft.itemDescription,
+      salesTax: draft.salesTax,
+      takeoutException: draft.takeoutException,
       stockStatus: draft.stockStatus,
       orderQuantityLimit: draft.orderQuantityLimit,
       minLimit: draft.minLimit,
@@ -327,6 +367,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
+      visibilityMenuBoard: draft.visibilityMenuBoard,
       visibilityQr: draft.visibilityQr,
       visibilityWebsite: draft.visibilityWebsite,
       visibilityMobileApp: draft.visibilityMobileApp,
@@ -363,7 +404,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: item.posDisplayName,
       kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
+      doordashPrice: item.doordashPrice ?? 0,
+      uberEatsPrice: item.uberEatsPrice ?? 0,
+      grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
+      salesTax: item.salesTax ?? true,
+      takeoutException: item.takeoutException ?? false,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
       minLimit: item.minLimit ?? 0,
@@ -375,6 +421,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
+      visibilityMenuBoard: item.visibilityMenuBoard ?? true,
       visibilityQr: item.visibilityQr ?? true,
       visibilityWebsite: item.visibilityWebsite ?? true,
       visibilityMobileApp: item.visibilityMobileApp ?? true,
@@ -385,6 +432,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setBulkStart('');
     setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
+    setDoordashInput(fmt3po(item.doordashPrice));
+    setUberEatsInput(fmt3po(item.uberEatsPrice));
+    setGrubHubInput(fmt3po(item.grubHubPrice));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setStationDraft(originalStationIds);
@@ -397,6 +447,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     const price = parseFloat(value);
     if (!isNaN(price) && price >= 0) {
       setDraft(d => ({ ...d, itemPrice: price }));
+    }
+  };
+
+  const handle3poPriceChange = (
+    value: string,
+    setInput: (v: string) => void,
+    field: 'doordashPrice' | 'uberEatsPrice' | 'grubHubPrice',
+  ) => {
+    setInput(value);
+    const trimmed = value.trim();
+    const price = trimmed === '' ? 0 : parseFloat(trimmed);
+    if (!isNaN(price) && price >= 0) {
+      setDraft(d => ({ ...d, [field]: price }));
     }
   };
 
@@ -603,53 +666,81 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       )}
       
       <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
-        {/* Item name, POS, KDS — all visible; item name can drive the other two until you edit POS or KDS separately */}
+        {/* Item name + collapsible POS/KDS overrides */}
         <div className="space-y-1">
           <Label className="section-header">Names</Label>
           <div className="space-y-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">Item name</span>
-              <input
-                type="text"
-                value={draft.itemName}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setDraft((d) =>
-                    itemNameDrivesPosKds
-                      ? { ...d, itemName: v, posDisplayName: v, kdsName: v }
-                      : { ...d, itemName: v },
-                  );
-                }}
-                className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
-                placeholder="Item name"
-              />
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">POS</span>
-              <input
-                type="text"
-                value={draft.posDisplayName}
-                onChange={(e) => {
-                  setItemNameDrivesPosKds(false);
-                  setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
-                }}
-                className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                placeholder="POS display name"
-              />
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">KDS</span>
-              <input
-                type="text"
-                value={draft.kdsName}
-                onChange={(e) => {
-                  setItemNameDrivesPosKds(false);
-                  setDraft((d) => ({ ...d, kdsName: e.target.value }));
-                }}
-                className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                placeholder="KDS display name"
-              />
-            </div>
+            <input
+              type="text"
+              value={draft.itemName}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDraft((d) =>
+                  itemNameDrivesPosKds
+                    ? { ...d, itemName: v, posDisplayName: v, kdsName: v }
+                    : { ...d, itemName: v },
+                );
+              }}
+              className="input-field h-8 text-sm font-semibold w-full leading-tight py-1"
+              placeholder="Item name"
+            />
+
+            {/* POS / KDS toggle */}
+            <button
+              type="button"
+              onClick={() => setNamesExpanded((v) => !v)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors mt-0.5 pl-0.5"
+            >
+              {namesExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              POS &amp; KDS names
+              {!itemNameDrivesPosKds && (
+                <span className="ml-1 px-1 py-0.5 rounded bg-muted text-[9px] font-medium text-muted-foreground leading-none">custom</span>
+              )}
+            </button>
+
+            {namesExpanded && (
+              <div className="space-y-1 pl-2 border-l-2 border-border ml-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">POS</span>
+                  <input
+                    type="text"
+                    value={draft.posDisplayName}
+                    onChange={(e) => {
+                      setItemNameDrivesPosKds(false);
+                      setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                    }}
+                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                    placeholder="POS display name"
+                  />
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">KDS</span>
+                  <input
+                    type="text"
+                    value={draft.kdsName}
+                    onChange={(e) => {
+                      setItemNameDrivesPosKds(false);
+                      setDraft((d) => ({ ...d, kdsName: e.target.value }));
+                    }}
+                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                    placeholder="KDS display name"
+                  />
+                </div>
+                {!itemNameDrivesPosKds && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemNameDrivesPosKds(true);
+                      setDraft((d) => ({ ...d, posDisplayName: d.itemName, kdsName: d.itemName }));
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    Reset to item name
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -664,17 +755,96 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           />
         </div>
 
-        {/* Base Price */}
-        <div className="space-y-2">
-          <Label className="section-header">Price</Label>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">$</span>
-            <input
-              type="text"
-              value={priceInput}
-              onChange={(e) => handlePriceChange(e.target.value)}
-              className="input-field w-24"
-            />
+        {/* Price & tax info */}
+        <div className="space-y-3">
+          <Label className="section-header">Price &amp; tax info</Label>
+
+          {/* Base price + Total price row */}
+          <div className="flex items-start gap-4">
+            <div className="space-y-1 flex-1">
+              <Label className="text-xs text-muted-foreground">Base price*</Label>
+              <div className="flex items-center gap-2 input-field px-3 py-2">
+                <span className="text-muted-foreground">$</span>
+                <input
+                  type="text"
+                  value={priceInput}
+                  onChange={(e) => handlePriceChange(e.target.value)}
+                  className="bg-transparent outline-none w-full"
+                />
+              </div>
+            </div>
+            {draft.salesTax && (
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs text-muted-foreground">Total price</Label>
+                <div className="flex items-center gap-2 input-field px-3 py-2 bg-muted/30">
+                  <span className="text-muted-foreground">$</span>
+                  <span className="text-muted-foreground">
+                    {(draft.itemPrice * (1 + taxRate / 100)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tax section */}
+          <div className="space-y-2 pt-1">
+            <span className="text-sm font-medium">Tax</span>
+
+            {/* Sales Tax checkbox */}
+            <div className="flex items-center gap-2">
+              <input
+                id="salesTax"
+                type="checkbox"
+                checked={draft.salesTax}
+                onChange={(e) => setDraft(d => ({ ...d, salesTax: e.target.checked }))}
+                className="w-4 h-4 rounded accent-orange-500"
+              />
+              <Label htmlFor="salesTax" className="text-sm font-normal cursor-pointer">Sales Tax</Label>
+            </div>
+
+            {/* Takeout exception */}
+            {draft.salesTax && (
+              <div className="flex items-start justify-between gap-3 pt-1">
+                <div>
+                  <p className="text-sm">Take out exception</p>
+                  <p className="text-xs text-muted-foreground">This item is taxed except when it is ordered for takeout</p>
+                </div>
+                <Switch
+                  checked={draft.takeoutException}
+                  onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Third-party delivery (3PO) prices */}
+        <div className="space-y-3">
+          <Label className="section-header">Third-party delivery prices</Label>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Optional per-platform prices. Leave blank to use the base price.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
+              { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
+              { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
+            ]).map(({ label, value, setInput, field }) => (
+              <div key={field} className="space-y-1">
+                <Label className="text-xs text-muted-foreground">{label}</Label>
+                <div className="flex items-center gap-2 input-field px-3 py-2">
+                  <span className="text-muted-foreground">$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={value}
+                    onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
+                    className="bg-transparent outline-none w-full"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

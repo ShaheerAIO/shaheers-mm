@@ -7,6 +7,7 @@ import type { Item } from '@/types/menu';
 const CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
   { key: 'visibilityKiosk' as const, label: 'Kiosk' },
+  { key: 'visibilityMenuBoard' as const, label: 'MB' },
   { key: 'visibilityQr' as const, label: 'QR' },
   { key: 'visibilityWebsite' as const, label: 'Web' },
   { key: 'visibilityMobileApp' as const, label: 'App' },

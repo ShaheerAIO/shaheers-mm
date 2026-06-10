@@ -92,7 +92,8 @@ interface MenuState {
 
   // Derived / helper data (not part of Excel schema)
   stations: Station[]; // canonical station catalog
-  
+  taxRate: number; // restaurant-level tax rate (percentage, e.g. 10 = 10%)
+
   // Actions - UI
   setActiveTab: (tab: TabType) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -184,6 +185,8 @@ interface MenuState {
   unassignItemFromStation: (itemId: number, stationId: number) => void;
   bulkSetItemsForStation: (stationId: number, itemIds: number[]) => void;
 
+  setTaxRate: (rate: number) => void;
+
   // Actions - AI Enhancement
   applyAiPatches: (patches: AiPatch[], newStations: string[]) => void;
 
@@ -249,6 +252,7 @@ export const useMenuStore = create<MenuState>()(
       allergens: [],
       tags: [...SYSTEM_TAGS],
       stations: [],
+      taxRate: 10,
 
       // UI Actions
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -906,6 +910,8 @@ export const useMenuStore = create<MenuState>()(
         return { items, categories, stations };
       }),
 
+      setTaxRate: (rate) => set({ taxRate: rate }),
+
       bulkUpdateItems: (ids, transform) => set((state) => {
         const idSet = new Set(ids);
         return {
@@ -933,7 +939,7 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 10,
+      version: 13,
       migrate(persisted: unknown, fromVersion: number) {
         const state = persisted as Record<string, unknown>;
 
@@ -1146,6 +1152,47 @@ export const useMenuStore = create<MenuState>()(
               return { ...m, modType };
             });
           }
+        }
+
+        if (fromVersion < 11) {
+          // Backfill salesTax: true for all existing items
+          if (Array.isArray(state.items)) {
+            state.items = (state.items as Record<string, unknown>[]).map((item) =>
+              typeof item.salesTax === 'boolean' ? item : { ...item, salesTax: true },
+            );
+          }
+        }
+
+        if (fromVersion < 12) {
+          // Backfill 3PO delivery prices (0 = unset) on items and price (0) on modifier options
+          if (Array.isArray(state.items)) {
+            state.items = (state.items as Record<string, unknown>[]).map((item) => ({
+              doordashPrice: 0,
+              uberEatsPrice: 0,
+              grubHubPrice: 0,
+              ...item,
+            }));
+          }
+          if (Array.isArray(state.modifierOptions)) {
+            state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((o) => ({
+              price: 0,
+              ...o,
+            }));
+          }
+        }
+
+        if (fromVersion < 13) {
+          // Backfill the Menu Board channel (default visible) on every entity that carries visibility.
+          const addMenuBoard = (arr: unknown) =>
+            Array.isArray(arr)
+              ? (arr as Record<string, unknown>[]).map((e) =>
+                  typeof e.visibilityMenuBoard === 'boolean' ? e : { ...e, visibilityMenuBoard: true })
+              : arr;
+          state.menus = addMenuBoard(state.menus);
+          state.categories = addMenuBoard(state.categories);
+          state.items = addMenuBoard(state.items);
+          state.modifiers = addMenuBoard(state.modifiers);
+          state.modifierOptions = addMenuBoard(state.modifierOptions);
         }
 
         return persisted as MenuState;

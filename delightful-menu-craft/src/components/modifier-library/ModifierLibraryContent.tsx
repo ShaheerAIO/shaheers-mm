@@ -571,6 +571,7 @@ interface ModifierDraft {
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -626,6 +627,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     ...defaultVisibility(),
     visibilityPos: modifier.visibilityPos ?? true,
     visibilityKiosk: modifier.visibilityKiosk ?? true,
+    visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
     visibilityQr: modifier.visibilityQr ?? true,
     visibilityWebsite: modifier.visibilityWebsite ?? true,
     visibilityMobileApp: modifier.visibilityMobileApp ?? true,
@@ -649,6 +651,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       ...defaultVisibility(),
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
+      visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
       visibilityQr: modifier.visibilityQr ?? true,
       visibilityWebsite: modifier.visibilityWebsite ?? true,
       visibilityMobileApp: modifier.visibilityMobileApp ?? true,
@@ -750,6 +753,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         isSizeModifier: draft.isSizeModifier,
         visibilityPos: draft.visibilityPos,
         visibilityKiosk: draft.visibilityKiosk,
+        visibilityMenuBoard: draft.visibilityMenuBoard,
         visibilityQr: draft.visibilityQr,
         visibilityWebsite: draft.visibilityWebsite,
         visibilityMobileApp: draft.visibilityMobileApp,
@@ -775,6 +779,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       ...defaultVisibility(),
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
+      visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
       visibilityQr: modifier.visibilityQr ?? true,
       visibilityWebsite: modifier.visibilityWebsite ?? true,
       visibilityMobileApp: modifier.visibilityMobileApp ?? true,

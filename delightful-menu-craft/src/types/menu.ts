@@ -13,6 +13,7 @@ export interface Menu {
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -39,6 +40,7 @@ export interface Category {
   // Channel visibility (same model as Item)
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -63,6 +65,7 @@ export interface Item {
   itemPrice: number;
   taxLinkedWithParentSetting: boolean;
   calculatePricesWithTaxIncluded: boolean;
+  salesTax: boolean;
   takeoutException: boolean;
   stockStatus: string; // 'inStock', 'outOfStock', etc.
   stockValue: number;
@@ -80,9 +83,14 @@ export interface Item {
   inheritModifiersFromCategory: boolean;
   addonIds: string; // comma-separated IDs
   isSpecialRequest: boolean;
+  // Third-party (3PO) delivery prices — exported to POS as doordashPrice/uberEatsPrice/grubHubPrice
+  doordashPrice: number;
+  uberEatsPrice: number;
+  grubHubPrice: number;
   // Visibility channels
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;       // QR code ordering
   visibilityWebsite: boolean;  // Web ordering
   visibilityMobileApp: boolean;// First-party mobile app
@@ -166,6 +174,7 @@ export interface Modifier {
   // Channel visibility (same model as Item)
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -181,9 +190,13 @@ export interface ModifierOption {
   parentModifierId: number;
   isStockAvailable: boolean;
   isSizeModifier: boolean;
+  /** Option surcharge — POS keeps this on the option row (`price`); the app's UI
+   *  edits it via the join's `maxLimit`. Bridged on import/export. */
+  price?: number;
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
+  visibilityMenuBoard: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityMobileApp: boolean;
@@ -215,6 +228,14 @@ export interface Tag {
   icon?: string;     // lucide icon name, e.g. "Wine"
   color?: string;    // hex color, e.g. "#ef4444"
   isSystem?: boolean; // true = seeded by the app, cannot be deleted
+}
+
+// Sheet 15: Setting — per-entity status registry. Synthesized on export
+// (one Active row per menu/category/item) and ignored on import.
+export interface Setting {
+  id: number;
+  type: string;   // 'Menu' | 'Category' | 'Item'
+  status: string; // always 'Active'
 }
 
 // =============================================================================

@@ -96,6 +96,7 @@ export function TopBar() {
       sortOrder,
       visibilityPos: true,
       visibilityKiosk: true,
+      visibilityMenuBoard: true,
       visibilityQr: true,
       visibilityWebsite: true,
       visibilityMobileApp: true,

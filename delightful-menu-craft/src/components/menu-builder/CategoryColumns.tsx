@@ -92,6 +92,7 @@ export function CategoryColumns() {
       sortOrder: menuCategories.length,
       visibilityPos: true,
       visibilityKiosk: true,
+      visibilityMenuBoard: true,
       visibilityQr: true,
       visibilityWebsite: true,
       visibilityMobileApp: true,

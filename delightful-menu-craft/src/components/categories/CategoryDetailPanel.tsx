@@ -20,7 +20,7 @@ import {
 import type { Category } from '@/types/menu';
 
 type VisDraft = Pick<Category,
-  'visibilityPos' | 'visibilityKiosk' | 'visibilityQr' |
+  'visibilityPos' | 'visibilityKiosk' | 'visibilityMenuBoard' | 'visibilityQr' |
   'visibilityWebsite' | 'visibilityMobileApp' | 'visibilityDoordash'
 >;
 
@@ -89,6 +89,7 @@ export function CategoryDetailPanel({ category }: Props) {
     color: category.color || '#f97316',
     visibilityPos: category.visibilityPos ?? true,
     visibilityKiosk: category.visibilityKiosk ?? true,
+    visibilityMenuBoard: category.visibilityMenuBoard ?? true,
     visibilityQr: category.visibilityQr ?? true,
     visibilityWebsite: category.visibilityWebsite ?? true,
     visibilityMobileApp: category.visibilityMobileApp ?? true,
@@ -146,6 +147,7 @@ export function CategoryDetailPanel({ category }: Props) {
       color: category.color || '#f97316',
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
+      visibilityMenuBoard: category.visibilityMenuBoard ?? true,
       visibilityQr: category.visibilityQr ?? true,
       visibilityWebsite: category.visibilityWebsite ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
@@ -175,6 +177,7 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.color !== (category.color || '#f97316') ||
     draft.visibilityPos !== (category.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (category.visibilityKiosk ?? true) ||
+    draft.visibilityMenuBoard !== (category.visibilityMenuBoard ?? true) ||
     draft.visibilityQr !== (category.visibilityQr ?? true) ||
     draft.visibilityWebsite !== (category.visibilityWebsite ?? true) ||
     draft.visibilityMobileApp !== (category.visibilityMobileApp ?? true) ||
@@ -200,6 +203,7 @@ export function CategoryDetailPanel({ category }: Props) {
       color: category.color || '#f97316',
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
+      visibilityMenuBoard: category.visibilityMenuBoard ?? true,
       visibilityQr: category.visibilityQr ?? true,
       visibilityWebsite: category.visibilityWebsite ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
@@ -332,6 +336,7 @@ export function CategoryDetailPanel({ category }: Props) {
                 { id: 'onPrem' as const, label: 'On-Prem' as VisibilityGroup, channels: [
                   { key: 'visibilityPos' as VisibilityChannelKey, label: 'POS' },
                   { key: 'visibilityKiosk' as VisibilityChannelKey, label: 'Kiosk' },
+                  { key: 'visibilityMenuBoard' as VisibilityChannelKey, label: 'Menu Board' },
                 ]},
                 { id: 'offPrem' as const, label: 'Off-Prem' as VisibilityGroup, channels: [
                   { key: 'visibilityQr' as VisibilityChannelKey, label: 'QR Code' },

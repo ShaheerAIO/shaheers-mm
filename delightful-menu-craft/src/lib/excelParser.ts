@@ -75,6 +75,7 @@ const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
     sortOrder: parseNumber(row['sortOrder']),
     visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
     visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
+    visibilityMenuBoard: row['visibilityMenuBoard'] !== undefined ? parseBoolean(row['visibilityMenuBoard']) : true,
     visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
     visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
     visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
@@ -106,6 +107,7 @@ const parseCategories = (sheet: XLSX.WorkSheet): Category[] => {
     sortOrder: parseNumber(row['sortOrder']),
     visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
     visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
+    visibilityMenuBoard: row['visibilityMenuBoard'] !== undefined ? parseBoolean(row['visibilityMenuBoard']) : true,
     visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
     visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
     visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
@@ -139,6 +141,7 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     itemPrice: parseNumber(row['itemPrice']),
     taxLinkedWithParentSetting: parseBoolean(row['taxLinkedWithParentSetting']),
     calculatePricesWithTaxIncluded: parseBoolean(row['calculatePricesWithTaxIncluded']),
+    salesTax: row['salesTax'] !== undefined ? parseBoolean(row['salesTax']) : true,
     takeoutException: parseBoolean(row['takeoutException']),
     stockStatus: parseString(row['stockStatus']),
     stockValue: parseNumber(row['stockValue']),
@@ -160,6 +163,9 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
     addonIds: parseString(row['addonIds']),
     isSpecialRequest: parseBoolean(row['isSpecialRequest']),
+    doordashPrice: parseNumber(row['doordashPrice']),
+    uberEatsPrice: parseNumber(row['uberEatsPrice']),
+    grubHubPrice: parseNumber(row['grubHubPrice']),
     ...parseVisibilityFromRow(row),
     daySchedules: serializeDaySchedules(
       parseDaySchedules(
@@ -281,21 +287,33 @@ const parseModifierOptions = (sheet: XLSX.WorkSheet): ModifierOption[] => {
     parentModifierId: parseNumber(row['parentModifierId']),
     isStockAvailable: parseBoolean(row['isStockAvailable']),
     isSizeModifier: parseBoolean(row['isSizeModifier']),
+    price: parseNumber(row['price']),
     ...parseVisibilityFromRow(row),
   }));
 };
 
-// Parse Modifier ModifierOptions join table
+// Parse Modifier ModifierOptions join table.
+// Two formats share this sheet, distinguished by the column header:
+//   • POS format (no `maxQtyPerOption` column): the join's `maxLimit` is the
+//     per-option quantity cap (→ maxQtyPerOption); the option surcharge lives on
+//     the Modifier Option `price` column and is bridged into `maxLimit` afterwards.
+//   • Legacy app export (has `maxQtyPerOption` column): `maxLimit` is the surcharge.
 const parseModifierModifierOptions = (sheet: XLSX.WorkSheet): ModifierModifierOption[] => {
+  const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })[0] as string[]) ?? [];
+  const isPosFormat = !headerRow.includes('maxQtyPerOption');
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
   return data.map((row) => ({
     modifierId: parseNumber(row['modifierId']),
     modifierOptionId: parseNumber(row['modifierOptionId']),
     isDefaultSelected: parseBoolean(row['isDefaultSelected']),
-    maxLimit: parseNumber(row['maxLimit']),
+    // Surcharge: 0 in POS format (filled later from the option price), else the value here.
+    maxLimit: isPosFormat ? 0 : parseNumber(row['maxLimit']),
     optionDisplayName: parseString(row['optionDisplayName']),
     sortOrder: parseNumber(row['sortOrder']),
-    maxQtyPerOption: row['maxQtyPerOption'] !== undefined ? parseNumber(row['maxQtyPerOption']) : 1,
+    // Quantity cap: the POS join `maxLimit`, or the legacy `maxQtyPerOption` column.
+    maxQtyPerOption: isPosFormat
+      ? parseNumber(row['maxLimit'])
+      : (row['maxQtyPerOption'] !== undefined ? parseNumber(row['maxQtyPerOption']) : 1),
   }));
 };
 
@@ -305,7 +323,8 @@ const parseAllergens = (sheet: XLSX.WorkSheet): Allergen[] => {
   return data
     .map((row) => ({
       id: parseNumber(row['id']),
-      name: parseString(row['name']),
+      // POS schema uses `allergenName`; older app exports used `name`.
+      name: parseString(row['allergenName'] ?? row['name']),
     }))
     .filter((a) => a.id > 0 && a.name.trim().length > 0);
 };
@@ -316,10 +335,14 @@ const parseTags = (sheet: XLSX.WorkSheet): Tag[] => {
   return data
     .map((row) => ({
       id: parseNumber(row['id']),
-      name: parseString(row['name']),
+      // POS schema uses `tagName`; older app exports used `name`.
+      name: parseString(row['tagName'] ?? row['name']),
       icon: parseString(row['icon']) || undefined,
       color: parseString(row['color']) || undefined,
-      isSystem: row['isSystem'] === true || row['isSystem'] === 'true' || undefined,
+      // POS schema uses `isDefault`; older app exports used `isSystem`.
+      isSystem:
+        row['isSystem'] === true || row['isSystem'] === 'true' ||
+        row['isDefault'] === true || row['isDefault'] === 'true' || undefined,
     }))
     .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };
@@ -400,7 +423,19 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         
         const tagSheet = getSheet(SHEET_NAMES.TAG);
         if (tagSheet) result.tags = parseTags(tagSheet);
-        
+
+        // The POS keeps the option surcharge on the Modifier Option `price`
+        // column; the app's UI reads it from the join's `maxLimit`. Bridge it
+        // back so surcharges survive import (only when the join has no maxLimit
+        // of its own, preserving older app exports that stored it there).
+        const optionPrice = new Map<number, number>();
+        result.modifierOptions.forEach((o) => {
+          if (typeof o.price === 'number' && o.price > 0) optionPrice.set(o.id, o.price);
+        });
+        result.modifierModifierOptions = result.modifierModifierOptions.map((j) =>
+          j.maxLimit ? j : { ...j, maxLimit: optionPrice.get(j.modifierOptionId) ?? 0 }
+        );
+
         console.log('Imported:', {
           menus: result.menus.length,
           categories: result.categories.length,

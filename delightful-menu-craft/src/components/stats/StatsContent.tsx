@@ -26,6 +26,7 @@ import type { Item } from '@/types/menu';
 const CHANNELS = [
   { key: 'visibilityPos' as keyof Item,       label: 'POS',        color: 'hsl(var(--primary))' },
   { key: 'visibilityKiosk' as keyof Item,     label: 'Kiosk',      color: '#3b82f6' },
+  { key: 'visibilityMenuBoard' as keyof Item, label: 'Menu Board', color: '#14b8a6' },
   { key: 'visibilityQr' as keyof Item,        label: 'QR',         color: '#8b5cf6' },
   { key: 'visibilityWebsite' as keyof Item,   label: 'Website',    color: '#10b981' },
   { key: 'visibilityMobileApp' as keyof Item, label: 'Mobile App', color: '#f59e0b' },

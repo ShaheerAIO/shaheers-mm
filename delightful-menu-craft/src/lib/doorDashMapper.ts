@@ -109,6 +109,10 @@ export function mapScraperToExcelData(data: ScraperMenuData): ExcelMenuData {
     inheritModifiersFromCategory: bool(i.inheritModifiersFromCategory, false),
     addonIds: str(i.addonIds),
     isSpecialRequest: bool(i.isSpecialRequest, true),
+    // Scraper payloads don't carry 3PO prices; default to unset.
+    doordashPrice: 0,
+    uberEatsPrice: 0,
+    grubHubPrice: 0,
     ...parseVisibilityFromScraper(i),
     daySchedules: serializeDaySchedules(defaultDaySchedules()),
   }));

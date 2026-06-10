@@ -7,6 +7,7 @@ import type { Item } from '@/types/menu';
 const VIS_CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
   { key: 'visibilityKiosk' as const, label: 'Kiosk' },
+  { key: 'visibilityMenuBoard' as const, label: 'Menu Board' },
   { key: 'visibilityQr' as const, label: 'QR' },
   { key: 'visibilityWebsite' as const, label: 'Website' },
   { key: 'visibilityMobileApp' as const, label: 'Mobile App' },
@@ -67,6 +68,7 @@ export function BulkEditPanel({ selectedItemIds, onClearSelection }: BulkEditPan
   const [vis, setVis] = useState({
     visibilityPos: true,
     visibilityKiosk: true,
+    visibilityMenuBoard: true,
     visibilityQr: true,
     visibilityWebsite: true,
     visibilityMobileApp: true,

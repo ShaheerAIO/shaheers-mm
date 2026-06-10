@@ -47,6 +47,7 @@ interface Props {
 const ON_PREM: { key: VisibilityChannelKey; label: string }[] = [
   { key: 'visibilityPos', label: 'POS' },
   { key: 'visibilityKiosk', label: 'Kiosk' },
+  { key: 'visibilityMenuBoard', label: 'Menu Board' },
 ];
 const OFF_PREM: { key: VisibilityChannelKey; label: string }[] = [
   { key: 'visibilityQr', label: 'QR Code' },
