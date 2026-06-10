@@ -38,8 +38,6 @@ interface TicketLine {
 
 type PosMode = 'qsr' | 'tsr';
 
-const TAX_RATE = 0.05;
-
 /** Sum join-table `maxLimit` for each selected option occurrence (duplicates = multi-qty). */
 function modifierSurchargePerUnit(
   selectedOptions: Record<number, number[]>,
@@ -65,7 +63,7 @@ function modifierSurchargePerUnit(
 // ---------------------------------------------------------------------------
 
 export function POSPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions } =
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions, taxRate } =
     useMenuStore();
 
   // POS mode toggle
@@ -164,7 +162,7 @@ export function POSPreview() {
       }, 0),
     [ticketLines, modifierModifierOptions],
   );
-  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+  const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
 
   // ---------------------------------------------------------------------------

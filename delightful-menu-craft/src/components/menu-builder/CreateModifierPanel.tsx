@@ -89,6 +89,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [openChannelGroup, setOpenChannelGroup] = useState<string | null>(null);
   const [pizzaSelection, setPizzaSelection] = useState(false);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
+  const [modifierOptionPriceType, setModifierOptionPriceType] = useState('NoCharge');
+  const [multiSelect, setMultiSelect] = useState(false);
 
   // Modifier type mode — mutually exclusive
   type ModifierMode = 'flat' | 'nested';
@@ -327,9 +329,9 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       // Default values for other required fields
       isNested: false,
       addNested: false,
-      modifierOptionPriceType: 'NoCharge',
+      modifierOptionPriceType,
       canGuestSelectMoreModifiers: true,
-      multiSelect: false,
+      multiSelect,
       limitIndividualModifierSelection: options.some(o => o.maxQtyPerOption !== 1),
       prefix: prefix.trim(),
       pizzaSelection,
@@ -494,6 +496,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setOffPrem(true);
     setPizzaSelection(false);
     setIsSizeModifier(false);
+    setModifierOptionPriceType('NoCharge');
+    setMultiSelect(false);
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
@@ -725,57 +729,91 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
-        </Accordion>
-
-        {/* Selection rules — always visible */}
-        <div className="rounded-lg border border-border bg-muted/10 px-3 py-3 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selection rules</p>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
-              <input
-                type="number"
-                min={0}
-                value={minSelector}
-                onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
-                className="input-field w-full text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
-              <input
-                type="number"
-                min={1}
-                value={maxSelector}
-                onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
-                disabled={noMaxSelection}
-                className="input-field w-full text-sm disabled:opacity-50"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase text-muted-foreground">No max</Label>
-              <div className="flex h-9 items-center">
-                <Switch checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
+          <AccordionItem value="selection-rules" className="px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Selection rules
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2.5 pb-1">
+                <div className="space-y-1">
+                  <div className="flex items-end gap-2 flex-wrap">
+                    <div className="space-y-1 w-14 shrink-0">
+                      <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={minSelector}
+                        onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
+                        className="input-field w-full text-sm h-8"
+                      />
+                    </div>
+                    <div className="space-y-1 w-14 shrink-0">
+                      <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={maxSelector}
+                        onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
+                        disabled={noMaxSelection}
+                        className="input-field w-full text-sm h-8 disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
+                      <Label htmlFor="noMaxSelection" className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">No max</Label>
+                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="section-header text-xs">Selection type</Label>
+                    <Select
+                      value={isOptional}
+                      onValueChange={setIsOptional}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectValue placeholder="Optional (select any)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Select any">Optional (select any)</SelectItem>
+                        <SelectItem value="Required">Required</SelectItem>
+                        <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="section-header text-xs">Pricing</Label>
+                    <Select
+                      value={modifierOptionPriceType}
+                      onValueChange={setModifierOptionPriceType}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectValue placeholder="No charge" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NoCharge">No charge</SelectItem>
+                        <SelectItem value="Individual">Individual pricing</SelectItem>
+                        <SelectItem value="Group">Group pricing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="multiSelect"
+                    title="Guest can pick more than one option"
+                    className="text-xs font-normal cursor-pointer"
+                  >
+                    Allow multiple selections
+                  </Label>
+                  <Switch id="multiSelect" checked={multiSelect} onCheckedChange={setMultiSelect} />
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="section-header text-xs">Selection type</Label>
-            <Select
-              value={isOptional}
-              onValueChange={setIsOptional}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Optional (select any)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Select any">Optional (select any)</SelectItem>
-                <SelectItem value="Required">Required</SelectItem>
-                <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+            </AccordionContent>
+          </AccordionItem>
+
+        </Accordion>
 
         {/* Options — flat mode only */}
         {modifierMode === 'flat' && <div className="space-y-2.5">
@@ -845,12 +883,18 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                           </span>
                         )}
                       </div>
-                      {option.posDisplayName.trim() &&
-                        option.posDisplayName.trim() !== option.optionName && (
-                          <span className="text-xs text-muted-foreground">
-                            POS: {option.posDisplayName}
-                          </span>
-                        )}
+                      <input
+                        type="text"
+                        value={option.posDisplayName}
+                        onChange={(e) =>
+                          setOptions(opts => opts.map(o =>
+                            o.id === option.id ? { ...o, posDisplayName: e.target.value } : o
+                          ))
+                        }
+                        placeholder={`Display name (default: ${option.optionName})`}
+                        className="input-field text-xs h-7 w-full max-w-[220px]"
+                        aria-label="Option display name"
+                      />
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">$</span>

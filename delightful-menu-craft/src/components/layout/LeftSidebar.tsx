@@ -2,7 +2,7 @@ import {
   LayoutGrid,
   Settings2,
   Radio,
-  BarChart3,
+  SlidersHorizontal,
   Layers,
 } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
@@ -14,7 +14,7 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'modifier-library', label: 'Modifiers', icon: Settings2 },
   { id: 'stations', label: 'Stations', icon: Radio },
   { id: 'categories', label: 'Bulk', icon: Layers },
-  { id: 'stats', label: 'Stats', icon: BarChart3 },
+  { id: 'settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 
 export function LeftSidebar() {

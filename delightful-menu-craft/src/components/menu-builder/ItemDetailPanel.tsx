@@ -8,9 +8,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, Link, Unlink, ArrowDownUp } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
+import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Item } from '@/types/menu';
 import {
@@ -51,6 +52,7 @@ interface DraftState {
   itemDescription: string;
   salesTax: boolean;
   takeoutException: boolean;
+  taxLinkedWithParentSetting: boolean;
   stockStatus: string;
   orderQuantityLimit: boolean;
   minLimit: number;
@@ -116,6 +118,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     stations,
     reorderModifierOptions,
     reorderItemModifiers,
+    setItemModifierOrder,
     taxRate,
   } = useMenuStore();
 
@@ -173,6 +176,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     itemDescription: item.itemDescription,
     salesTax: item.salesTax ?? true,
     takeoutException: item.takeoutException ?? false,
+    taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
     stockStatus: item.stockStatus,
     orderQuantityLimit: item.orderQuantityLimit ?? false,
     minLimit: item.minLimit ?? 0,
@@ -229,6 +233,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerSearch, setGroupPickerSearch] = useState('');
   const groupPickerRef = useRef<HTMLDivElement>(null);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
 
   // Reset draft state when item changes
@@ -244,6 +250,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemDescription: item.itemDescription,
       salesTax: item.salesTax ?? true,
       takeoutException: item.takeoutException ?? false,
+      taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
       minLimit: item.minLimit ?? 0,
@@ -298,6 +305,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [groupPickerOpen]);
 
+  useEffect(() => {
+    if (!sortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [sortMenuOpen]);
+
   const originalStationIds = useMemo(
     () =>
       item.stationIds
@@ -325,6 +343,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.itemDescription !== item.itemDescription ||
       draft.salesTax !== (item.salesTax ?? true) ||
       draft.takeoutException !== (item.takeoutException ?? false) ||
+      draft.taxLinkedWithParentSetting !== (item.taxLinkedWithParentSetting ?? true) ||
       draft.stockStatus !== item.stockStatus ||
       draft.orderQuantityLimit !== (item.orderQuantityLimit ?? false) ||
       draft.minLimit !== (item.minLimit ?? 0) ||
@@ -348,6 +367,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     );
   }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft]);
 
+  const saleCategoryValid = draft.saleCategory.trim() !== '';
+
   const handleSave = () => {
     // Save item changes
     updateItem(item.id, {
@@ -361,6 +382,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemDescription: draft.itemDescription,
       salesTax: draft.salesTax,
       takeoutException: draft.takeoutException,
+      taxLinkedWithParentSetting: draft.taxLinkedWithParentSetting,
       stockStatus: draft.stockStatus,
       orderQuantityLimit: draft.orderQuantityLimit,
       minLimit: draft.minLimit,
@@ -416,6 +438,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       itemDescription: item.itemDescription,
       salesTax: item.salesTax ?? true,
       takeoutException: item.takeoutException ?? false,
+      taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
       minLimit: item.minLimit ?? 0,
@@ -551,6 +574,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       // If it's already saved, add to pending removals
       setPendingRemovedModifierIds([...pendingRemovedModifierIds, modifierId]);
     }
+  };
+
+  const handleSortModifiers = (dir: 'asc' | 'desc') => {
+    const sorted = [...attachedModifiers].sort((a, b) =>
+      a.modifierName.localeCompare(b.modifierName, undefined, { sensitivity: 'base' })
+    );
+    if (dir === 'desc') sorted.reverse();
+    const sortedIds = sorted.map((m) => m.id);
+    setItemModifierOrder(item.id, sortedIds.filter((id) => attachedModifierIds.includes(id)));
+    setPendingModifierIds(sortedIds.filter((id) => pendingModifierIds.includes(id)));
+    setSortMenuOpen(false);
   };
 
   const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
@@ -805,20 +839,40 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 className="w-4 h-4 rounded accent-orange-500"
               />
               <Label htmlFor="salesTax" className="text-sm font-normal cursor-pointer">Sales Tax</Label>
+              <button
+                type="button"
+                title={draft.taxLinkedWithParentSetting ? 'Tax linked to category (click to unlink)' : 'Tax unlinked from category (click to link)'}
+                onClick={() => setDraft(d => ({ ...d, taxLinkedWithParentSetting: !d.taxLinkedWithParentSetting }))}
+                className={`ml-1 rounded p-0.5 transition-colors ${draft.taxLinkedWithParentSetting ? 'text-primary hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+              >
+                {draft.taxLinkedWithParentSetting ? <Link className="w-3.5 h-3.5" /> : <Unlink className="w-3.5 h-3.5" />}
+              </button>
             </div>
 
             {/* Takeout exception */}
             {draft.salesTax && (
-              <div className="flex items-start justify-between gap-3 pt-1">
-                <div>
-                  <p className="text-sm">Take out exception</p>
-                  <p className="text-xs text-muted-foreground">This item is taxed except when it is ordered for takeout</p>
-                </div>
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <Label htmlFor="takeoutException" className="text-sm font-normal cursor-pointer">Takeout exception</Label>
                 <Switch
+                  id="takeoutException"
                   checked={draft.takeoutException}
                   onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
                 />
               </div>
+            )}
+
+          </div>
+
+          {/* Sale category (required) */}
+          <div className="space-y-1.5 pt-1">
+            <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
+            <SaleCategorySelect
+              id="saleCategory"
+              value={draft.saleCategory}
+              onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
+            />
+            {!saleCategoryValid && (
+              <p className="text-xs text-destructive">Sale category is required.</p>
             )}
           </div>
         </div>
@@ -1042,7 +1096,53 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2">
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label
+                    htmlFor="inheritMods"
+                    title="Inherit modifiers from category"
+                    className="flex items-center gap-1.5 text-xs font-medium cursor-pointer mr-auto"
+                  >
+                    Inherit
+                    <Switch
+                      id="inheritMods"
+                      checked={draft.inheritModifiersFromCategory}
+                      onCheckedChange={(checked) =>
+                        setDraft((d) => ({ ...d, inheritModifiersFromCategory: checked }))
+                      }
+                    />
+                  </label>
+                  <div className="flex items-center gap-2">
+                  {/* Sort modifiers */}
+                  {attachedModifiers.length > 1 && (
+                    <div className="relative" ref={sortMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setSortMenuOpen((o) => !o)}
+                        className="flex items-center justify-center w-7 h-7 rounded-md border border-border hover:bg-muted/50 transition-colors"
+                        title="Sort modifiers"
+                      >
+                        <ArrowDownUp className="w-3.5 h-3.5" />
+                      </button>
+                      {sortMenuOpen && (
+                        <div className="absolute z-20 right-0 top-full mt-1 w-36 rounded-md border border-border bg-background shadow-md py-1">
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                            onClick={() => handleSortModifiers('asc')}
+                          >
+                            Name (A → Z)
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                            onClick={() => handleSortModifiers('desc')}
+                          >
+                            Name (Z → A)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {/* Apply modifier group picker */}
                   {modifierGroups.length > 0 && (
                     <div className="relative" ref={groupPickerRef}>
@@ -1093,11 +1193,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   )}
                   {availableModifiers.length > 0 && (
                     <Select onValueChange={handleAddModifier}>
-                      <SelectTrigger className="w-32">
-                        <span className="text-xs flex items-center gap-1">
-                          <Plus className="w-3 h-3" />
-                          Add
-                        </span>
+                      <SelectTrigger className="btn-add w-auto h-auto border-0 shadow-none focus:ring-0 focus:ring-offset-0 [&>svg]:size-3">
+                        <Plus className="w-3.5 h-3.5" />
+                        Add
                       </SelectTrigger>
                       <SelectContent>
                         {availableModifiers.map((mod) => (
@@ -1115,19 +1213,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     <Plus className="w-3.5 h-3.5" />
                     New
                   </button>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 rounded-md border border-border/70 px-2.5 py-1.5 bg-muted/10">
-                  <Label htmlFor="inheritMods" className="text-xs font-medium">
-                    Inherit modifiers from category
-                  </Label>
-                  <Switch
-                    id="inheritMods"
-                    checked={draft.inheritModifiersFromCategory}
-                    onCheckedChange={(checked) =>
-                      setDraft((d) => ({ ...d, inheritModifiersFromCategory: checked }))
-                    }
-                  />
+                  </div>
                 </div>
 
                 {inheritedCategoryModifiers.length > 0 && (
@@ -1794,17 +1880,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     aria-label="Calories in kilocalories"
                   />
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Sale category</span>
-                  <input
-                    type="text"
-                    value={draft.saleCategory}
-                    onChange={(e) => setDraft(d => ({ ...d, saleCategory: e.target.value }))}
-                    placeholder="Food Sales"
-                    className="input-field w-40 text-right"
-                    aria-label="Sale category"
-                  />
-                </div>
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -1826,7 +1901,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </button>
         <button
           onClick={handleSave}
-          disabled={!hasChanges}
+          disabled={!hasChanges || !saleCategoryValid}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Save className="w-4 h-4" />

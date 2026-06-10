@@ -2,7 +2,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { MenuBuilderContent } from '@/components/menu-builder/MenuBuilderContent';
 import { ModifierLibraryContent } from '@/components/modifier-library/ModifierLibraryContent';
 import { StationsContent } from '@/components/stations/StationsContent';
-import { StatsContent } from '@/components/stats/StatsContent';
+import { SettingsContent } from '@/components/settings/SettingsContent';
 import { CategoriesContent } from '@/components/categories/CategoriesContent';
 
 export function MainContent() {
@@ -14,7 +14,7 @@ export function MainContent() {
       {activeTab === 'modifier-library' && <ModifierLibraryContent />}
       {activeTab === 'stations' && <StationsContent />}
       {activeTab === 'categories' && <CategoriesContent />}
-      {activeTab === 'stats' && <StatsContent />}
+      {activeTab === 'settings' && <SettingsContent />}
     </main>
   );
 }

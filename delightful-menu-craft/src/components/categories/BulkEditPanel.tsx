@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type { Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
 import { LEVEL_COLORS, type BulkLevel, type useBulkSelection } from './useBulkSelection';
+import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
 
 const VIS_CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
@@ -717,12 +718,10 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 </label>
                 {applySaleCategory && (
                   <div className="pl-5">
-                    <input
-                      type="text"
+                    <SaleCategorySelect
                       value={saleCategoryValue}
-                      onChange={(e) => setSaleCategoryValue(e.target.value)}
-                      placeholder="Food Sales"
-                      className="input-field w-full text-xs h-8"
+                      onChange={setSaleCategoryValue}
+                      triggerClassName="text-xs h-8"
                     />
                   </div>
                 )}

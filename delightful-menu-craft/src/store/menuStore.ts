@@ -146,6 +146,7 @@ interface MenuState {
   addItemModifier: (itemModifier: ItemModifier) => void;
   removeItemModifier: (modifierId: number, itemId: number) => void;
   reorderItemModifiers: (itemId: number, fromModifierId: number, toModifierId: number) => void;
+  setItemModifierOrder: (itemId: number, orderedModifierIds: number[]) => void;
   addModifierModifierOption: (mmo: ModifierModifierOption) => void;
   updateModifierModifierOption: (modifierId: number, optionId: number, updates: Partial<ModifierModifierOption>) => void;
   removeModifierModifierOption: (modifierId: number, optionId: number) => void;
@@ -597,7 +598,23 @@ export const useMenuStore = create<MenuState>()(
 
           return { itemModifiers: [...rest, ...updated] };
         }),
-      
+
+      setItemModifierOrder: (itemId, orderedModifierIds) =>
+        set((state) => {
+          const rest = state.itemModifiers.filter((im) => im.itemId !== itemId);
+          const mine = state.itemModifiers.filter((im) => im.itemId === itemId);
+          const rank = new Map(orderedModifierIds.map((id, idx) => [id, idx]));
+          const updated = mine
+            .slice()
+            .sort(
+              (a, b) =>
+                (rank.get(a.modifierId) ?? Number.MAX_SAFE_INTEGER) -
+                (rank.get(b.modifierId) ?? Number.MAX_SAFE_INTEGER)
+            )
+            .map((im, idx) => ({ ...im, sortOrder: idx }));
+          return { itemModifiers: [...rest, ...updated] };
+        }),
+
       // Join Table Actions - Modifier Modifier Options
       addModifierModifierOption: (mmo) => set((state) => ({ 
         modifierModifierOptions: [...state.modifierModifierOptions, mmo] 
@@ -1068,7 +1085,7 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 13,
+      version: 14,
       migrate(persisted: unknown, fromVersion: number) {
         const state = persisted as Record<string, unknown>;
 
@@ -1322,6 +1339,12 @@ export const useMenuStore = create<MenuState>()(
           state.items = addMenuBoard(state.items);
           state.modifiers = addMenuBoard(state.modifiers);
           state.modifierOptions = addMenuBoard(state.modifierOptions);
+        }
+
+        if (fromVersion < 14) {
+          // The 'stats' tab was replaced by 'settings'. A persisted activeTab of
+          // 'stats' would leave MainContent with no matching route (blank screen).
+          if (state.activeTab === 'stats') state.activeTab = 'settings';
         }
 
         return persisted as MenuState;

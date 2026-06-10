@@ -566,6 +566,8 @@ interface ModifierDraft {
   maxSelector: number;
   noMaxSelection: boolean;
   isOptional: string;
+  modifierOptionPriceType: string;
+  multiSelect: boolean;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
   // Channel visibility
@@ -622,6 +624,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     maxSelector: modifier.maxSelector,
     noMaxSelection: modifier.noMaxSelection,
     isOptional: modifier.isOptional,
+    modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
+    multiSelect: modifier.multiSelect ?? false,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
     ...defaultVisibility(),
@@ -646,6 +650,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       maxSelector: modifier.maxSelector,
       noMaxSelection: modifier.noMaxSelection,
       isOptional: modifier.isOptional,
+      modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
+      multiSelect: modifier.multiSelect ?? false,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -728,6 +734,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       draft.maxSelector !== modifier.maxSelector ||
       draft.noMaxSelection !== modifier.noMaxSelection ||
       draft.isOptional !== modifier.isOptional ||
+      draft.modifierOptionPriceType !== (modifier.modifierOptionPriceType ?? 'NoCharge') ||
+      draft.multiSelect !== (modifier.multiSelect ?? false) ||
       draft.pizzaSelection !== modifier.pizzaSelection ||
       draft.isSizeModifier !== modifier.isSizeModifier
     );
@@ -749,6 +757,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         maxSelector: draft.maxSelector,
         noMaxSelection: draft.noMaxSelection,
         isOptional: draft.isOptional,
+        modifierOptionPriceType: draft.modifierOptionPriceType,
+        multiSelect: draft.multiSelect,
         pizzaSelection: draft.pizzaSelection,
         isSizeModifier: draft.isSizeModifier,
         visibilityPos: draft.visibilityPos,
@@ -774,6 +784,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       maxSelector: modifier.maxSelector,
       noMaxSelection: modifier.noMaxSelection,
       isOptional: modifier.isOptional,
+      modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
+      multiSelect: modifier.multiSelect ?? false,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -925,6 +937,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
   const handleOptionPriceChange = (optionId: number, maxLimit: number) => {
     updateModifierModifierOption(modifier.id, optionId, { maxLimit });
+  };
+
+  const handleOptionDisplayNameChange = (optionId: number, optionDisplayName: string) => {
+    updateModifierModifierOption(modifier.id, optionId, { optionDisplayName });
   };
 
   const handleOptionQtyChange = (optionId: number, maxQtyPerOption: number) => {
@@ -1490,12 +1506,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       <span className="text-sm font-medium">
                         {assignment.option?.optionName || assignment.optionDisplayName}
                       </span>
-                      {assignment.option?.posDisplayName?.trim() &&
-                        assignment.option.posDisplayName.trim() !== assignment.option.optionName && (
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            POS: {assignment.option.posDisplayName}
-                          </div>
+                      <input
+                        type="text"
+                        value={assignment.optionDisplayName}
+                        onChange={(e) => handleOptionDisplayNameChange(
+                          assignment.modifierOptionId,
+                          e.target.value,
                         )}
+                        placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
+                        className="input-field text-xs h-7 w-full max-w-[220px] mt-0.5"
+                        aria-label="Option display name"
+                      />
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {assignment.isDefaultSelected && (
@@ -1685,6 +1706,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 disabled={draft.noMaxSelection}
                 className="input-field w-full"
               />
+              <p className="text-[10px] text-muted-foreground">Combination limit</p>
             </div>
             <div className="space-y-2">
               <Label className="section-header">No maximum</Label>
@@ -1693,6 +1715,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxSelection: checked }))}
               />
             </div>
+          </div>
+
+          {/* Multi-select */}
+          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+            <div>
+              <Label htmlFor="multiSelect" className="text-sm">Allow multiple selections</Label>
+              <p className="text-xs text-muted-foreground">Guest can pick more than one option from this modifier</p>
+            </div>
+            <Switch
+              id="multiSelect"
+              checked={draft.multiSelect}
+              onCheckedChange={(checked) => setDraft(d => ({ ...d, multiSelect: checked }))}
+            />
           </div>
 
           {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
@@ -1714,6 +1749,26 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 <SelectItem value="Select any">Optional (Select any)</SelectItem>
                 <SelectItem value="Required">Required</SelectItem>
                 <SelectItem value="Select one">Select One</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pricing — how option prices are charged */}
+          <div className="space-y-2">
+            <Label className="section-header">Pricing</Label>
+            <Select
+              value={draft.modifierOptionPriceType || 'NoCharge'}
+              onValueChange={(value) =>
+                setDraft((d) => ({ ...d, modifierOptionPriceType: value }))
+              }
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="No charge" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NoCharge">No charge</SelectItem>
+                <SelectItem value="Individual">Individual pricing</SelectItem>
+                <SelectItem value="Group">Group pricing</SelectItem>
               </SelectContent>
             </Select>
           </div>
