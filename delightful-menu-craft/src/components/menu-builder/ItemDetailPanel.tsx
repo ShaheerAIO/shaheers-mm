@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -59,6 +59,7 @@ interface DraftState {
   inheritModifiersFromCategory: boolean;
   preparationTime: number;
   calories: number;
+  saleCategory: string;
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
@@ -111,6 +112,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     deleteAllergen,
     getNextId,
     setIsCreatingModifier,
+    navigateToModifier,
     stations,
     reorderModifierOptions,
     reorderItemModifiers,
@@ -179,6 +181,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
     calories: item.calories,
+    saleCategory: item.saleCategory ?? '',
     ...defaultVisibility(),
     visibilityPos: item.visibilityPos ?? true,
     visibilityKiosk: item.visibilityKiosk ?? true,
@@ -249,6 +252,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
+      saleCategory: item.saleCategory ?? '',
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
@@ -329,6 +333,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.inheritModifiersFromCategory !== item.inheritModifiersFromCategory ||
       draft.preparationTime !== item.preparationTime ||
       draft.calories !== item.calories ||
+      draft.saleCategory !== (item.saleCategory ?? '') ||
       draft.visibilityPos !== (item.visibilityPos ?? true) ||
       draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
       draft.visibilityMenuBoard !== (item.visibilityMenuBoard ?? true) ||
@@ -364,6 +369,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: draft.inheritModifiersFromCategory,
       preparationTime: draft.preparationTime,
       calories: draft.calories,
+      saleCategory: draft.saleCategory.trim() || 'Food Sales',
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
@@ -418,6 +424,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
       calories: item.calories,
+      saleCategory: item.saleCategory ?? '',
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
@@ -665,7 +672,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </div>
       )}
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
         {/* Item name + collapsible POS/KDS overrides */}
         <div className="space-y-1">
           <Label className="section-header">Names</Label>
@@ -750,7 +757,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           <textarea
             value={draft.itemDescription}
             onChange={(e) => setDraft(d => ({ ...d, itemDescription: e.target.value }))}
-            className="input-field w-full min-h-[80px] resize-none"
+            className="input-field w-full min-h-[56px] resize-none"
             placeholder="Item description (optional)"
           />
         </div>
@@ -786,10 +793,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             )}
           </div>
 
-          {/* Tax section */}
-          <div className="space-y-2 pt-1">
-            <span className="text-sm font-medium">Tax</span>
-
+          {/* Tax */}
+          <div className="space-y-2">
             {/* Sales Tax checkbox */}
             <div className="flex items-center gap-2">
               <input
@@ -818,49 +823,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </div>
         </div>
 
-        {/* Third-party delivery (3PO) prices */}
-        <div className="space-y-3">
-          <Label className="section-header">Third-party delivery prices</Label>
-          <p className="text-xs text-muted-foreground -mt-1">
-            Optional per-platform prices. Leave blank to use the base price.
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {([
-              { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
-              { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
-              { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
-            ]).map(({ label, value, setInput, field }) => (
-              <div key={field} className="space-y-1">
-                <Label className="text-xs text-muted-foreground">{label}</Label>
-                <div className="flex items-center gap-2 input-field px-3 py-2">
-                  <span className="text-muted-foreground">$</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={value}
-                    onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
-                    className="bg-transparent outline-none w-full"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Stock Status */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="stockStatus" className="text-sm">In Stock</Label>
-            <Switch
-              id="stockStatus"
-              checked={draft.stockStatus === 'inStock'}
-              onCheckedChange={(checked) => setDraft(d => ({ 
-                ...d, 
-                stockStatus: checked ? 'inStock' : 'outOfStock' 
-              }))}
-            />
-          </div>
+        {/* Stock */}
+        <div className="flex items-center justify-between">
+          <Label htmlFor="stockStatus" className="text-sm">In Stock</Label>
+          <Switch
+            id="stockStatus"
+            checked={draft.stockStatus === 'inStock'}
+            onCheckedChange={(checked) => setDraft(d => ({
+              ...d,
+              stockStatus: checked ? 'inStock' : 'outOfStock'
+            }))}
+          />
         </div>
 
         {/* Technical sections — collapsed by default */}
@@ -869,77 +842,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           defaultValue={[]}
           className="rounded-lg border border-border bg-muted/10 overflow-hidden"
         >
-          <AccordionItem value="order-quantity" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Order quantity
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <Label htmlFor="orderQuantityLimit" className="text-sm">Limit quantity per order</Label>
-                    <p className="text-xs text-muted-foreground">Set min/max how many of this item can be ordered at once</p>
-                  </div>
-                  <Switch
-                    id="orderQuantityLimit"
-                    checked={draft.orderQuantityLimit}
-                    onCheckedChange={(checked) => setDraft(d => ({ ...d, orderQuantityLimit: checked }))}
-                  />
-                </div>
-                {draft.orderQuantityLimit && (
-                  <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Minimum</Label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={draft.minLimit}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) =>
-                            setDraft(d => ({
-                              ...d,
-                              minLimit: Math.max(0, parseInt(e.target.value, 10) || 0),
-                            }))
-                          }
-                          className="input-field w-full"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Maximum</Label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={draft.maxLimit}
-                          disabled={draft.noMaxLimit}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) =>
-                            setDraft(d => ({
-                              ...d,
-                              maxLimit: Math.max(1, parseInt(e.target.value, 10) || 1),
-                            }))
-                          }
-                          className="input-field w-full disabled:opacity-50"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <Label htmlFor="noMaxLimit" className="text-sm">No maximum</Label>
-                        <p className="text-xs text-muted-foreground">Allow unlimited quantity on a single order</p>
-                      </div>
-                      <Switch
-                        id="noMaxLimit"
-                        checked={draft.noMaxLimit}
-                        onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxLimit: checked }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
           <AccordionItem value="availability" className="border-b border-border px-3">
             <AccordionTrigger className="px-0 py-3 hover:no-underline items-start gap-2 [&>svg]:mt-1">
               <div className="flex-1 min-w-0 text-left">
@@ -1284,15 +1186,27 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             </span>
                           )}
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveModifier(modifier.id);
-                          }}
-                          className="p-1 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateToModifier(modifier.id);
+                            }}
+                            className="p-1 text-muted-foreground hover:text-primary"
+                            title="Edit in modifier library"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveModifier(modifier.id);
+                            }}
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3">
@@ -1747,6 +1661,112 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
+          <AccordionItem value="third-party" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Third-party delivery prices
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Optional per-platform prices. Leave blank to use the base price.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
+                    { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
+                    { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
+                  ]).map(({ label, value, setInput, field }) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{label}</Label>
+                      <div className="flex items-center gap-2 input-field px-3 py-2">
+                        <span className="text-muted-foreground">$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={value}
+                          onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
+                          className="bg-transparent outline-none w-full"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="order-quantity" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Order quantity
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label htmlFor="orderQuantityLimit" className="text-sm">Limit quantity per order</Label>
+                    <p className="text-xs text-muted-foreground">Set min/max how many of this item can be ordered at once</p>
+                  </div>
+                  <Switch
+                    id="orderQuantityLimit"
+                    checked={draft.orderQuantityLimit}
+                    onCheckedChange={(checked) => setDraft(d => ({ ...d, orderQuantityLimit: checked }))}
+                  />
+                </div>
+                {draft.orderQuantityLimit && (
+                  <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Minimum</Label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={draft.minLimit}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) =>
+                            setDraft(d => ({
+                              ...d,
+                              minLimit: Math.max(0, parseInt(e.target.value, 10) || 0),
+                            }))
+                          }
+                          className="input-field w-full"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Maximum</Label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={draft.maxLimit}
+                          disabled={draft.noMaxLimit}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) =>
+                            setDraft(d => ({
+                              ...d,
+                              maxLimit: Math.max(1, parseInt(e.target.value, 10) || 1),
+                            }))
+                          }
+                          className="input-field w-full disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <Label htmlFor="noMaxLimit" className="text-sm">No maximum</Label>
+                        <p className="text-xs text-muted-foreground">Allow unlimited quantity on a single order</p>
+                      </div>
+                      <Switch
+                        id="noMaxLimit"
+                        checked={draft.noMaxLimit}
+                        onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxLimit: checked }))}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
           <AccordionItem value="kitchen-details" className="border-b-0 px-3">
             <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Kitchen & details
@@ -1772,6 +1792,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     onChange={(e) => setDraft(d => ({ ...d, calories: parseInt(e.target.value) || 0 }))}
                     className="input-field w-20 text-right"
                     aria-label="Calories in kilocalories"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Sale category</span>
+                  <input
+                    type="text"
+                    value={draft.saleCategory}
+                    onChange={(e) => setDraft(d => ({ ...d, saleCategory: e.target.value }))}
+                    placeholder="Food Sales"
+                    className="input-field w-40 text-right"
+                    aria-label="Sale category"
                   />
                 </div>
               </div>

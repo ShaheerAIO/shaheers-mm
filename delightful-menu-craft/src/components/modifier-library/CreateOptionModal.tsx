@@ -32,8 +32,8 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
   const handleSave = () => {
-    if (!optionName.trim()) return;
-    
+    if (optionName.trim().length < 2) return;
+
     onSave({
       optionName: optionName.trim(),
       posDisplayName: posDisplayName.trim() || optionName.trim(),
@@ -62,7 +62,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
     onClose();
   };
 
-  const isValid = optionName.trim().length > 0;
+  const isValid = optionName.trim().length >= 2;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -92,6 +92,9 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
               className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               autoFocus
             />
+            {optionName.trim().length === 1 && (
+              <p className="text-xs text-destructive">Name must be at least 2 characters.</p>
+            )}
           </div>
 
           {/* POS Display Name */}

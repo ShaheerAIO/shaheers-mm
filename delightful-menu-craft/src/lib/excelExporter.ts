@@ -132,7 +132,8 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
     stockStatus: i.stockStatus, stockValue: i.stockValue, orderQuantityLimit: i.orderQuantityLimit,
     minLimit: i.minLimit, maxLimit: i.maxLimit, noMaxLimit: i.noMaxLimit, stationIds: i.stationIds,
     preparationTime: i.preparationTime, calories: i.calories, tagIds: i.tagIds,
-    inheritTagsFromCategory: i.inheritTagsFromCategory, saleCategory: i.saleCategory,
+    // saleCategory is required by the POS importer; default blanks to 'Food Sales'.
+    inheritTagsFromCategory: i.inheritTagsFromCategory, saleCategory: (i.saleCategory || '').trim() || 'Food Sales',
     allergenIds: i.allergenIds, inheritModifiersFromCategory: i.inheritModifiersFromCategory,
     addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest,
     // 3PO prices: blank (null) when unset, matching real POS files.
@@ -141,17 +142,24 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
   }));
 
 const buildModifierRows = (mods: Modifier[]) =>
-  mods.map((m) => ({
-    id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
-    isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
-    isOptional: m.modType !== 'Required', // POS expects a boolean
-    canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers, multiSelect: m.multiSelect,
-    limitIndividualModifierSelection: m.limitIndividualModifierSelection,
-    minSelector: m.minSelector, maxSelector: m.maxSelector, noMaxSelection: m.noMaxSelection,
-    prefix: m.prefix, pizzaSelection: m.pizzaSelection, stockStatus: true,
-    price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
-    parentModifierId: m.parentModifierId || '', isSizeModifier: m.isSizeModifier, modType: m.modType,
-  }));
+  mods.map((m) => {
+    // modType is required by the POS importer; fall back when blank (e.g. nested
+    // modifiers). isOptional is the boolean form derived from the resolved modType.
+    const modType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
+    return {
+      id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
+      isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
+      isOptional: modType !== 'Required', // POS expects a boolean
+      canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers, multiSelect: m.multiSelect,
+      limitIndividualModifierSelection: m.limitIndividualModifierSelection,
+      // POS format: when No Max Limit is on, min/max are 1/1 and noMaxSelection carries the "unlimited" meaning.
+      minSelector: m.noMaxSelection ? 1 : m.minSelector, maxSelector: m.noMaxSelection ? 1 : m.maxSelector,
+      noMaxSelection: m.noMaxSelection,
+      prefix: m.prefix, pizzaSelection: m.pizzaSelection, stockStatus: true,
+      price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
+      parentModifierId: m.parentModifierId || '', isSizeModifier: m.isSizeModifier, modType,
+    };
+  });
 
 // POS keeps option surcharge on the Modifier Option `price` column; the app
 // stores it on the join's `maxLimit`. Map each option to its surcharge.
@@ -163,9 +171,15 @@ const buildOptionPriceMap = (joins: ModifierModifierOption[]): Map<number, numbe
   return map;
 };
 
+// POS importer requires optionName/posDisplayName ≥ 2 chars; pad legacy short names.
+const padName = (s: string): string => {
+  const t = (s || '').trim();
+  return t.length < 2 ? `${t}.` : t;
+};
+
 const buildModifierOptionRows = (opts: ModifierOption[], priceMap: Map<number, number>) =>
   opts.map((o) => ({
-    id: o.id, optionName: o.optionName, posDisplayName: o.posDisplayName,
+    id: o.id, optionName: padName(o.optionName), posDisplayName: padName(o.posDisplayName),
     price: priceMap.get(o.id) ?? o.price ?? 0,
     isStockAvailable: o.isStockAvailable, isSizeModifier: o.isSizeModifier,
   }));

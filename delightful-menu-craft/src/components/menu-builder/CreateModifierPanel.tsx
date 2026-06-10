@@ -17,6 +17,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
@@ -219,7 +220,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   };
 
   const handleBulkCreateFromLines = () => {
-    const names = parseBulkOptionNames(bulkCreateText);
+    const parsed = parseBulkOptionNames(bulkCreateText);
+    if (parsed.length === 0) return;
+    // POS importer requires option names ≥ 2 chars — skip any that are too short.
+    const names = parsed.filter((n) => n.trim().length >= 2);
+    const skipped = parsed.length - names.length;
+    if (skipped > 0) {
+      toast.warning(`Skipped ${skipped} option name${skipped > 1 ? 's' : ''} shorter than 2 characters.`);
+    }
     if (names.length === 0) return;
     const newDrafts: OptionDraft[] = names.map((name, i) => ({
       id: `new-bulk-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
@@ -406,7 +414,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   const handleSaveChild = () => {
     const name = childName.trim();
-    if (!name || childOptions.every(o => !o.name.trim())) return;
+    // POS importer requires option names ≥ 2 chars — keep only those.
+    const validChildOptions = childOptions.filter(o => o.name.trim().length >= 2);
+    const skipped = childOptions.filter(o => o.name.trim().length === 1).length;
+    if (!name || validChildOptions.length === 0) return;
+    if (skipped > 0) {
+      toast.warning(`Skipped ${skipped} option name${skipped > 1 ? 's' : ''} shorter than 2 characters.`);
+    }
 
     const newModId = getNextId('modifiers');
     addModifier({
@@ -417,6 +431,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       addNested: false,
       modifierOptionPriceType: 'NoCharge',
       isOptional: '',
+      modType: 'Optional',
       canGuestSelectMoreModifiers: true,
       multiSelect: false,
       limitIndividualModifierSelection: false,
@@ -434,8 +449,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       ...defaultVisibility(),
     });
 
-    childOptions
-      .filter(o => o.name.trim())
+    validChildOptions
       .forEach((o, idx) => {
         const optId = getNextId('modifierOptions');
         addModifierOption({

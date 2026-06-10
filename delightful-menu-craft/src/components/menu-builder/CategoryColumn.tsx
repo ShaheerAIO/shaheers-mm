@@ -166,7 +166,7 @@ export function CategoryColumn({
       calories: 0,
       tagIds: '',
       inheritTagsFromCategory: true,
-      saleCategory: '',
+      saleCategory: 'Food Sales',
       allergenIds: '',
       inheritModifiersFromCategory: true,
       addonIds: '',

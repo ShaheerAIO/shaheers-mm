@@ -3,6 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
+import { toast } from 'sonner';
 import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import {
   AlertDialog,
@@ -138,6 +139,16 @@ export function TopBar() {
 
   const handleExport = () => {
     const data = exportData();
+    // stationIds is required by the POS importer for routing — block export if any item lacks one.
+    const missingStations = data.items.filter((i) => !i.stationIds.trim());
+    if (missingStations.length > 0) {
+      const names = missingStations.slice(0, 5).map((i) => i.itemName).join(', ');
+      const more = missingStations.length > 5 ? ` and ${missingStations.length - 5} more` : '';
+      toast.error('Cannot export: items missing a station', {
+        description: `Assign a station to: ${names}${more}.`,
+      });
+      return;
+    }
     const timestamp = new Date().toISOString().split('T')[0];
     exportToExcel(data, `menu-data-${timestamp}.xlsx`);
   };

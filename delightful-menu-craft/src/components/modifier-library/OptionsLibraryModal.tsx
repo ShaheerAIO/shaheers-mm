@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { ModifierOption } from '@/types/menu';
 
 interface OptionsLibraryModalProps {
@@ -69,7 +70,10 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   };
 
   const handleCreateOption = () => {
-    if (!newOptionName.trim()) return;
+    if (newOptionName.trim().length < 2) {
+      toast.error('Option name must be at least 2 characters.');
+      return;
+    }
 
     const newOption: ModifierOption = {
       id: getNextId('modifierOptions'),
@@ -99,7 +103,11 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   };
 
   const saveEdit = () => {
-    if (!editingOptionId || !editOptionName.trim()) return;
+    if (!editingOptionId) return;
+    if (editOptionName.trim().length < 2) {
+      toast.error('Option name must be at least 2 characters.');
+      return;
+    }
 
     updateModifierOption(editingOptionId, {
       optionName: editOptionName.trim(),

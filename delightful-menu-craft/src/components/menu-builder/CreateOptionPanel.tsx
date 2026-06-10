@@ -14,7 +14,7 @@ export function CreateOptionPanel() {
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
   const handleSave = () => {
-    if (!optionName.trim()) return;
+    if (optionName.trim().length < 2) return;
 
     setPendingOption({
       optionName: optionName.trim(),
@@ -44,7 +44,7 @@ export function CreateOptionPanel() {
     setIsSizeModifier(false);
   };
 
-  const isValid = optionName.trim().length > 0;
+  const isValid = optionName.trim().length >= 2;
 
   return (
     <div className="flex flex-col h-full">
@@ -80,6 +80,9 @@ export function CreateOptionPanel() {
             className="input-field w-full"
             autoFocus
           />
+          {optionName.trim().length === 1 && (
+            <p className="text-xs text-destructive">Name must be at least 2 characters.</p>
+          )}
         </div>
 
         {/* POS Display Name */}

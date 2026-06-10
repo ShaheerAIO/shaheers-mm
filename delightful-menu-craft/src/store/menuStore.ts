@@ -193,6 +193,18 @@ interface MenuState {
   // Actions - Bulk Item Update
   bulkUpdateItems: (ids: number[], transform: (item: Item) => Partial<Item>) => void;
 
+  // Actions - Bulk console (multi-entity cascade edits)
+  bulkUpdateMenus: (ids: number[], transform: (menu: Menu) => Partial<Menu>) => void;
+  bulkUpdateCategories: (ids: number[], transform: (category: Category) => Partial<Category>) => void;
+  bulkUpdateModifiers: (ids: number[], transform: (modifier: Modifier) => Partial<Modifier>) => void;
+  bulkUpdateModifierOptions: (ids: number[], transform: (option: ModifierOption) => Partial<ModifierOption>) => void;
+  /** Update option-surcharge join rows; pairKeys are "modifierId:optionId". */
+  bulkUpdateOptionJoins: (pairKeys: string[], transform: (mmo: ModifierModifierOption) => Partial<ModifierModifierOption>) => void;
+  bulkAddModifiersToItems: (itemIds: number[], modifierIds: number[]) => void;
+  bulkRemoveModifiersFromItems: (itemIds: number[], modifierIds: number[]) => void;
+  bulkAddOptionsToModifiers: (modifierIds: number[], optionIds: number[]) => void;
+  bulkRemoveOptionsFromModifiers: (modifierIds: number[], optionIds: number[]) => void;
+
   // Helper - Get next ID
   getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'modifierGroups' | 'allergens' | 'tags'>) => number;
 }
@@ -917,6 +929,123 @@ export const useMenuStore = create<MenuState>()(
         return {
           items: state.items.map((item) =>
             idSet.has(item.id) ? { ...item, ...transform(item) } : item,
+          ),
+        };
+      }),
+
+      bulkUpdateMenus: (ids, transform) => set((state) => {
+        const idSet = new Set(ids);
+        return {
+          menus: state.menus.map((menu) =>
+            idSet.has(menu.id) ? { ...menu, ...transform(menu) } : menu,
+          ),
+        };
+      }),
+
+      bulkUpdateCategories: (ids, transform) => set((state) => {
+        const idSet = new Set(ids);
+        return {
+          categories: state.categories.map((cat) =>
+            idSet.has(cat.id) ? { ...cat, ...transform(cat) } : cat,
+          ),
+        };
+      }),
+
+      bulkUpdateModifiers: (ids, transform) => set((state) => {
+        const idSet = new Set(ids);
+        return {
+          modifiers: state.modifiers.map((mod) =>
+            idSet.has(mod.id) ? { ...mod, ...transform(mod) } : mod,
+          ),
+        };
+      }),
+
+      bulkUpdateModifierOptions: (ids, transform) => set((state) => {
+        const idSet = new Set(ids);
+        return {
+          modifierOptions: state.modifierOptions.map((opt) =>
+            idSet.has(opt.id) ? { ...opt, ...transform(opt) } : opt,
+          ),
+        };
+      }),
+
+      bulkUpdateOptionJoins: (pairKeys, transform) => set((state) => {
+        const pairSet = new Set(pairKeys);
+        return {
+          modifierModifierOptions: state.modifierModifierOptions.map((mmo) =>
+            pairSet.has(`${mmo.modifierId}:${mmo.modifierOptionId}`)
+              ? { ...mmo, ...transform(mmo) }
+              : mmo,
+          ),
+        };
+      }),
+
+      bulkAddModifiersToItems: (itemIds, modifierIds) => set((state) => {
+        const newLinks: ItemModifier[] = [];
+        for (const itemId of itemIds) {
+          const existing = new Set(
+            state.itemModifiers.filter((im) => im.itemId === itemId).map((im) => im.modifierId),
+          );
+          let order = state.itemModifiers
+            .filter((im) => im.itemId === itemId)
+            .reduce((m, im) => Math.max(m, im.sortOrder), -1);
+          for (const modifierId of modifierIds) {
+            if (existing.has(modifierId)) continue;
+            order += 1;
+            newLinks.push({ itemId, modifierId, sortOrder: order });
+          }
+        }
+        if (newLinks.length === 0) return {};
+        return { itemModifiers: [...state.itemModifiers, ...newLinks] };
+      }),
+
+      bulkRemoveModifiersFromItems: (itemIds, modifierIds) => set((state) => {
+        const itemSet = new Set(itemIds);
+        const modSet = new Set(modifierIds);
+        return {
+          itemModifiers: state.itemModifiers.filter(
+            (im) => !(itemSet.has(im.itemId) && modSet.has(im.modifierId)),
+          ),
+        };
+      }),
+
+      bulkAddOptionsToModifiers: (modifierIds, optionIds) => set((state) => {
+        const newLinks: ModifierModifierOption[] = [];
+        for (const modifierId of modifierIds) {
+          const existing = new Set(
+            state.modifierModifierOptions
+              .filter((mmo) => mmo.modifierId === modifierId)
+              .map((mmo) => mmo.modifierOptionId),
+          );
+          let order = state.modifierModifierOptions
+            .filter((mmo) => mmo.modifierId === modifierId)
+            .reduce((m, mmo) => Math.max(m, mmo.sortOrder), -1);
+          for (const optionId of optionIds) {
+            if (existing.has(optionId)) continue;
+            const option = state.modifierOptions.find((o) => o.id === optionId);
+            if (!option) continue;
+            order += 1;
+            newLinks.push({
+              modifierId,
+              modifierOptionId: optionId,
+              isDefaultSelected: false,
+              maxLimit: option.price ?? 0,
+              optionDisplayName: option.optionName,
+              sortOrder: order,
+              maxQtyPerOption: 1,
+            });
+          }
+        }
+        if (newLinks.length === 0) return {};
+        return { modifierModifierOptions: [...state.modifierModifierOptions, ...newLinks] };
+      }),
+
+      bulkRemoveOptionsFromModifiers: (modifierIds, optionIds) => set((state) => {
+        const modSet = new Set(modifierIds);
+        const optSet = new Set(optionIds);
+        return {
+          modifierModifierOptions: state.modifierModifierOptions.filter(
+            (mmo) => !(modSet.has(mmo.modifierId) && optSet.has(mmo.modifierOptionId)),
           ),
         };
       }),
