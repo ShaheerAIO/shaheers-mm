@@ -36,6 +36,7 @@ export function StationsContent() {
   const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [itemSearch, setItemSearch] = useState('');
+  const [view, setView] = useState<'stations' | 'unmapped'>('stations');
 
   // Fallback: derive stations from items if store.stations is empty
   const derivedStationsFromItems = useMemo((): Station[] => {
@@ -85,6 +86,23 @@ export function StationsContent() {
     );
   }, [items, itemSearch]);
 
+  // An item is "unmapped" when it has no valid (positive, numeric) station ID.
+  const isUnmapped = (stationIds: string) =>
+    !stationIds
+      .split(',')
+      .map((p) => parseInt(p.trim(), 10))
+      .some((n) => !isNaN(n) && n > 0);
+
+  const unmappedCount = useMemo(
+    () => items.filter((item) => isUnmapped(item.stationIds ?? '')).length,
+    [items],
+  );
+
+  const displayedUnmapped = useMemo(
+    () => filteredItems.filter((item) => isUnmapped(item.stationIds ?? '')),
+    [filteredItems],
+  );
+
   const startEditingNumber = (station: Station) => {
     setEditingStationId(station.id);
     setEditingNumber(String(station.id));
@@ -131,6 +149,35 @@ export function StationsContent() {
         />
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {([
+          { id: 'stations', label: 'Stations' },
+          { id: 'unmapped', label: 'Unmapped' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setView(tab.id)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+              view === tab.id
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {tab.label}
+            {tab.id === 'unmapped' && unmappedCount > 0 && (
+              <span className="px-1.5 rounded-full bg-destructive/15 text-destructive text-[10px] font-bold tabular-nums">
+                {unmappedCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {view === 'stations' && (
+      <>
       <p className="text-sm text-muted-foreground">
         Stations are identified by numeric IDs. Station names are configured separately in Prod Ops.
         Changes to item assignments are saved automatically.
@@ -294,6 +341,56 @@ export function StationsContent() {
           <p>No stations yet</p>
           <p className="text-sm mt-1">Click "Add Station" above to create your first station</p>
         </div>
+      )}
+      </>
+      )}
+
+      {view === 'unmapped' && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Items not assigned to any station. Assign each to a station so it routes to the right printer.
+          </p>
+          {displayedUnmapped.length > 0 ? (
+            <div className="space-y-1">
+              {displayedUnmapped.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-muted/50"
+                >
+                  <span className="text-sm truncate flex-1">
+                    {item.itemName}
+                    <span className="text-[10px] text-muted-foreground ml-1">
+                      (${item.itemPrice.toFixed(2)})
+                    </span>
+                  </span>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const id = parseInt(e.target.value, 10);
+                      if (!isNaN(id)) assignItemToStation(item.id, id);
+                    }}
+                    className="input-field h-8 py-0 text-xs w-44 shrink-0"
+                    disabled={effectiveStations.length === 0}
+                  >
+                    <option value="" disabled>
+                      {effectiveStations.length === 0 ? 'No stations' : 'Assign to station...'}
+                    </option>
+                    {effectiveStations.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label ? `${s.label} (${s.id})` : `Station ${s.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Radio className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>{itemSearch.trim() ? 'No matching unmapped items' : 'Every item is assigned to a station'}</p>
+            </div>
+          )}
+        </>
       )}
 
       <AlertDialog open={stationToDelete !== null} onOpenChange={() => setStationToDelete(null)}>

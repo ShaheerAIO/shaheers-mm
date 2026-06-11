@@ -313,22 +313,18 @@ export function CategoriesContent() {
         </div>
       )}
 
-      {/* Columns + bulk panel */}
+      {/* Columns + bulk panel (panel pops in once something is checked, instead of always occupying space) */}
       <div className="flex-1 flex min-h-0">
         <BulkColumns selection={selection} search={search} filters={filters} />
-        <div className="w-[384px] shrink-0 border-l border-border flex flex-col min-h-0">
-          {selected.size > 0 ? (
+        {selected.size > 0 && (
+          <div className="w-[384px] shrink-0 border-l border-border bg-background shadow-2xl flex flex-col min-h-0 animate-in slide-in-from-right duration-200">
             <BulkEditPanel
               selection={selection}
               onClearSelection={clear}
               captureUndo={captureUndo}
             />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground p-6 text-center">
-              Check any menu, category, item, modifier or option to bulk-edit it. Editing applies only to what you check.
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

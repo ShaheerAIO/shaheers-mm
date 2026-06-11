@@ -151,6 +151,19 @@ export function modifiersForItem(itemId: number, data: BulkData): Modifier[] {
     .filter((m): m is Modifier => m !== undefined);
 }
 
+/** Direct nested child modifiers of one modifier (one level).
+ *  Primary: the parent's explicit `modifierIds` CSV. Fallback: children that
+ *  declare this as their `parentModifierId` — Excel exports populate the child's
+ *  parentModifierId but often leave the parent's modifierIds empty. */
+export function nestedModifiersFor(parentModifierId: number, data: BulkData): Modifier[] {
+  const parent = data.modifiers.find((m) => m.id === parentModifierId);
+  const explicit = parseCsvIds(parent?.modifierIds)
+    .map((id) => data.modifiers.find((m) => m.id === id))
+    .filter((m): m is Modifier => m !== undefined);
+  if (explicit.length > 0) return explicit;
+  return data.modifiers.filter((m) => m.parentModifierId === parentModifierId);
+}
+
 export function optionsForModifier(
   modifierId: number,
   data: BulkData,
@@ -202,9 +215,8 @@ function collectClosure(level: BulkLevel, id: number, data: BulkData, acc: BulkT
         acc.pairKeys.add(`${join.modifierId}:${join.modifierOptionId}`);
       }
       // Nested modifiers cascade too (guarded against cycles by the has() check)
-      const mod = data.modifiers.find((m) => m.id === id);
-      parseCsvIds(mod?.modifierIds).forEach((nestedId) =>
-        collectClosure('modifier', nestedId, data, acc),
+      nestedModifiersFor(id, data).forEach((nested) =>
+        collectClosure('modifier', nested.id, data, acc),
       );
       return;
     }
@@ -255,9 +267,16 @@ export interface DrillPath {
   categoryId: number | null;
   itemId: number | null;
   modifierId: number | null;
+  nestedModifierId: number | null;
 }
 
-const EMPTY_DRILL: DrillPath = { menuId: null, categoryId: null, itemId: null, modifierId: null };
+const EMPTY_DRILL: DrillPath = {
+  menuId: null,
+  categoryId: null,
+  itemId: null,
+  modifierId: null,
+  nestedModifierId: null,
+};
 
 export function useBulkSelection() {
   const categories = useMenuStore((s) => s.categories);
@@ -363,17 +382,19 @@ export function useBulkSelection() {
     [selected, targets],
   );
 
-  const drillTo = useCallback((level: BulkLevel, id: number | null) => {
+  const drillTo = useCallback((level: BulkLevel | 'nestedModifier', id: number | null) => {
     setDrill((prev) => {
       switch (level) {
         case 'menu':
-          return { menuId: prev.menuId === id ? null : id, categoryId: null, itemId: null, modifierId: null };
+          return { menuId: prev.menuId === id ? null : id, categoryId: null, itemId: null, modifierId: null, nestedModifierId: null };
         case 'category':
-          return { ...prev, categoryId: prev.categoryId === id ? null : id, itemId: null, modifierId: null };
+          return { ...prev, categoryId: prev.categoryId === id ? null : id, itemId: null, modifierId: null, nestedModifierId: null };
         case 'item':
-          return { ...prev, itemId: prev.itemId === id ? null : id, modifierId: null };
+          return { ...prev, itemId: prev.itemId === id ? null : id, modifierId: null, nestedModifierId: null };
         case 'modifier':
-          return { ...prev, modifierId: prev.modifierId === id ? null : id };
+          return { ...prev, modifierId: prev.modifierId === id ? null : id, nestedModifierId: null };
+        case 'nestedModifier':
+          return { ...prev, nestedModifierId: prev.nestedModifierId === id ? null : id };
         default:
           return prev;
       }

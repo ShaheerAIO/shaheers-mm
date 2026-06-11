@@ -10,6 +10,7 @@ import {
   categoriesForMenuFlat,
   itemsForCategoryScope,
   modifiersForItem,
+  nestedModifiersFor,
   optionsForModifier,
   type useBulkSelection,
 } from './useBulkSelection';
@@ -151,7 +152,12 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
   const activeMenuIds = activeParents('menu', drill.menuId);
   const activeCategoryIds = activeParents('category', drill.categoryId);
   const activeItemIds = activeParents('item', drill.itemId);
+  // Active modifiers = checked + drilled top-level modifier + drilled nested
+  // modifier, so the Options column unions a drilled nested modifier's options.
   const activeModifierIds = activeParents('modifier', drill.modifierId);
+  if (drill.nestedModifierId != null && !activeModifierIds.includes(drill.nestedModifierId)) {
+    activeModifierIds.push(drill.nestedModifierId);
+  }
 
   // ---- Item/option attribute filters (parents pass when any descendant does) ----
   const itemFilterPass = (item: Item): boolean => {
@@ -183,10 +189,13 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
       if (item && nameMatches(item.itemName)) return true;
       return modifiersForItem(itemId, data).some((m) => modMatches(m.id));
     };
-    const modMatches = (modId: number): boolean => {
+    const modMatches = (modId: number, seen = new Set<number>()): boolean => {
+      if (seen.has(modId)) return false;
+      seen.add(modId);
       const mod = data.modifiers.find((m) => m.id === modId);
       if (mod && nameMatches(mod.modifierName)) return true;
-      return optionsForModifier(modId, data).some(({ option }) => nameMatches(option.optionName));
+      if (optionsForModifier(modId, data).some(({ option }) => nameMatches(option.optionName))) return true;
+      return nestedModifiersFor(modId, data).some((nested) => modMatches(nested.id, seen));
     };
     const catMatches = (catId: number): boolean => {
       const cat = data.categories.find((c) => c.id === catId);
@@ -329,10 +338,15 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
         modifierEntries.push(mod);
       }
     }
+    // Keep directly-selected modifiers visible, but only top-level ones —
+    // checked nested modifiers belong in the Nested Mods column, not here.
     for (const id of selectedIdsAt('modifier')) {
       if (seen.has(id)) continue;
       const mod = data.modifiers.find((m) => m.id === id);
-      if (mod) { seen.add(id); modifierEntries.push(mod); }
+      if (mod && !mod.isNested && !mod.parentModifierId) {
+        seen.add(id);
+        modifierEntries.push(mod);
+      }
     }
   }
   const modifierRows: BulkRowData[] = modifierEntries
@@ -349,6 +363,42 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
             </span>
           )}
           {countTag(optionsForModifier(m.id, data).length, 'opt')}
+        </>
+      ),
+      drillable: true,
+    }));
+
+  // ---- Nested modifiers of all active modifiers (recursive, deduped) ----
+  // Start from active top-level modifiers; diving into a nested modifier (it
+  // joins activeModifierIds) surfaces its own children here too.
+  const nestedEntries: { mod: Modifier; depth: number }[] = [];
+  {
+    const seen = new Set<number>();
+    const walk = (parentId: number, depth: number) => {
+      for (const child of nestedModifiersFor(parentId, data)) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
+        nestedEntries.push({ mod: child, depth });
+        walk(child.id, depth + 1);
+      }
+    };
+    for (const modId of activeModifierIds) walk(modId, 0);
+  }
+  const nestedRows: BulkRowData[] = nestedEntries
+    .filter(({ mod }) => anyDescendantMatches('modifier', mod.id))
+    .map(({ mod, depth }) => ({
+      key: bulkKey('modifier', mod.id),
+      id: mod.id,
+      name: mod.modifierName,
+      depth,
+      meta: (
+        <>
+          {mod.modType === 'Required' && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+              Req
+            </span>
+          )}
+          {countTag(optionsForModifier(mod.id, data).length, 'opt')}
         </>
       ),
       drillable: true,
@@ -408,6 +458,7 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
   const showCategories = activeMenuIds.length > 0 || categoryRows.length > 0;
   const showItems = activeCategoryIds.length > 0 || itemRows.length > 0;
   const showModifiers = activeItemIds.length > 0 || modifierRows.length > 0;
+  const showNested = nestedRows.length > 0 || drill.nestedModifierId != null;
   const showOptions = activeModifierIds.length > 0 || optionRows.length > 0;
 
   return (
@@ -459,6 +510,19 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
           onDrill={(id) => drillTo('modifier', id)}
           emptyText="No modifiers on the checked items"
           widthClass="w-[260px]"
+          {...columnProps}
+        />
+      )}
+      {showNested && (
+        <BulkColumn
+          title="Nested Mods"
+          accent={LEVEL_COLORS.modifier}
+          rows={nestedRows}
+          count={nestedRows.length}
+          drilledId={drill.nestedModifierId}
+          onDrill={(id) => drillTo('nestedModifier', id)}
+          emptyText="No nested modifiers"
+          widthClass="w-[240px]"
           {...columnProps}
         />
       )}
