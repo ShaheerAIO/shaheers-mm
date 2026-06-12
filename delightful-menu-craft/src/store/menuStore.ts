@@ -21,6 +21,7 @@ import type {
   ViewMode,
   AiPatch,
 } from '@/types/menu';
+import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 
 // System tags are always present in the store and cannot be deleted.
 export const SYSTEM_TAGS: Tag[] = [
@@ -406,7 +407,7 @@ export const useMenuStore = create<MenuState>()(
           id: 1,
           menuName: 'Main Menu',
           posDisplayName: 'Main',
-          posButtonColor: '#f97316',
+          posButtonColor: DEFAULT_MENU_COLOR,
           picture: '',
           sortOrder: 1,
         }],
@@ -1085,7 +1086,7 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 14,
+      version: 15,
       migrate(persisted: unknown, fromVersion: number) {
         const state = persisted as Record<string, unknown>;
 
@@ -1345,6 +1346,25 @@ export const useMenuStore = create<MenuState>()(
           // The 'stats' tab was replaced by 'settings'. A persisted activeTab of
           // 'stats' would leave MainContent with no matching route (blank screen).
           if (state.activeTab === 'stats') state.activeTab = 'settings';
+        }
+
+        if (fromVersion < 15) {
+          // Snap menu/category colors to the POS-allowed palette. Older data used
+          // arbitrary Tailwind colors (#f97316, #6366f1, …) the POS importer rejects.
+          const { snapToMenuColor, snapToCategoryColor } =
+            require('@/lib/posColors') as typeof import('@/lib/posColors');
+          if (Array.isArray(state.menus)) {
+            state.menus = (state.menus as Record<string, unknown>[]).map((m) => ({
+              ...m,
+              posButtonColor: snapToMenuColor(typeof m.posButtonColor === 'string' ? m.posButtonColor : ''),
+            }));
+          }
+          if (Array.isArray(state.categories)) {
+            state.categories = (state.categories as Record<string, unknown>[]).map((c) => ({
+              ...c,
+              color: snapToCategoryColor(typeof c.color === 'string' ? c.color : ''),
+            }));
+          }
         }
 
         return persisted as MenuState;

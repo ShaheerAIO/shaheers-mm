@@ -66,13 +66,18 @@ const HEADERS = {
 };
 
 // Convert data array to worksheet with headers (maps each row object by header key).
+// Blank values (undefined/null/'') become ABSENT cells, not empty-string cells:
+// aoa_to_sheet skips nulls. Real POS exports omit blank cells entirely, and the
+// POS-side validator flags any cell that exists but is empty — so writing ''
+// here makes otherwise-valid files fail import.
 const createSheet = <T extends object>(data: readonly T[], headers: string[]): XLSX.WorkSheet => {
   const rows: unknown[][] = [headers];
   data.forEach((item) => {
     const record = item as Record<string, unknown>;
     rows.push(headers.map((header) => {
       const value = record[header];
-      if (value === undefined || value === null) return '';
+      if (value === undefined || value === null) return null;
+      if (typeof value === 'string' && value.trim() === '') return null;
       return value;
     }));
   });
@@ -141,7 +146,33 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
     settingId: sid.get(i.id) ?? '', visibility: serializeVisibility(i),
   }));
 
-const buildModifierRows = (mods: Modifier[]) =>
+// Nested-modifier structure: a child→parent map derived from each modifier's
+// `modifierIds` list, plus the set of modifier ids that are nested children.
+// The POS forbids linking nested modifiers directly to items/categories and
+// requires each nested modifier to point at its parent.
+interface ModifierNesting {
+  childToParent: Map<number, number>;
+  nestedIds: Set<number>;
+}
+const buildModifierNesting = (mods: Modifier[]): ModifierNesting => {
+  const childToParent = new Map<number, number>();
+  for (const m of mods) {
+    String(m.modifierIds || '')
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n > 0)
+      .forEach((childId) => { if (!childToParent.has(childId)) childToParent.set(childId, m.id); });
+  }
+  const nestedIds = new Set<number>();
+  for (const m of mods) if (m.isNested || childToParent.has(m.id)) nestedIds.add(m.id);
+  return { childToParent, nestedIds };
+};
+
+// Default prefix for modifiers that have none — the app never sets one, but the
+// POS requires it non-empty. "Select any" matches real POS exports.
+const resolvePrefix = (s: string): string => ((s || '').trim() ? s : 'Select any');
+
+const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
   mods.map((m) => {
     // modType is required by the POS importer; fall back when blank (e.g. nested
     // modifiers). isOptional is the boolean form derived from the resolved modType.
@@ -150,14 +181,18 @@ const buildModifierRows = (mods: Modifier[]) =>
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
       isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
       isOptional: modType !== 'Required', // POS expects a boolean
-      canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers, multiSelect: m.multiSelect,
+      // POS rule: canGuestSelectMoreModifiers cannot be TRUE when addNested is TRUE.
+      canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers && !m.addNested, multiSelect: m.multiSelect,
       limitIndividualModifierSelection: m.limitIndividualModifierSelection,
       // POS format: when No Max Limit is on, min/max are 1/1 and noMaxSelection carries the "unlimited" meaning.
       minSelector: m.noMaxSelection ? 1 : m.minSelector, maxSelector: m.noMaxSelection ? 1 : m.maxSelector,
       noMaxSelection: m.noMaxSelection,
-      prefix: m.prefix, pizzaSelection: m.pizzaSelection, stockStatus: true,
+      prefix: resolvePrefix(m.prefix), pizzaSelection: m.pizzaSelection, stockStatus: true,
       price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
-      parentModifierId: m.parentModifierId || '', isSizeModifier: m.isSizeModifier, modType,
+      // Nested modifiers must reference their parent; backfill from the parent's
+      // modifierIds when the modifier's own parentModifierId wasn't set.
+      parentModifierId: m.parentModifierId || nesting.childToParent.get(m.id) || '',
+      isSizeModifier: m.isSizeModifier, modType,
     };
   });
 
@@ -195,11 +230,48 @@ const buildModifierModifierOptionRows = (joins: ModifierModifierOption[]) =>
     optionDisplayName: j.optionDisplayName, sortOrder: j.sortOrder,
   }));
 
+// POS icon catalog ids, keyed by lowercase tag/allergen name. Derived from real
+// POS export files (identical across businesses): tag icons 1–12, allergen
+// icons 13–24. Names not in the catalog fall back to the first icon of their
+// kind — iconId must be a valid id, never blank.
+const TAG_ICON_IDS: Record<string, number> = {
+  vegan: 1, chicken: 2, beef: 3, seafood: 4, spicy: 5, glutenfree: 6,
+  kosher: 7, halal: 8, beer: 9, wine: 10, cocktail: 11, 'non-alcoholic': 12,
+  alcohol: 10, 'contains alcohol': 10,
+};
+const ALLERGEN_ICON_IDS: Record<string, number> = {
+  milk: 13, eggs: 14, wheat: 15, soybean: 16, mustard: 17, sesame: 18,
+  celery: 19, crustaceans: 20, fish: 21, 'mussels/oyster': 22, 'tree nuts': 23, peanuts: 24,
+};
+
 const buildAllergenRows = (allergens: Allergen[]) =>
-  allergens.map((a) => ({ id: a.id, allergenName: a.name, iconId: '', isDefault: false }));
+  allergens.map((a) => ({
+    id: a.id, allergenName: a.name,
+    iconId: ALLERGEN_ICON_IDS[a.name.trim().toLowerCase()] ?? 13,
+    isDefault: false,
+  }));
 
 const buildTagRows = (tags: Tag[]) =>
-  tags.map((t) => ({ id: t.id, tagName: t.name, iconId: '', isDefault: t.isSystem === true }));
+  tags.map((t) => ({
+    id: t.id, tagName: t.name,
+    iconId: TAG_ICON_IDS[t.name.trim().toLowerCase()] ?? 1,
+    isDefault: t.isSystem === true,
+  }));
+
+// The POS importer requires sortOrder to be unique within its group (e.g. per
+// itemId in Item Modifiers, per modifierId in Modifier ModifierOptions).
+// Renumber 1..n within each group, preserving the existing relative order.
+const renumberSortOrder = <T extends { sortOrder: number }>(rows: readonly T[], groupKey: (r: T) => number): T[] => {
+  const counters = new Map<number, number>();
+  return [...rows]
+    .sort((a, b) => groupKey(a) - groupKey(b) || a.sortOrder - b.sortOrder)
+    .map((r) => {
+      const key = groupKey(r);
+      const next = (counters.get(key) ?? 0) + 1;
+      counters.set(key, next);
+      return { ...r, sortOrder: next };
+    });
+};
 
 // ---------------------------------------------------------------------------
 // Workbook assembly (shared by exportToExcel and exportToBlob)
@@ -208,22 +280,34 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   const workbook = XLSX.utils.book_new();
   const { settings, menuSid, catSid, itemSid } = buildSettings(data);
   const optionPriceMap = buildOptionPriceMap(data.modifierModifierOptions);
+  const nesting = buildModifierNesting(data.modifiers);
 
   const append = <T extends object>(rows: readonly T[], headers: string[], name: string) =>
     XLSX.utils.book_append_sheet(workbook, createSheet(rows, headers), name);
 
+  // The POS only allows top-level modifiers to be linked to items/categories;
+  // drop any join row pointing at a nested modifier.
+  const itemModifiers = renumberSortOrder(
+    data.itemModifiers.filter((im) => !nesting.nestedIds.has(im.modifierId)),
+    (im) => im.itemId,
+  );
+  const categoryModifiers = data.categoryModifiers.filter((cm) => !nesting.nestedIds.has(cm.modifierId));
+
   append(buildMenuRows(data.menus, menuSid), HEADERS.MENU, SHEET_NAMES.MENU);
   append(buildCategoryRows(data.categories, catSid), HEADERS.CATEGORY, SHEET_NAMES.CATEGORY);
   append(buildItemRows(data.items, itemSid), HEADERS.ITEM, SHEET_NAMES.ITEM);
-  append(data.itemModifiers, HEADERS.ITEM_MODIFIERS, SHEET_NAMES.ITEM_MODIFIERS);
+  append(itemModifiers, HEADERS.ITEM_MODIFIERS, SHEET_NAMES.ITEM_MODIFIERS);
   append(data.categoryModifierGroups, HEADERS.CATEGORY_MODIFIER_GROUPS, SHEET_NAMES.CATEGORY_MODIFIER_GROUPS);
-  append(data.categoryModifiers, HEADERS.CATEGORY_MODIFIERS, SHEET_NAMES.CATEGORY_MODIFIERS);
+  append(categoryModifiers, HEADERS.CATEGORY_MODIFIERS, SHEET_NAMES.CATEGORY_MODIFIERS);
   append(data.categoryItems, HEADERS.CATEGORY_ITEMS, SHEET_NAMES.CATEGORY_ITEMS);
   append(data.itemModifierGroups, HEADERS.ITEM_MODIFIER_GROUP, SHEET_NAMES.ITEM_MODIFIER_GROUP);
   append(data.modifierGroups, HEADERS.MODIFIER_GROUP, SHEET_NAMES.MODIFIER_GROUP);
-  append(buildModifierRows(data.modifiers), HEADERS.MODIFIER, SHEET_NAMES.MODIFIER);
+  append(buildModifierRows(data.modifiers, nesting), HEADERS.MODIFIER, SHEET_NAMES.MODIFIER);
   append(buildModifierOptionRows(data.modifierOptions, optionPriceMap), HEADERS.MODIFIER_OPTION, SHEET_NAMES.MODIFIER_OPTION);
-  append(buildModifierModifierOptionRows(data.modifierModifierOptions), HEADERS.MODIFIER_MODIFIER_OPTIONS, SHEET_NAMES.MODIFIER_MODIFIER_OPTIONS);
+  append(
+    renumberSortOrder(buildModifierModifierOptionRows(data.modifierModifierOptions), (r) => r.modifierId),
+    HEADERS.MODIFIER_MODIFIER_OPTIONS, SHEET_NAMES.MODIFIER_MODIFIER_OPTIONS,
+  );
   append(buildAllergenRows(data.allergens), HEADERS.ALLERGEN, SHEET_NAMES.ALLERGEN);
   append(buildTagRows(data.tags), HEADERS.TAG, SHEET_NAMES.TAG);
   append(settings, HEADERS.SETTING, SHEET_NAMES.SETTING);

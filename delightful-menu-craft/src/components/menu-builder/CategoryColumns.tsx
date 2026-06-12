@@ -4,6 +4,7 @@ import { CategoryColumn } from './CategoryColumn';
 import { Plus, Upload } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
+import { DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
 
 export function CategoryColumns() {
   const {
@@ -83,7 +84,7 @@ export function CategoryColumns() {
       categoryName: 'New Category',
       posDisplayName: 'New Category',
       kdsDisplayName: 'New Category',
-      color: '#6366f1',
+      color: DEFAULT_CATEGORY_COLOR,
       image: '',
       kioskImage: '',
       parentCategoryId: null,

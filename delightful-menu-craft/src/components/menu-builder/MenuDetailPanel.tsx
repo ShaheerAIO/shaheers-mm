@@ -15,6 +15,8 @@ import {
   type VisibilityGroup,
 } from '@/lib/visibility';
 import type { Menu } from '@/types/menu';
+import { ColorPalettePicker } from '@/components/ColorPalettePicker';
+import { MENU_COLOR_PALETTE, DEFAULT_MENU_COLOR } from '@/lib/posColors';
 
 type VisDraft = Pick<Menu,
   'visibilityPos' | 'visibilityKiosk' | 'visibilityQr' |
@@ -66,7 +68,7 @@ export function MenuDetailPanel({ menu }: Props) {
   const [draft, setDraft] = useState<Draft>(() => ({
     menuName: menu.menuName,
     posDisplayName: menu.posDisplayName,
-    posButtonColor: menu.posButtonColor || '#f97316',
+    posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
     visibilityPos: menu.visibilityPos ?? true,
     visibilityKiosk: menu.visibilityKiosk ?? true,
     visibilityQr: menu.visibilityQr ?? true,
@@ -85,7 +87,7 @@ export function MenuDetailPanel({ menu }: Props) {
     setDraft({
       menuName: menu.menuName,
       posDisplayName: menu.posDisplayName,
-      posButtonColor: menu.posButtonColor || '#f97316',
+      posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityQr: menu.visibilityQr ?? true,
@@ -103,7 +105,7 @@ export function MenuDetailPanel({ menu }: Props) {
   const isDirty =
     draft.menuName !== menu.menuName ||
     draft.posDisplayName !== menu.posDisplayName ||
-    draft.posButtonColor !== (menu.posButtonColor || '#f97316') ||
+    draft.posButtonColor !== (menu.posButtonColor || DEFAULT_MENU_COLOR) ||
     draft.visibilityPos !== (menu.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (menu.visibilityKiosk ?? true) ||
     draft.visibilityQr !== (menu.visibilityQr ?? true) ||
@@ -123,7 +125,7 @@ export function MenuDetailPanel({ menu }: Props) {
     setDraft({
       menuName: menu.menuName,
       posDisplayName: menu.posDisplayName,
-      posButtonColor: menu.posButtonColor || '#f97316',
+      posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityQr: menu.visibilityQr ?? true,
@@ -178,11 +180,11 @@ export function MenuDetailPanel({ menu }: Props) {
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">POS Button Color</p>
             <div className="flex items-center gap-3">
-              <input
-                type="color"
+              <ColorPalettePicker
+                palette={MENU_COLOR_PALETTE}
                 value={draft.posButtonColor}
-                onChange={(e) => setDraft((d) => ({ ...d, posButtonColor: e.target.value }))}
-                className="h-8 w-12 rounded cursor-pointer border border-border p-0.5 bg-transparent"
+                onChange={(color) => setDraft((d) => ({ ...d, posButtonColor: color }))}
+                title="POS button color"
               />
               <span className="text-xs text-muted-foreground font-mono">{draft.posButtonColor}</span>
               <span

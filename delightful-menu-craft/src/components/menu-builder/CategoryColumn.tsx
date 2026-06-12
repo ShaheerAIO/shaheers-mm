@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
 import { AddItemsModal } from './AddItemsModal';
+import { ColorPalettePicker } from '@/components/ColorPalettePicker';
+import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR, pickUnusedCategoryColor } from '@/lib/posColors';
 import { defaultVisibility, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
 import {
   AlertDialog,
@@ -16,19 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-const SUBCAT_PALETTE = [
-  '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6',
-  '#8b5cf6', '#ec4899', '#ef4444', '#06b6d4', '#84cc16',
-  '#f59e0b', '#10b981', '#6366f1', '#d946ef', '#0ea5e9',
-];
-
-function pickSubcatColor(siblingColors: string[]): string {
-  const used = new Set(siblingColors.map((c) => c.toLowerCase()));
-  const unused = SUBCAT_PALETTE.filter((c) => !used.has(c.toLowerCase()));
-  const pool = unused.length > 0 ? unused : SUBCAT_PALETTE;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
 
 interface CategoryColumnProps {
   category: Category;
@@ -224,7 +213,7 @@ export function CategoryColumn({
       categoryName: 'New Subcategory',
       posDisplayName: 'New Subcategory',
       kdsDisplayName: 'New Subcategory',
-      color: pickSubcatColor(siblingColors),
+      color: pickUnusedCategoryColor(siblingColors),
       image: '',
       kioskImage: '',
       parentCategoryId: category.id,
@@ -330,13 +319,12 @@ export function CategoryColumn({
         <div className="category-header flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
-            <input
-              type="color"
-              value={category.color?.trim() || '#f97316'}
-              onChange={(e) => updateCategory(category.id, { color: e.target.value })}
-              className="h-5 w-5 flex-shrink-0 cursor-pointer rounded border border-border/50 bg-transparent p-0 [appearance:none] [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-0"
+            <ColorPalettePicker
+              palette={CATEGORY_COLOR_PALETTE}
+              value={category.color?.trim() || DEFAULT_CATEGORY_COLOR}
+              onChange={(color) => updateCategory(category.id, { color })}
+              triggerClassName="h-5 w-5 flex-shrink-0 rounded-full"
               title="Category color"
-              aria-label="Category color"
             />
             {isEditingName ? (
               <input

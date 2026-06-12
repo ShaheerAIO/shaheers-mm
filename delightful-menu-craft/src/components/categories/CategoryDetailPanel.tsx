@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Check, X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
+import { ColorPalettePicker } from '@/components/ColorPalettePicker';
+import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
@@ -86,7 +88,7 @@ export function CategoryDetailPanel({ category }: Props) {
     categoryName: category.categoryName,
     posDisplayName: category.posDisplayName,
     kdsDisplayName: category.kdsDisplayName,
-    color: category.color || '#f97316',
+    color: category.color || DEFAULT_CATEGORY_COLOR,
     visibilityPos: category.visibilityPos ?? true,
     visibilityKiosk: category.visibilityKiosk ?? true,
     visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -144,7 +146,7 @@ export function CategoryDetailPanel({ category }: Props) {
       categoryName: category.categoryName,
       posDisplayName: category.posDisplayName,
       kdsDisplayName: category.kdsDisplayName,
-      color: category.color || '#f97316',
+      color: category.color || DEFAULT_CATEGORY_COLOR,
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -174,7 +176,7 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.categoryName !== category.categoryName ||
     draft.posDisplayName !== category.posDisplayName ||
     draft.kdsDisplayName !== category.kdsDisplayName ||
-    draft.color !== (category.color || '#f97316') ||
+    draft.color !== (category.color || DEFAULT_CATEGORY_COLOR) ||
     draft.visibilityPos !== (category.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (category.visibilityKiosk ?? true) ||
     draft.visibilityMenuBoard !== (category.visibilityMenuBoard ?? true) ||
@@ -200,7 +202,7 @@ export function CategoryDetailPanel({ category }: Props) {
       categoryName: category.categoryName,
       posDisplayName: category.posDisplayName,
       kdsDisplayName: category.kdsDisplayName,
-      color: category.color || '#f97316',
+      color: category.color || DEFAULT_CATEGORY_COLOR,
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -309,11 +311,11 @@ export function CategoryDetailPanel({ category }: Props) {
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Color</p>
             <div className="flex items-center gap-3">
-              <input
-                type="color"
+              <ColorPalettePicker
+                palette={CATEGORY_COLOR_PALETTE}
                 value={draft.color}
-                onChange={(e) => setDraft((d) => ({ ...d, color: e.target.value }))}
-                className="h-8 w-12 rounded cursor-pointer border border-border p-0.5 bg-transparent"
+                onChange={(color) => setDraft((d) => ({ ...d, color }))}
+                title="Category color"
               />
               <span className="text-xs text-muted-foreground font-mono">{draft.color}</span>
               <span

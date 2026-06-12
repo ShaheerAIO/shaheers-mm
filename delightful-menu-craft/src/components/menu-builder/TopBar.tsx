@@ -3,6 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
+import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import { toast } from 'sonner';
 import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
 import {
@@ -92,7 +93,7 @@ export function TopBar() {
       id,
       menuName: label,
       posDisplayName: label,
-      posButtonColor: '#f97316',
+      posButtonColor: DEFAULT_MENU_COLOR,
       picture: '',
       sortOrder,
       visibilityPos: true,
