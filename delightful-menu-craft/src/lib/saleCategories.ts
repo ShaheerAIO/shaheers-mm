@@ -5,7 +5,7 @@ export const SALE_CATEGORIES = [
   'Liquor Sales',
   'Beer Sales',
   'Wine Sales',
-  'Non-Alcoholic Beverage',
+  'Non-Alcoholic Beverages Sales',
   'Retail',
   'Non-Taxable',
 ] as const;
