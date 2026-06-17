@@ -44,12 +44,15 @@ Admins can invite users and reset passwords from the in-app **Team** screen
 3. **Auth → SMTP (Project Settings → Auth):** configure an SMTP sender so invite
    and password-reset emails actually send. The built-in sender works but is
    rate-limited (~few/hour) and may land in spam.
-4. **Deploy the invite function:**
+4. **Deploy the invite + remove functions:**
    ```bash
    supabase functions deploy invite-user
+   supabase functions deploy remove-user
    ```
-   No secret needed — it uses the built-in `SUPABASE_SERVICE_ROLE_KEY`. It checks
-   that the caller is an `admin` before inviting.
+   No secret needed — they use the built-in `SUPABASE_SERVICE_ROLE_KEY` and check
+   that the caller is an `admin`. `remove-user` also refuses to delete your own
+   account. (Removing a user needs the `on delete set null` rule on
+   `workspaces.created_by/updated_by` — re-run `schema.sql` to apply it.)
 
 How it works: invite a teammate (choosing **member** or **admin**) → they get an
 email → the link lands on `/set-password` where they pick a password → done.
