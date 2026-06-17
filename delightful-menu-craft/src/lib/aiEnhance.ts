@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { supabase } from '@/lib/supabase';
 import type { Item, Category, CategoryItem, AiEnhanceResult } from '@/types/menu';
 
 const MODEL = 'claude-haiku-4-5';
@@ -111,27 +111,18 @@ function parseResponse(text: string): AiEnhanceResult {
 }
 
 export async function enhanceMenu(ctx: MenuContext): Promise<AiEnhanceResult> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
-  if (!apiKey) {
-    throw new Error(
-      'VITE_ANTHROPIC_API_KEY is not set. Add it to your .env.local file and restart the dev server.',
-    );
-  }
-
-  // dangerouslyAllowBrowser is required for browser clients.
-  // The API key is intentionally exposed client-side for this internal tool.
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-
   const payload = buildPayload(ctx);
   const prompt = buildPrompt(payload);
 
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    messages: [{ role: 'user', content: prompt }],
+  // The Anthropic key lives in the `ai-enhance` Edge Function, not the browser.
+  // supabase-js attaches the user's session token; only logged-in users can call it.
+  const { data, error } = await supabase.functions.invoke('ai-enhance', {
+    body: { prompt, model: MODEL, max_tokens: 16000 },
   });
 
-  const text =
-    message.content.find((c) => c.type === 'text')?.text ?? '';
+  if (error) throw new Error(`AI enhance request failed: ${error.message}`);
+  if (data?.error) throw new Error(data.error);
+
+  const text = (data as { text?: string })?.text ?? '';
   return parseResponse(text);
 }

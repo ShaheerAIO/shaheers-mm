@@ -5,7 +5,10 @@ import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import { toast } from 'sonner';
-import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown } from 'lucide-react';
+import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useWorkspaceSession, closeWorkspace } from '@/lib/workspaceSync';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +47,15 @@ export function TopBar() {
     (editingMenuId ? CATEGORY_PANEL_WIDTH_PX : 0) +
     (isCreatingModifier ? RIGHT_PANEL_WIDTH_PX : 0) +
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
+
+  const navigate = useNavigate();
+  const { currentName, status } = useWorkspaceSession();
+  const { signOut } = useAuth();
+
+  const handleSwitchProject = () => {
+    closeWorkspace();
+    navigate('/workspaces');
+  };
 
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [confirmDeleteMenuOpen, setConfirmDeleteMenuOpen] = useState(false);
@@ -160,6 +172,25 @@ export function TopBar() {
       style={{ paddingRight: `calc(1rem + ${panelWidth}px)` }}
     >
       <div className="flex items-center gap-3 flex-shrink-0">
+        {/* Current workspace + save status + switch */}
+        <button
+          type="button"
+          onClick={handleSwitchProject}
+          title="Switch project"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors max-w-[200px]"
+        >
+          <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{currentName ?? 'Projects'}</span>
+        </button>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground w-[64px]">
+          {status === 'saving' && (<><Loader2 className="w-3 h-3 animate-spin" /> Saving</>)}
+          {status === 'saved' && (<><Check className="w-3 h-3 text-green-500" /> Saved</>)}
+          {status === 'error' && (<><AlertTriangle className="w-3 h-3 text-destructive" /> Error</>)}
+          {status === 'conflict' && (<><AlertTriangle className="w-3 h-3 text-amber-500" /> Conflict</>)}
+        </span>
+
+        <div className="w-px h-6 bg-border" />
+
         {/* File Dropdown (New / Import / Export) */}
         <div ref={fileDropdownRef} className="relative">
           <input
@@ -319,6 +350,15 @@ export function TopBar() {
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          title="Sign out"
+          className="flex items-center justify-center h-9 w-9 rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Delete current menu */}

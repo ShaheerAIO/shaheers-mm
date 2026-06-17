@@ -4,8 +4,11 @@ import {
   Radio,
   SlidersHorizontal,
   Layers,
+  Users,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useMenuStore } from '@/store/menuStore';
+import { useAuth } from '@/contexts/AuthContext';
 import type { TabType } from '@/types/menu';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +22,8 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
 
 export function LeftSidebar() {
   const { activeTab, setActiveTab } = useMenuStore();
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <aside className="w-[60px] h-screen bg-sidebar-bg flex flex-col items-center py-4 border-r border-sidebar-hover">
@@ -27,7 +32,7 @@ export function LeftSidebar() {
           <span className="text-primary-foreground font-bold text-sm">AIO</span>
         </div>
       </div>
-      
+
       <nav className="sidebar-nav flex-1">
         {tabs.map((tab) => (
           <button
@@ -43,6 +48,17 @@ export function LeftSidebar() {
           </button>
         ))}
       </nav>
+
+      {isAdmin && (
+        <button
+          onClick={() => navigate('/team')}
+          className="sidebar-tab"
+          title="Team"
+        >
+          <Users className="sidebar-tab-icon" />
+          <span className="sidebar-tab-label">Team</span>
+        </button>
+      )}
     </aside>
   );
 }
