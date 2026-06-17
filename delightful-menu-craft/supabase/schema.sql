@@ -24,6 +24,17 @@ create table if not exists public.workspaces (
   updated_at     timestamptz not null default now()
 );
 
+-- Let a user be deleted without blocking on workspaces they touched: null the
+-- reference instead of erroring. (Inline FKs default to NO ACTION, which would
+-- make `auth.admin.deleteUser` fail for anyone who created/updated a workspace.)
+-- Idempotent: drop-then-recreate so re-running the schema applies the rule.
+alter table public.workspaces drop constraint if exists workspaces_created_by_fkey;
+alter table public.workspaces add constraint workspaces_created_by_fkey
+  foreign key (created_by) references auth.users(id) on delete set null;
+alter table public.workspaces drop constraint if exists workspaces_updated_by_fkey;
+alter table public.workspaces add constraint workspaces_updated_by_fkey
+  foreign key (updated_by) references auth.users(id) on delete set null;
+
 -- Immutable audit trail (who did what, when) --------------------------------
 create table if not exists public.audit_log (
   id             bigint generated always as identity primary key,

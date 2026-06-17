@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Mail, KeyRound, Shield } from 'lucide-react';
+import { ArrowLeft, Loader2, Mail, KeyRound, Shield, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -64,6 +64,20 @@ export default function Team() {
     else toast.success(`Password reset email sent to ${targetEmail}.`);
   };
 
+  const handleRemove = async (row: ProfileRow) => {
+    const label = row.email ?? 'this user';
+    if (!confirm(`Remove ${label}? They lose access immediately. This cannot be undone.`)) return;
+    const { data, error } = await supabase.functions.invoke('remove-user', {
+      body: { userId: row.id },
+    });
+    if (error || data?.error) {
+      toast.error(`Could not remove: ${data?.error ?? error?.message}`);
+      return;
+    }
+    toast.success(`Removed ${label}.`);
+    void refresh();
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-2xl">
@@ -76,7 +90,7 @@ export default function Team() {
 
         <h1 className="mb-1 text-2xl font-semibold">Team</h1>
         <p className="mb-6 text-sm text-muted-foreground">
-          Invite teammates and manage access. Admins can invite users and reset passwords.
+          Invite teammates and manage access. Admins can invite users, reset passwords, and remove access.
         </p>
 
         <Card className="mb-6 p-4">
@@ -123,9 +137,21 @@ export default function Team() {
                     {r.role}
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => void handleReset(r.email)}>
-                  <KeyRound className="mr-2 h-4 w-4" /> Reset password
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => void handleReset(r.email)}>
+                    <KeyRound className="mr-2 h-4 w-4" /> Reset password
+                  </Button>
+                  {r.id !== user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleRemove(r)}
+                      aria-label={`Remove ${r.email ?? 'user'}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
+                </div>
               </Card>
             ))}
           </div>
