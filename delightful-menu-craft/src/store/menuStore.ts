@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   Menu,
   Category,
@@ -117,6 +117,10 @@ interface MenuState {
   exportData: () => ExcelMenuData;
   clearData: () => void;
   startFresh: () => void;
+  /** Snapshot the data slice (no UI state) for saving to a cloud workspace. */
+  serializeWorkspace: () => WorkspaceData;
+  /** Load a cloud workspace blob into the store, migrating from an older schema if needed. */
+  hydrateWorkspace: (data: unknown, schemaVersion: number) => void;
   
   // Actions - Menus
   addMenu: (menu: Menu) => void;
@@ -232,6 +236,336 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
   }
   return set;
 };
+
+/** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
+export const STORE_VERSION = 15;
+
+/** The data fields that make up a saved workspace (everything except UI state). */
+export const WORKSPACE_DATA_KEYS = [
+  'menus', 'categories', 'items', 'itemModifiers', 'categoryModifierGroups',
+  'categoryModifiers', 'categoryItems', 'itemModifierGroups', 'modifierGroups',
+  'modifiers', 'modifierOptions', 'modifierModifierOptions', 'allergens', 'tags',
+  'stations', 'taxRate',
+] as const;
+
+export type WorkspaceData = Pick<MenuState, typeof WORKSPACE_DATA_KEYS[number]>;
+
+/** A blank workspace blob for a brand-new project (one empty "Main Menu"). */
+export function createFreshWorkspaceData(): WorkspaceData {
+  return {
+    menus: [{
+      id: 1,
+      menuName: 'Main Menu',
+      posDisplayName: 'Main',
+      posButtonColor: DEFAULT_MENU_COLOR,
+      picture: '',
+      sortOrder: 1,
+    }],
+    categories: [],
+    items: [],
+    itemModifiers: [],
+    categoryModifierGroups: [],
+    categoryModifiers: [],
+    categoryItems: [],
+    itemModifierGroups: [],
+    modifierGroups: [],
+    modifiers: [],
+    modifierOptions: [],
+    modifierModifierOptions: [],
+    allergens: [],
+    tags: [...SYSTEM_TAGS],
+    stations: [],
+    taxRate: 10,
+  };
+}
+
+/**
+ * Upgrade a persisted/blob state from an older schema version to the current one.
+ * Shared by the (session) persist middleware and the Supabase workspace hydrator,
+ * so cloud-stored blobs upgrade on load exactly like local ones.
+ */
+export function runMigrations(persisted: unknown, fromVersion: number): MenuState {
+  const state = persisted as Record<string, unknown>;
+
+  if (fromVersion < 2) {
+    // Migrate items: replace old visibility + timing fields with new ones
+    const { parseDaySchedules, serializeDaySchedules, defaultVisibility } =
+      require('@/lib/visibility') as typeof import('@/lib/visibility');
+
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((item) => {
+        const vis = defaultVisibility();
+        if (typeof item.visibilityPos === 'boolean')   vis.visibilityPos   = item.visibilityPos;
+        if (typeof item.visibilityKiosk === 'boolean') vis.visibilityKiosk = item.visibilityKiosk;
+        const online = typeof item.visibilityOnline === 'boolean' ? item.visibilityOnline : true;
+        const third  = typeof item.visibilityThirdParty === 'boolean' ? item.visibilityThirdParty : true;
+        vis.visibilityQr        = typeof item.visibilityQr        === 'boolean' ? item.visibilityQr        : online;
+        vis.visibilityWebsite   = typeof item.visibilityWebsite   === 'boolean' ? item.visibilityWebsite   : online;
+        vis.visibilityMobileApp = typeof item.visibilityMobileApp === 'boolean' ? item.visibilityMobileApp : online;
+        vis.visibilityDoordash  = typeof item.visibilityDoordash  === 'boolean' ? item.visibilityDoordash  : third;
+
+        const daySchedules = typeof item.daySchedules === 'string' && item.daySchedules
+          ? item.daySchedules
+          : serializeDaySchedules(parseDaySchedules(
+              undefined,
+              typeof item.availableDays      === 'string' ? item.availableDays      : undefined,
+              typeof item.availableTimeStart === 'string' ? item.availableTimeStart : undefined,
+              typeof item.availableTimeEnd   === 'string' ? item.availableTimeEnd   : undefined,
+            ));
+
+        const migrated = { ...item, ...vis, daySchedules };
+        delete migrated.visibilityOnline;
+        delete migrated.visibilityThirdParty;
+        delete migrated.availableDays;
+        delete migrated.availableTimeStart;
+        delete migrated.availableTimeEnd;
+        return migrated;
+      });
+    }
+
+    if (Array.isArray(state.modifiers)) {
+      const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+      state.modifiers = (state.modifiers as Record<string, unknown>[]).map((mod) => ({
+        ...dv(),
+        ...mod,
+      }));
+    }
+
+    if (Array.isArray(state.modifierOptions)) {
+      const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+      state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((opt) => ({
+        ...dv(),
+        ...opt,
+      }));
+    }
+  }
+
+  if (fromVersion < 3) {
+    // Migrate stations: convert any string tokens in item.stationIds to numeric IDs
+    // and build a Station[] catalog in state.stations.
+    const tokenToId = new Map<string, number>();
+    let nextId = 1;
+
+    // First pass: claim IDs for already-numeric tokens
+    if (Array.isArray(state.items)) {
+      for (const item of state.items as Record<string, unknown>[]) {
+        const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+        for (const raw of csv.split(',')) {
+          const token = raw.trim();
+          if (!token || tokenToId.has(token)) continue;
+          const n = parseInt(token, 10);
+          if (!isNaN(n) && n > 0 && String(n) === token) {
+            tokenToId.set(token, n);
+            if (n >= nextId) nextId = n + 1;
+          }
+        }
+      }
+    }
+
+    // Second pass: assign new IDs to non-numeric tokens
+    if (Array.isArray(state.items)) {
+      for (const item of state.items as Record<string, unknown>[]) {
+        const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+        for (const raw of csv.split(',')) {
+          const token = raw.trim();
+          if (!token || tokenToId.has(token)) continue;
+          tokenToId.set(token, nextId++);
+        }
+      }
+    }
+
+    // Build Station catalog
+    const stationCatalog: Array<{ id: number; name: string }> = [];
+    tokenToId.forEach((numId, token) => {
+      const n = parseInt(token, 10);
+      const isNumeric = !isNaN(n) && String(n) === token;
+      stationCatalog.push({ id: numId, name: isNumeric ? `Station ${numId}` : token });
+    });
+    stationCatalog.sort((a, b) => a.id - b.id);
+    state.stations = stationCatalog;
+
+    // Rewrite item stationIds to numeric CSV
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((item) => {
+        const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
+        if (!csv.trim()) return item;
+        const numericIds = Array.from(
+          new Set(
+            csv.split(',')
+              .map((r) => r.trim())
+              .filter(Boolean)
+              .map((t) => tokenToId.get(t))
+              .filter((n): n is number => n !== undefined),
+          ),
+        ).sort((a, b) => a - b);
+        return { ...item, stationIds: numericIds.join(',') };
+      });
+    }
+  }
+
+  if (fromVersion < 4) {
+    // Add maxQtyPerOption (default 1) to all ModifierModifierOption records
+    if (Array.isArray(state.modifierModifierOptions)) {
+      state.modifierModifierOptions = (state.modifierModifierOptions as Record<string, unknown>[]).map((mmo) => ({
+        ...mmo,
+        maxQtyPerOption: typeof mmo.maxQtyPerOption === 'number' ? mmo.maxQtyPerOption : 1,
+      }));
+    }
+  }
+
+  if (fromVersion < 5) {
+    // Add visibility fields (default true) to all Category records
+    if (Array.isArray(state.categories)) {
+      state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
+        visibilityPos: true,
+        visibilityKiosk: true,
+        visibilityQr: true,
+        visibilityWebsite: true,
+        visibilityMobileApp: true,
+        visibilityDoordash: true,
+        ...cat,
+      }));
+    }
+  }
+
+  if (fromVersion < 6) {
+    // Add daySchedules (all days enabled, no time restriction) to all Category records
+    const { serializeDaySchedules, defaultDaySchedules } =
+      require('@/lib/visibility') as typeof import('@/lib/visibility');
+    if (Array.isArray(state.categories)) {
+      state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
+        daySchedules: serializeDaySchedules(defaultDaySchedules()),
+        ...cat,
+      }));
+    }
+  }
+
+  if (fromVersion < 7) {
+    // Add visibility fields + daySchedules to all Menu records
+    const { serializeDaySchedules, defaultDaySchedules } =
+      require('@/lib/visibility') as typeof import('@/lib/visibility');
+    if (Array.isArray(state.menus)) {
+      state.menus = (state.menus as Record<string, unknown>[]).map((menu) => ({
+        visibilityPos: true,
+        visibilityKiosk: true,
+        visibilityQr: true,
+        visibilityWebsite: true,
+        visibilityMobileApp: true,
+        visibilityDoordash: true,
+        daySchedules: serializeDaySchedules(defaultDaySchedules()),
+        ...menu,
+      }));
+    }
+  }
+
+  if (fromVersion < 8) {
+    const { parseGroupSchedules, serializeGroupSchedules } =
+      require('@/lib/visibility') as typeof import('@/lib/visibility');
+    const migrate = (entity: Record<string, unknown>) => {
+      if (entity.daySchedulesByGroup) return entity;
+      return {
+        ...entity,
+        daySchedulesByGroup: serializeGroupSchedules(
+          parseGroupSchedules(
+            undefined,
+            typeof entity.daySchedules === 'string' ? entity.daySchedules : undefined,
+          ),
+        ),
+      };
+    };
+    if (Array.isArray(state.items))      state.items      = (state.items      as Record<string, unknown>[]).map(migrate);
+    if (Array.isArray(state.categories)) state.categories = (state.categories as Record<string, unknown>[]).map(migrate);
+    if (Array.isArray(state.menus))      state.menus      = (state.menus      as Record<string, unknown>[]).map(migrate);
+  }
+
+  if (fromVersion < 9) {
+    // Seed system tags (e.g. Alcohol) into any existing persisted store
+    const tags = Array.isArray(state.tags) ? (state.tags as Record<string, unknown>[]) : [];
+    const existingIds = new Set(tags.map((t) => t.id));
+    const missing = SYSTEM_TAGS.filter((st) => !existingIds.has(st.id));
+    state.tags = [...tags, ...missing];
+  }
+
+  if (fromVersion < 10) {
+    // Backfill modType from isOptional for modifiers created before push-modifier support
+    if (Array.isArray(state.modifiers)) {
+      state.modifiers = (state.modifiers as Record<string, unknown>[]).map((m) => {
+        if (m.modType) return m;
+        const iso = typeof m.isOptional === 'string' ? m.isOptional : '';
+        const modType = iso === 'Required' || iso === 'Select one' ? 'Required' : 'Optional';
+        return { ...m, modType };
+      });
+    }
+  }
+
+  if (fromVersion < 11) {
+    // Backfill salesTax: true for all existing items
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((item) =>
+        typeof item.salesTax === 'boolean' ? item : { ...item, salesTax: true },
+      );
+    }
+  }
+
+  if (fromVersion < 12) {
+    // Backfill 3PO delivery prices (0 = unset) on items and price (0) on modifier options
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((item) => ({
+        doordashPrice: 0,
+        uberEatsPrice: 0,
+        grubHubPrice: 0,
+        ...item,
+      }));
+    }
+    if (Array.isArray(state.modifierOptions)) {
+      state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((o) => ({
+        price: 0,
+        ...o,
+      }));
+    }
+  }
+
+  if (fromVersion < 13) {
+    // Backfill the Menu Board channel (default visible) on every entity that carries visibility.
+    const addMenuBoard = (arr: unknown) =>
+      Array.isArray(arr)
+        ? (arr as Record<string, unknown>[]).map((e) =>
+            typeof e.visibilityMenuBoard === 'boolean' ? e : { ...e, visibilityMenuBoard: true })
+        : arr;
+    state.menus = addMenuBoard(state.menus);
+    state.categories = addMenuBoard(state.categories);
+    state.items = addMenuBoard(state.items);
+    state.modifiers = addMenuBoard(state.modifiers);
+    state.modifierOptions = addMenuBoard(state.modifierOptions);
+  }
+
+  if (fromVersion < 14) {
+    // The 'stats' tab was replaced by 'settings'. A persisted activeTab of
+    // 'stats' would leave MainContent with no matching route (blank screen).
+    if (state.activeTab === 'stats') state.activeTab = 'settings';
+  }
+
+  if (fromVersion < 15) {
+    // Snap menu/category colors to the POS-allowed palette. Older data used
+    // arbitrary Tailwind colors (#f97316, #6366f1, …) the POS importer rejects.
+    const { snapToMenuColor, snapToCategoryColor } =
+      require('@/lib/posColors') as typeof import('@/lib/posColors');
+    if (Array.isArray(state.menus)) {
+      state.menus = (state.menus as Record<string, unknown>[]).map((m) => ({
+        ...m,
+        posButtonColor: snapToMenuColor(typeof m.posButtonColor === 'string' ? m.posButtonColor : ''),
+      }));
+    }
+    if (Array.isArray(state.categories)) {
+      state.categories = (state.categories as Record<string, unknown>[]).map((c) => ({
+        ...c,
+        color: snapToCategoryColor(typeof c.color === 'string' ? c.color : ''),
+      }));
+    }
+  }
+
+  return persisted as MenuState;
+}
 
 export const useMenuStore = create<MenuState>()(
   persist(
@@ -378,7 +712,38 @@ export const useMenuStore = create<MenuState>()(
           tags: state.tags,
         };
       },
-      
+
+      serializeWorkspace: () => {
+        const state = get();
+        const data = {} as WorkspaceData;
+        for (const key of WORKSPACE_DATA_KEYS) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data as any)[key] = state[key];
+        }
+        return data;
+      },
+
+      hydrateWorkspace: (data, schemaVersion) => {
+        const migrated = runMigrations(
+          { ...(data as Record<string, unknown>) },
+          schemaVersion,
+        ) as unknown as WorkspaceData;
+        const next = {} as Partial<MenuState>;
+        for (const key of WORKSPACE_DATA_KEYS) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (next as any)[key] = (migrated as any)[key];
+        }
+        set({
+          ...next,
+          isDataLoaded: true,
+          // Reset transient selections so a freshly-loaded workspace starts clean.
+          selectedMenuId: (next.menus && next.menus[0]?.id) ?? null,
+          selectedCategoryId: null,
+          selectedItemId: null,
+          selectedModifierId: null,
+        });
+      },
+
       clearData: () => set({
         menus: [],
         categories: [],
@@ -1086,289 +1451,12 @@ export const useMenuStore = create<MenuState>()(
     }),
     {
       name: 'menu-manager-storage',
-      version: 15,
-      migrate(persisted: unknown, fromVersion: number) {
-        const state = persisted as Record<string, unknown>;
-
-        if (fromVersion < 2) {
-          // Migrate items: replace old visibility + timing fields with new ones
-          const { parseDaySchedules, serializeDaySchedules, defaultVisibility } =
-            require('@/lib/visibility') as typeof import('@/lib/visibility');
-
-          if (Array.isArray(state.items)) {
-            state.items = (state.items as Record<string, unknown>[]).map((item) => {
-              const vis = defaultVisibility();
-              if (typeof item.visibilityPos === 'boolean')   vis.visibilityPos   = item.visibilityPos;
-              if (typeof item.visibilityKiosk === 'boolean') vis.visibilityKiosk = item.visibilityKiosk;
-              const online = typeof item.visibilityOnline === 'boolean' ? item.visibilityOnline : true;
-              const third  = typeof item.visibilityThirdParty === 'boolean' ? item.visibilityThirdParty : true;
-              vis.visibilityQr        = typeof item.visibilityQr        === 'boolean' ? item.visibilityQr        : online;
-              vis.visibilityWebsite   = typeof item.visibilityWebsite   === 'boolean' ? item.visibilityWebsite   : online;
-              vis.visibilityMobileApp = typeof item.visibilityMobileApp === 'boolean' ? item.visibilityMobileApp : online;
-              vis.visibilityDoordash  = typeof item.visibilityDoordash  === 'boolean' ? item.visibilityDoordash  : third;
-
-              const daySchedules = typeof item.daySchedules === 'string' && item.daySchedules
-                ? item.daySchedules
-                : serializeDaySchedules(parseDaySchedules(
-                    undefined,
-                    typeof item.availableDays      === 'string' ? item.availableDays      : undefined,
-                    typeof item.availableTimeStart === 'string' ? item.availableTimeStart : undefined,
-                    typeof item.availableTimeEnd   === 'string' ? item.availableTimeEnd   : undefined,
-                  ));
-
-              const migrated = { ...item, ...vis, daySchedules };
-              delete migrated.visibilityOnline;
-              delete migrated.visibilityThirdParty;
-              delete migrated.availableDays;
-              delete migrated.availableTimeStart;
-              delete migrated.availableTimeEnd;
-              return migrated;
-            });
-          }
-
-          if (Array.isArray(state.modifiers)) {
-            const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
-            state.modifiers = (state.modifiers as Record<string, unknown>[]).map((mod) => ({
-              ...dv(),
-              ...mod,
-            }));
-          }
-
-          if (Array.isArray(state.modifierOptions)) {
-            const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
-            state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((opt) => ({
-              ...dv(),
-              ...opt,
-            }));
-          }
-        }
-
-        if (fromVersion < 3) {
-          // Migrate stations: convert any string tokens in item.stationIds to numeric IDs
-          // and build a Station[] catalog in state.stations.
-          const tokenToId = new Map<string, number>();
-          let nextId = 1;
-
-          // First pass: claim IDs for already-numeric tokens
-          if (Array.isArray(state.items)) {
-            for (const item of state.items as Record<string, unknown>[]) {
-              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
-              for (const raw of csv.split(',')) {
-                const token = raw.trim();
-                if (!token || tokenToId.has(token)) continue;
-                const n = parseInt(token, 10);
-                if (!isNaN(n) && n > 0 && String(n) === token) {
-                  tokenToId.set(token, n);
-                  if (n >= nextId) nextId = n + 1;
-                }
-              }
-            }
-          }
-
-          // Second pass: assign new IDs to non-numeric tokens
-          if (Array.isArray(state.items)) {
-            for (const item of state.items as Record<string, unknown>[]) {
-              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
-              for (const raw of csv.split(',')) {
-                const token = raw.trim();
-                if (!token || tokenToId.has(token)) continue;
-                tokenToId.set(token, nextId++);
-              }
-            }
-          }
-
-          // Build Station catalog
-          const stationCatalog: Array<{ id: number; name: string }> = [];
-          tokenToId.forEach((numId, token) => {
-            const n = parseInt(token, 10);
-            const isNumeric = !isNaN(n) && String(n) === token;
-            stationCatalog.push({ id: numId, name: isNumeric ? `Station ${numId}` : token });
-          });
-          stationCatalog.sort((a, b) => a.id - b.id);
-          state.stations = stationCatalog;
-
-          // Rewrite item stationIds to numeric CSV
-          if (Array.isArray(state.items)) {
-            state.items = (state.items as Record<string, unknown>[]).map((item) => {
-              const csv = typeof item.stationIds === 'string' ? item.stationIds : '';
-              if (!csv.trim()) return item;
-              const numericIds = Array.from(
-                new Set(
-                  csv.split(',')
-                    .map((r) => r.trim())
-                    .filter(Boolean)
-                    .map((t) => tokenToId.get(t))
-                    .filter((n): n is number => n !== undefined),
-                ),
-              ).sort((a, b) => a - b);
-              return { ...item, stationIds: numericIds.join(',') };
-            });
-          }
-        }
-
-        if (fromVersion < 4) {
-          // Add maxQtyPerOption (default 1) to all ModifierModifierOption records
-          if (Array.isArray(state.modifierModifierOptions)) {
-            state.modifierModifierOptions = (state.modifierModifierOptions as Record<string, unknown>[]).map((mmo) => ({
-              ...mmo,
-              maxQtyPerOption: typeof mmo.maxQtyPerOption === 'number' ? mmo.maxQtyPerOption : 1,
-            }));
-          }
-        }
-
-        if (fromVersion < 5) {
-          // Add visibility fields (default true) to all Category records
-          if (Array.isArray(state.categories)) {
-            state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
-              visibilityPos: true,
-              visibilityKiosk: true,
-              visibilityQr: true,
-              visibilityWebsite: true,
-              visibilityMobileApp: true,
-              visibilityDoordash: true,
-              ...cat,
-            }));
-          }
-        }
-
-        if (fromVersion < 6) {
-          // Add daySchedules (all days enabled, no time restriction) to all Category records
-          const { serializeDaySchedules, defaultDaySchedules } =
-            require('@/lib/visibility') as typeof import('@/lib/visibility');
-          if (Array.isArray(state.categories)) {
-            state.categories = (state.categories as Record<string, unknown>[]).map((cat) => ({
-              daySchedules: serializeDaySchedules(defaultDaySchedules()),
-              ...cat,
-            }));
-          }
-        }
-
-        if (fromVersion < 7) {
-          // Add visibility fields + daySchedules to all Menu records
-          const { serializeDaySchedules, defaultDaySchedules } =
-            require('@/lib/visibility') as typeof import('@/lib/visibility');
-          if (Array.isArray(state.menus)) {
-            state.menus = (state.menus as Record<string, unknown>[]).map((menu) => ({
-              visibilityPos: true,
-              visibilityKiosk: true,
-              visibilityQr: true,
-              visibilityWebsite: true,
-              visibilityMobileApp: true,
-              visibilityDoordash: true,
-              daySchedules: serializeDaySchedules(defaultDaySchedules()),
-              ...menu,
-            }));
-          }
-        }
-
-        if (fromVersion < 8) {
-          const { parseGroupSchedules, serializeGroupSchedules } =
-            require('@/lib/visibility') as typeof import('@/lib/visibility');
-          const migrate = (entity: Record<string, unknown>) => {
-            if (entity.daySchedulesByGroup) return entity;
-            return {
-              ...entity,
-              daySchedulesByGroup: serializeGroupSchedules(
-                parseGroupSchedules(
-                  undefined,
-                  typeof entity.daySchedules === 'string' ? entity.daySchedules : undefined,
-                ),
-              ),
-            };
-          };
-          if (Array.isArray(state.items))      state.items      = (state.items      as Record<string, unknown>[]).map(migrate);
-          if (Array.isArray(state.categories)) state.categories = (state.categories as Record<string, unknown>[]).map(migrate);
-          if (Array.isArray(state.menus))      state.menus      = (state.menus      as Record<string, unknown>[]).map(migrate);
-        }
-
-        if (fromVersion < 9) {
-          // Seed system tags (e.g. Alcohol) into any existing persisted store
-          const tags = Array.isArray(state.tags) ? (state.tags as Record<string, unknown>[]) : [];
-          const existingIds = new Set(tags.map((t) => t.id));
-          const missing = SYSTEM_TAGS.filter((st) => !existingIds.has(st.id));
-          state.tags = [...tags, ...missing];
-        }
-
-        if (fromVersion < 10) {
-          // Backfill modType from isOptional for modifiers created before push-modifier support
-          if (Array.isArray(state.modifiers)) {
-            state.modifiers = (state.modifiers as Record<string, unknown>[]).map((m) => {
-              if (m.modType) return m;
-              const iso = typeof m.isOptional === 'string' ? m.isOptional : '';
-              const modType = iso === 'Required' || iso === 'Select one' ? 'Required' : 'Optional';
-              return { ...m, modType };
-            });
-          }
-        }
-
-        if (fromVersion < 11) {
-          // Backfill salesTax: true for all existing items
-          if (Array.isArray(state.items)) {
-            state.items = (state.items as Record<string, unknown>[]).map((item) =>
-              typeof item.salesTax === 'boolean' ? item : { ...item, salesTax: true },
-            );
-          }
-        }
-
-        if (fromVersion < 12) {
-          // Backfill 3PO delivery prices (0 = unset) on items and price (0) on modifier options
-          if (Array.isArray(state.items)) {
-            state.items = (state.items as Record<string, unknown>[]).map((item) => ({
-              doordashPrice: 0,
-              uberEatsPrice: 0,
-              grubHubPrice: 0,
-              ...item,
-            }));
-          }
-          if (Array.isArray(state.modifierOptions)) {
-            state.modifierOptions = (state.modifierOptions as Record<string, unknown>[]).map((o) => ({
-              price: 0,
-              ...o,
-            }));
-          }
-        }
-
-        if (fromVersion < 13) {
-          // Backfill the Menu Board channel (default visible) on every entity that carries visibility.
-          const addMenuBoard = (arr: unknown) =>
-            Array.isArray(arr)
-              ? (arr as Record<string, unknown>[]).map((e) =>
-                  typeof e.visibilityMenuBoard === 'boolean' ? e : { ...e, visibilityMenuBoard: true })
-              : arr;
-          state.menus = addMenuBoard(state.menus);
-          state.categories = addMenuBoard(state.categories);
-          state.items = addMenuBoard(state.items);
-          state.modifiers = addMenuBoard(state.modifiers);
-          state.modifierOptions = addMenuBoard(state.modifierOptions);
-        }
-
-        if (fromVersion < 14) {
-          // The 'stats' tab was replaced by 'settings'. A persisted activeTab of
-          // 'stats' would leave MainContent with no matching route (blank screen).
-          if (state.activeTab === 'stats') state.activeTab = 'settings';
-        }
-
-        if (fromVersion < 15) {
-          // Snap menu/category colors to the POS-allowed palette. Older data used
-          // arbitrary Tailwind colors (#f97316, #6366f1, …) the POS importer rejects.
-          const { snapToMenuColor, snapToCategoryColor } =
-            require('@/lib/posColors') as typeof import('@/lib/posColors');
-          if (Array.isArray(state.menus)) {
-            state.menus = (state.menus as Record<string, unknown>[]).map((m) => ({
-              ...m,
-              posButtonColor: snapToMenuColor(typeof m.posButtonColor === 'string' ? m.posButtonColor : ''),
-            }));
-          }
-          if (Array.isArray(state.categories)) {
-            state.categories = (state.categories as Record<string, unknown>[]).map((c) => ({
-              ...c,
-              color: snapToCategoryColor(typeof c.color === 'string' ? c.color : ''),
-            }));
-          }
-        }
-
-        return persisted as MenuState;
-      },
+      version: STORE_VERSION,
+      // Tab-scoped cache: two windows editing different workspaces no longer
+      // clobber each other (sessionStorage is per-tab). Supabase is the source
+      // of truth; this only smooths in-tab refreshes.
+      storage: createJSONStorage(() => sessionStorage),
+      migrate: runMigrations,
     }
   )
 );

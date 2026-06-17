@@ -119,6 +119,35 @@ const buildMenuRows = (menus: Menu[], sid: Map<number, number>) =>
     settingId: sid.get(m.id) ?? '', visibility: serializeVisibility(m),
   }));
 
+// The real POS importer resolves parentCategoryId in a single top-down pass,
+// so every parent row must be emitted before its children. Order roots first,
+// then descendants (depth-first), preserving original sibling order. A category
+// whose parent isn't in the export is treated as a root; cyclic/leftover rows
+// are appended last so nothing is dropped.
+const sortCategoriesParentFirst = (cats: Category[]): Category[] => {
+  const ids = new Set(cats.map((c) => c.id));
+  const byParent = new Map<number | '', Category[]>();
+  for (const c of cats) {
+    const key = c.parentCategoryId && ids.has(c.parentCategoryId) ? c.parentCategoryId : '';
+    const bucket = byParent.get(key);
+    if (bucket) bucket.push(c);
+    else byParent.set(key, [c]);
+  }
+  const out: Category[] = [];
+  const visit = (parentKey: number | '') => {
+    for (const c of byParent.get(parentKey) ?? []) {
+      out.push(c);
+      visit(c.id);
+    }
+  };
+  visit('');
+  if (out.length < cats.length) {
+    const seen = new Set(out.map((c) => c.id));
+    for (const c of cats) if (!seen.has(c.id)) out.push(c);
+  }
+  return out;
+};
+
 const buildCategoryRows = (cats: Category[], sid: Map<number, number>) =>
   cats.map((c) => ({
     id: c.id, categoryName: c.categoryName, posDisplayName: c.posDisplayName,
@@ -177,15 +206,19 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
     // modType is required by the POS importer; fall back when blank (e.g. nested
     // modifiers). isOptional is the boolean form derived from the resolved modType.
     const modType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
+    const isOptional = modType !== 'Required';
+    // POS rule: minSelector must be 0 when the modifier is optional and not a
+    // nested-adding modifier — an optional modifier can't require a selection.
+    const minSelector = isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector);
     return {
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
       isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
-      isOptional: modType !== 'Required', // POS expects a boolean
+      isOptional, // POS expects a boolean
       // POS rule: canGuestSelectMoreModifiers cannot be TRUE when addNested is TRUE.
       canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers && !m.addNested, multiSelect: m.multiSelect,
       limitIndividualModifierSelection: m.limitIndividualModifierSelection,
       // POS format: when No Max Limit is on, min/max are 1/1 and noMaxSelection carries the "unlimited" meaning.
-      minSelector: m.noMaxSelection ? 1 : m.minSelector, maxSelector: m.noMaxSelection ? 1 : m.maxSelector,
+      minSelector, maxSelector: m.noMaxSelection ? 1 : m.maxSelector,
       noMaxSelection: m.noMaxSelection,
       prefix: resolvePrefix(m.prefix), pizzaSelection: m.pizzaSelection, stockStatus: true,
       price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
@@ -293,13 +326,27 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   );
   const categoryModifiers = data.categoryModifiers.filter((cm) => !nesting.nestedIds.has(cm.modifierId));
 
-  append(buildMenuRows(data.menus, menuSid), HEADERS.MENU, SHEET_NAMES.MENU);
-  append(buildCategoryRows(data.categories, catSid), HEADERS.CATEGORY, SHEET_NAMES.CATEGORY);
+  // POS requires sortOrder unique across the WHOLE Menu/Category sheet (not per
+  // menu/parent). Categories restart numbering per menu, so renumber sheet-wide
+  // (constant group key) to dedupe while preserving relative order.
+  append(renumberSortOrder(buildMenuRows(data.menus, menuSid), () => 0), HEADERS.MENU, SHEET_NAMES.MENU);
+  // Categories must be parent-before-child for the POS importer's single-pass
+  // parent resolution. Assign sortOrder directly from that order — do NOT run
+  // renumberSortOrder here, since it re-sorts by the original sortOrder and would
+  // undo the parent-first ordering.
+  const orderedCategoryRows = buildCategoryRows(sortCategoriesParentFirst(data.categories), catSid)
+    .map((row, i) => ({ ...row, sortOrder: i + 1 }));
+  append(orderedCategoryRows, HEADERS.CATEGORY, SHEET_NAMES.CATEGORY);
   append(buildItemRows(data.items, itemSid), HEADERS.ITEM, SHEET_NAMES.ITEM);
   append(itemModifiers, HEADERS.ITEM_MODIFIERS, SHEET_NAMES.ITEM_MODIFIERS);
   append(data.categoryModifierGroups, HEADERS.CATEGORY_MODIFIER_GROUPS, SHEET_NAMES.CATEGORY_MODIFIER_GROUPS);
   append(categoryModifiers, HEADERS.CATEGORY_MODIFIERS, SHEET_NAMES.CATEGORY_MODIFIERS);
-  append(data.categoryItems, HEADERS.CATEGORY_ITEMS, SHEET_NAMES.CATEGORY_ITEMS);
+  // The POS requires the join-row `id` to be unique within the Category Items
+  // sheet. The store can reuse ids when an item is assigned to multiple
+  // categories, so reassign sequential ids here (the id has no external
+  // references — nothing points at categoryItems.id).
+  const categoryItems = data.categoryItems.map((ci, i) => ({ ...ci, id: i + 1 }));
+  append(categoryItems, HEADERS.CATEGORY_ITEMS, SHEET_NAMES.CATEGORY_ITEMS);
   append(data.itemModifierGroups, HEADERS.ITEM_MODIFIER_GROUP, SHEET_NAMES.ITEM_MODIFIER_GROUP);
   append(data.modifierGroups, HEADERS.MODIFIER_GROUP, SHEET_NAMES.MODIFIER_GROUP);
   append(buildModifierRows(data.modifiers, nesting), HEADERS.MODIFIER, SHEET_NAMES.MODIFIER);

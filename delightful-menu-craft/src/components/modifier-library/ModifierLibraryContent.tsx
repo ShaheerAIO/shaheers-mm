@@ -1749,6 +1749,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 <SelectItem value="Select any">Optional (Select any)</SelectItem>
                 <SelectItem value="Required">Required</SelectItem>
                 <SelectItem value="Select one">Select One</SelectItem>
+                <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
               </SelectContent>
             </Select>
           </div>
