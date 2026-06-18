@@ -908,6 +908,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 id="saleCategory"
                 value={draft.saleCategory}
                 onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
+                triggerClassName="input-field"
               />
               {!saleCategoryValid && (
                 <p className="text-xs text-destructive">Required.</p>
