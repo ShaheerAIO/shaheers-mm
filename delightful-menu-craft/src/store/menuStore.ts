@@ -16,6 +16,7 @@ import type {
   Allergen,
   Tag,
   Station,
+  CustomTax,
   ExcelMenuData,
   TabType,
   ViewMode,
@@ -90,6 +91,7 @@ interface MenuState {
   modifierModifierOptions: ModifierModifierOption[];
   allergens: Allergen[];
   tags: Tag[];
+  customTaxes: CustomTax[];
 
   // Derived / helper data (not part of Excel schema)
   stations: Station[]; // canonical station catalog
@@ -181,7 +183,12 @@ interface MenuState {
   addTag: (tag: Tag) => void;
   updateTag: (id: number, updates: Partial<Tag>) => void;
   deleteTag: (id: number) => void;
-  
+
+  // Actions - Custom Taxes
+  addCustomTax: (tax: CustomTax) => void;
+  updateCustomTax: (id: number, updates: Partial<CustomTax>) => void;
+  deleteCustomTax: (id: number) => void;
+
   // Actions - Stations
   addStation: () => number;
   renumberStation: (oldId: number, newId: number) => boolean;
@@ -212,7 +219,7 @@ interface MenuState {
   bulkRemoveOptionsFromModifiers: (modifierIds: number[], optionIds: number[]) => void;
 
   // Helper - Get next ID
-  getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'modifierGroups' | 'allergens' | 'tags'>) => number;
+  getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'modifierGroups' | 'allergens' | 'tags' | 'customTaxes'>) => number;
 }
 
 // Helper to generate next ID
@@ -238,14 +245,14 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 15;
+export const STORE_VERSION = 16;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
   'menus', 'categories', 'items', 'itemModifiers', 'categoryModifierGroups',
   'categoryModifiers', 'categoryItems', 'itemModifierGroups', 'modifierGroups',
   'modifiers', 'modifierOptions', 'modifierModifierOptions', 'allergens', 'tags',
-  'stations', 'taxRate',
+  'customTaxes', 'stations', 'taxRate',
 ] as const;
 
 export type WorkspaceData = Pick<MenuState, typeof WORKSPACE_DATA_KEYS[number]>;
@@ -274,6 +281,7 @@ export function createFreshWorkspaceData(): WorkspaceData {
     modifierModifierOptions: [],
     allergens: [],
     tags: [...SYSTEM_TAGS],
+    customTaxes: [],
     stations: [],
     taxRate: 10,
   };
@@ -564,6 +572,12 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     }
   }
 
+  if (fromVersion < 16) {
+    // Add the custom-taxes catalog. Existing items keep customTaxId undefined
+    // (standard rate), so no per-item backfill is required.
+    if (!Array.isArray(state.customTaxes)) state.customTaxes = [];
+  }
+
   return persisted as MenuState;
 }
 
@@ -599,6 +613,7 @@ export const useMenuStore = create<MenuState>()(
       modifierModifierOptions: [],
       allergens: [],
       tags: [...SYSTEM_TAGS],
+      customTaxes: [],
       stations: [],
       taxRate: 10,
 
@@ -687,6 +702,7 @@ export const useMenuStore = create<MenuState>()(
             const missing = SYSTEM_TAGS.filter((st) => !importedIds.has(st.id));
             return [...data.tags, ...missing];
           })(),
+          customTaxes: data.customTaxes ?? [],
           stations,
           isDataLoaded: true,
           selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
@@ -710,6 +726,7 @@ export const useMenuStore = create<MenuState>()(
           modifierModifierOptions: state.modifierModifierOptions,
           allergens: state.allergens,
           tags: state.tags,
+          customTaxes: state.customTaxes,
         };
       },
 
@@ -759,6 +776,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        customTaxes: [],
         stations: [],
         isDataLoaded: false,
         selectedMenuId: null,
@@ -789,6 +807,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        customTaxes: [],
         stations: [],
         isDataLoaded: true,
         selectedMenuId: 1,
@@ -1188,6 +1207,18 @@ export const useMenuStore = create<MenuState>()(
           })),
         };
       }),
+
+      // Custom Tax Actions
+      addCustomTax: (tax) => set((state) => ({ customTaxes: [...state.customTaxes, tax] })),
+      updateCustomTax: (id, updates) => set((state) => ({
+        customTaxes: state.customTaxes.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      })),
+      deleteCustomTax: (id) => set((state) => ({
+        customTaxes: state.customTaxes.filter((t) => t.id !== id),
+        items: state.items.map((item) =>
+          item.customTaxId === id ? { ...item, customTaxId: undefined } : item,
+        ),
+      })),
 
       // Station Actions
       addStation: () => {

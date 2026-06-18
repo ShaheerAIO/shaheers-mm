@@ -66,6 +66,7 @@ export interface Item {
   taxLinkedWithParentSetting: boolean;
   calculatePricesWithTaxIncluded: boolean;
   salesTax: boolean;
+  customTaxId?: number; // overrides the standard rate; undefined = standard rate (when salesTax)
   takeoutException: boolean;
   stockStatus: string; // 'inStock', 'outOfStock', etc.
   stockValue: number;
@@ -230,6 +231,13 @@ export interface Tag {
   isSystem?: boolean; // true = seeded by the app, cannot be deleted
 }
 
+// Custom tax — a named rate that overrides the standard rate on assigned items.
+export interface CustomTax {
+  id: number;
+  name: string;
+  rate: number; // percent, e.g. 15 = 15%
+}
+
 // Sheet 15: Setting — per-entity status registry. Synthesized on export
 // (one Active row per menu/category/item) and ignored on import.
 export interface Setting {
@@ -273,6 +281,7 @@ export interface ExcelMenuData {
   modifierModifierOptions: ModifierModifierOption[];
   allergens: Allergen[];
   tags: Tag[];
+  customTaxes?: CustomTax[];
 }
 
 // Helper type for creating new entities with auto-generated IDs

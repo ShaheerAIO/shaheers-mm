@@ -10,6 +10,9 @@ import {
   TrendingUp,
   Ban,
   UtensilsCrossed,
+  Receipt,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Item } from '@/types/menu';
@@ -91,6 +94,11 @@ export function SettingsContent() {
     isDataLoaded,
     taxRate,
     setTaxRate,
+    customTaxes,
+    addCustomTax,
+    updateCustomTax,
+    deleteCustomTax,
+    getNextId,
   } = useMenuStore();
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -210,6 +218,62 @@ export function SettingsContent() {
               />
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">%</span>
             </div>
+          </div>
+        </section>
+
+        {/* ── Custom taxes ───────────────────────────────────────────────────── */}
+        <section className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+              <Receipt className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">Custom taxes</h2>
+              <p className="text-xs text-muted-foreground">Named rates that override the standard rate on assigned items</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {customTaxes.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No custom taxes yet. Add one to override the standard rate on specific items.</p>
+            ) : (
+              customTaxes.map(tax => (
+                <div key={tax.id} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={tax.name}
+                    placeholder="Tax name"
+                    onChange={(e) => updateCustomTax(tax.id, { name: e.target.value })}
+                    className="input-field flex-1 text-sm"
+                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={tax.rate}
+                      onChange={(e) => updateCustomTax(tax.id, { rate: Math.max(0, parseFloat(e.target.value) || 0) })}
+                      className="input-field w-28 text-sm pr-7 text-right"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">%</span>
+                  </div>
+                  <button
+                    onClick={() => deleteCustomTax(tax.id)}
+                    aria-label="Delete tax"
+                    className="p-2 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            )}
+            <button
+              onClick={() => addCustomTax({ id: getNextId('customTaxes'), name: '', rate: 0 })}
+              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline pt-1"
+            >
+              <Plus className="w-4 h-4" />
+              Add tax
+            </button>
           </div>
         </section>
 

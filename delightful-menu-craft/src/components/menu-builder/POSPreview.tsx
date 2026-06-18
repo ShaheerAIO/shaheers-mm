@@ -22,6 +22,7 @@ import type { Item, ModifierModifierOption } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 import { ModifierPanel, itemHasPopupModifiers } from './pos-preview/ModifierPanel';
+import { effectiveItemTaxRate } from '@/lib/tax';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,7 +64,7 @@ function modifierSurchargePerUnit(
 // ---------------------------------------------------------------------------
 
 export function POSPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions, taxRate } =
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions, taxRate, customTaxes } =
     useMenuStore();
 
   // POS mode toggle
@@ -162,7 +163,15 @@ export function POSPreview() {
       }, 0),
     [ticketLines, modifierModifierOptions],
   );
-  const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
+  const tax = useMemo(() => {
+    const raw = ticketLines.reduce((s, l) => {
+      const mod = modifierSurchargePerUnit(l.selectedOptions, modifierModifierOptions);
+      const base = (l.item.itemPrice + mod) * l.qty;
+      const rate = effectiveItemTaxRate(l.item, customTaxes, taxRate);
+      return s + base * (rate / 100);
+    }, 0);
+    return Math.round(raw * 100) / 100;
+  }, [ticketLines, modifierModifierOptions, customTaxes, taxRate]);
   const total = Math.round((subtotal + tax) * 100) / 100;
 
   // ---------------------------------------------------------------------------
