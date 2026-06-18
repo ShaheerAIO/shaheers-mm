@@ -14,6 +14,7 @@ import type {
   ItemModifierGroup,
   Allergen,
   Tag,
+  CustomTax,
   ExcelMenuData,
 } from '@/types/menu';
 import { parseVisibilityFromRow, parseDaySchedules, serializeDaySchedules, parseGroupSchedules, serializeGroupSchedules } from '@/lib/visibility';
@@ -34,6 +35,7 @@ const SHEET_NAMES = {
   MODIFIER_MODIFIER_OPTIONS: 'Modifier ModifierOptions',
   ALLERGEN: 'Allergen',
   TAG: 'Tag',
+  CUSTOM_TAXES: 'CustomTaxes',
 };
 
 // Helper to safely parse boolean values from Excel
@@ -166,6 +168,8 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     doordashPrice: parseNumber(row['doordashPrice']),
     uberEatsPrice: parseNumber(row['uberEatsPrice']),
     grubHubPrice: parseNumber(row['grubHubPrice']),
+    // Single custom-tax id; empty/missing (older files) → undefined = standard rate.
+    customTaxId: (() => { const n = parseNumber(row['customTaxId']); return n > 0 ? n : undefined; })(),
     ...parseVisibilityFromRow(row),
     daySchedules: serializeDaySchedules(
       parseDaySchedules(
@@ -347,6 +351,18 @@ const parseTags = (sheet: XLSX.WorkSheet): Tag[] => {
     .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };
 
+// Parse CustomTaxes sheet
+const parseCustomTaxes = (sheet: XLSX.WorkSheet): CustomTax[] => {
+  const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  return data
+    .map((row) => ({
+      id: parseNumber(row['id']),
+      name: parseString(row['name']),
+      rate: parseNumber(row['rate']),
+    }))
+    .filter((t) => t.id > 0 && t.name.trim().length > 0);
+};
+
 /**
  * Parse an Excel file and return structured menu data
  */
@@ -379,6 +395,7 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
           modifierModifierOptions: [],
           allergens: [],
           tags: [],
+          customTaxes: [],
         };
         
         // Parse each sheet
@@ -423,6 +440,10 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         
         const tagSheet = getSheet(SHEET_NAMES.TAG);
         if (tagSheet) result.tags = parseTags(tagSheet);
+
+        // CustomTaxes sheet is optional — older files lack it; leave [] then.
+        const customTaxesSheet = getSheet(SHEET_NAMES.CUSTOM_TAXES);
+        if (customTaxesSheet) result.customTaxes = parseCustomTaxes(customTaxesSheet);
 
         // The POS keeps the option surcharge on the Modifier Option `price`
         // column; the app's UI reads it from the join's `maxLimit`. Bridge it

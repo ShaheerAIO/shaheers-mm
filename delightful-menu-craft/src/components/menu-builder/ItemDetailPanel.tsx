@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, Link, Unlink, ArrowDownUp } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { effectiveItemTaxRate } from '@/lib/tax';
 import { cn } from '@/lib/utils';
 
 interface ItemDetailPanelProps {
@@ -51,6 +52,7 @@ interface DraftState {
   grubHubPrice: number;
   itemDescription: string;
   salesTax: boolean;
+  customTaxId?: number;
   takeoutException: boolean;
   taxLinkedWithParentSetting: boolean;
   stockStatus: string;
@@ -120,6 +122,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     reorderItemModifiers,
     setItemModifierOrder,
     taxRate,
+    customTaxes,
+    setActiveTab,
   } = useMenuStore();
 
   // Get nested child modifiers for a given modifier
@@ -175,6 +179,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     grubHubPrice: item.grubHubPrice ?? 0,
     itemDescription: item.itemDescription,
     salesTax: item.salesTax ?? true,
+    customTaxId: item.customTaxId,
     takeoutException: item.takeoutException ?? false,
     taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
     stockStatus: item.stockStatus,
@@ -249,6 +254,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
       salesTax: item.salesTax ?? true,
+      customTaxId: item.customTaxId,
       takeoutException: item.takeoutException ?? false,
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
@@ -342,6 +348,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.grubHubPrice !== (item.grubHubPrice ?? 0) ||
       draft.itemDescription !== item.itemDescription ||
       draft.salesTax !== (item.salesTax ?? true) ||
+      draft.customTaxId !== item.customTaxId ||
       draft.takeoutException !== (item.takeoutException ?? false) ||
       draft.taxLinkedWithParentSetting !== (item.taxLinkedWithParentSetting ?? true) ||
       draft.stockStatus !== item.stockStatus ||
@@ -369,6 +376,23 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
   const saleCategoryValid = draft.saleCategory.trim() !== '';
 
+  // Effective tax rate for the live total + the current Select value/label.
+  const effectiveTaxRate = effectiveItemTaxRate(draft, customTaxes, taxRate);
+  const taxSelectValue = !draft.salesTax
+    ? 'none'
+    : draft.customTaxId != null && customTaxes.some((t) => t.id === draft.customTaxId)
+      ? String(draft.customTaxId)
+      : 'standard';
+  const handleTaxChange = (value: string) => {
+    if (value === 'none') {
+      setDraft((d) => ({ ...d, salesTax: false, customTaxId: undefined }));
+    } else if (value === 'standard') {
+      setDraft((d) => ({ ...d, salesTax: true, customTaxId: undefined }));
+    } else {
+      setDraft((d) => ({ ...d, salesTax: true, customTaxId: Number(value) }));
+    }
+  };
+
   const handleSave = () => {
     // Save item changes
     updateItem(item.id, {
@@ -381,6 +405,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       grubHubPrice: draft.grubHubPrice,
       itemDescription: draft.itemDescription,
       salesTax: draft.salesTax,
+      customTaxId: draft.customTaxId,
       takeoutException: draft.takeoutException,
       taxLinkedWithParentSetting: draft.taxLinkedWithParentSetting,
       stockStatus: draft.stockStatus,
@@ -437,6 +462,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
       salesTax: item.salesTax ?? true,
+      customTaxId: item.customTaxId,
       takeoutException: item.takeoutException ?? false,
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
@@ -797,11 +823,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </div>
 
         {/* Price & tax info */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <Label className="section-header">Price &amp; tax info</Label>
 
           {/* Base price + Total price row */}
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-3">
             <div className="space-y-1 flex-1">
               <Label className="text-xs text-muted-foreground">Base price*</Label>
               <div className="flex items-center gap-2 input-field px-3 py-2">
@@ -814,67 +840,92 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 />
               </div>
             </div>
-            {draft.salesTax && (
+            {effectiveTaxRate > 0 && (
               <div className="space-y-1 flex-1">
                 <Label className="text-xs text-muted-foreground">Total price</Label>
                 <div className="flex items-center gap-2 input-field px-3 py-2 bg-muted/30">
                   <span className="text-muted-foreground">$</span>
                   <span className="text-muted-foreground">
-                    {(draft.itemPrice * (1 + taxRate / 100)).toFixed(2)}
+                    {(draft.itemPrice * (1 + effectiveTaxRate / 100)).toFixed(2)}
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Tax */}
-          <div className="space-y-2">
-            {/* Sales Tax checkbox */}
-            <div className="flex items-center gap-2">
-              <input
-                id="salesTax"
-                type="checkbox"
-                checked={draft.salesTax}
-                onChange={(e) => setDraft(d => ({ ...d, salesTax: e.target.checked }))}
-                className="w-4 h-4 rounded accent-orange-500"
-              />
-              <Label htmlFor="salesTax" className="text-sm font-normal cursor-pointer">Sales Tax</Label>
-              <button
-                type="button"
-                title={draft.taxLinkedWithParentSetting ? 'Tax linked to category (click to unlink)' : 'Tax unlinked from category (click to link)'}
-                onClick={() => setDraft(d => ({ ...d, taxLinkedWithParentSetting: !d.taxLinkedWithParentSetting }))}
-                className={`ml-1 rounded p-0.5 transition-colors ${draft.taxLinkedWithParentSetting ? 'text-primary hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-              >
-                {draft.taxLinkedWithParentSetting ? <Link className="w-3.5 h-3.5" /> : <Unlink className="w-3.5 h-3.5" />}
-              </button>
+          {/* Tax + Sale category row */}
+          <div className="flex items-start gap-3">
+            <div className="space-y-1 flex-1 min-w-0">
+              <div className="flex items-center gap-1">
+                <Label htmlFor="tax" className="text-xs text-muted-foreground">Tax</Label>
+                <button
+                  type="button"
+                  title={draft.taxLinkedWithParentSetting ? 'Tax linked to category (click to unlink)' : 'Tax unlinked from category (click to link)'}
+                  onClick={() => setDraft(d => ({ ...d, taxLinkedWithParentSetting: !d.taxLinkedWithParentSetting }))}
+                  className={`rounded p-0.5 transition-colors ${draft.taxLinkedWithParentSetting ? 'text-primary hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                >
+                  {draft.taxLinkedWithParentSetting ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
+                </button>
+              </div>
+              <Select value={taxSelectValue} onValueChange={handleTaxChange}>
+                <SelectTrigger id="tax" className="input-field">
+                  <SelectValue>
+                    {taxSelectValue === 'none'
+                      ? 'No tax'
+                      : taxSelectValue === 'standard'
+                        ? `Standard · ${taxRate}%`
+                        : (() => {
+                            const t = customTaxes.find((c) => c.id === draft.customTaxId);
+                            return t ? `${t.name} · ${t.rate}%` : `Standard · ${taxRate}%`;
+                          })()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectOption value="none">No sales tax</SelectOption>
+                  <SelectOption value="standard">{`Standard rate (${taxRate}%)`}</SelectOption>
+                  {customTaxes.map((t) => (
+                    <SelectOption key={t.id} value={String(t.id)}>
+                      {`${t.name} · ${t.rate}%`}
+                    </SelectOption>
+                  ))}
+                  <div className="border-t mt-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('settings')}
+                      className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm transition-colors"
+                    >
+                      Manage custom taxes
+                    </button>
+                  </div>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Takeout exception */}
-            {draft.salesTax && (
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <Label htmlFor="takeoutException" className="text-sm font-normal cursor-pointer">Takeout exception</Label>
-                <Switch
-                  id="takeoutException"
-                  checked={draft.takeoutException}
-                  onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
-                />
-              </div>
-            )}
-
+            {/* Sale category (required) */}
+            <div className="space-y-1 flex-1 min-w-0">
+              <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
+              <SaleCategorySelect
+                id="saleCategory"
+                value={draft.saleCategory}
+                onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
+              />
+              {!saleCategoryValid && (
+                <p className="text-xs text-destructive">Required.</p>
+              )}
+            </div>
           </div>
 
-          {/* Sale category (required) */}
-          <div className="space-y-1.5 pt-1">
-            <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
-            <SaleCategorySelect
-              id="saleCategory"
-              value={draft.saleCategory}
-              onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
-            />
-            {!saleCategoryValid && (
-              <p className="text-xs text-destructive">Sale category is required.</p>
-            )}
-          </div>
+          {/* Takeout exception */}
+          {effectiveTaxRate > 0 && (
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="takeoutException" className="text-sm font-normal cursor-pointer">Takeout exception</Label>
+              <Switch
+                id="takeoutException"
+                checked={draft.takeoutException}
+                onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
+              />
+            </div>
+          )}
         </div>
 
         {/* Stock */}

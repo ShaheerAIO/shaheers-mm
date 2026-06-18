@@ -7,6 +7,7 @@ import type { Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
 import { LEVEL_COLORS, type BulkLevel, type useBulkSelection } from './useBulkSelection';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const VIS_CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
@@ -262,6 +263,38 @@ function Segmented<T extends string>({
   );
 }
 
+/** Tax selector (No change / No tax / Standard rate / each custom tax). */
+function TaxSection({
+  value,
+  onChange,
+  customTaxes,
+  taxRate,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  customTaxes: { id: number; name: string; rate: number }[];
+  taxRate: number;
+}) {
+  return (
+    <section>
+      <p className="section-header mb-2">Tax</p>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="text-xs h-8">
+          <SelectValue placeholder="No change" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">No change</SelectItem>
+          <SelectItem value="noTax">No tax</SelectItem>
+          <SelectItem value="standard">Standard rate · {taxRate}%</SelectItem>
+          {customTaxes.map((t) => (
+            <SelectItem key={t.id} value={String(t.id)}>{t.name} · {t.rate}%</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
@@ -282,7 +315,7 @@ interface BulkEditPanelProps {
 export function BulkEditPanel({ selection, onClearSelection, captureUndo }: BulkEditPanelProps) {
   const { selected, selectedIdsAt, optionPairKeys } = selection;
   const {
-    tags, allergens, stations, modifiers, modifierOptions,
+    tags, allergens, stations, modifiers, modifierOptions, customTaxes, taxRate,
     bulkUpdateMenus, bulkUpdateItems, bulkUpdateCategories, bulkUpdateModifiers,
     bulkUpdateModifierOptions, bulkUpdateOptionJoins, bulkAddModifiersToItems,
     bulkRemoveModifiersFromItems, bulkAddOptionsToModifiers, bulkRemoveOptionsFromModifiers,
@@ -335,6 +368,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [saleCategoryValue, setSaleCategoryValue] = useState('Food Sales');
   const [applyQtyLimit, setApplyQtyLimit] = useState(false);
   const [qtyLimitValue, setQtyLimitValue] = useState('');
+  const [taxAction, setTaxAction] = useState<string>('none'); // 'none' | 'noTax' | 'standard' | String(tax.id)
   const [tagAddIds, setTagAddIds] = useState<Set<number>>(new Set());
   const [tagRemoveIds, setTagRemoveIds] = useState<Set<number>>(new Set());
   const [allergenAddIds, setAllergenAddIds] = useState<Set<number>>(new Set());
@@ -369,6 +403,21 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
   const [showReview, setShowReview] = useState(false);
 
+  // Turn the tax selection into an Item patch. 'none' → no patch (returns {}).
+  const taxPatch = (): Partial<Item> => {
+    if (taxAction === 'noTax') return { salesTax: false };
+    if (taxAction === 'standard') return { salesTax: true, customTaxId: undefined };
+    const id = parseInt(taxAction, 10);
+    if (!isNaN(id)) return { salesTax: true, customTaxId: id };
+    return {};
+  };
+  const taxActionLabel = (): string => {
+    if (taxAction === 'noTax') return 'No tax';
+    if (taxAction === 'standard') return 'Standard rate';
+    const tax = customTaxes.find((t) => String(t.id) === taxAction);
+    return tax ? `${tax.name} · ${tax.rate}%` : '';
+  };
+
   const resetDrafts = () => {
     setApplyVisibility(false); setVis(defaultVisDraft());
     setApplyPriceFlag(false); setPriceMode('set'); setPriceValue('');
@@ -376,6 +425,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setTpoMode('none'); setTpoValue('');
     setApplySaleCategory(false); setSaleCategoryValue('Food Sales');
     setApplyQtyLimit(false); setQtyLimitValue('');
+    setTaxAction('none');
     setTagAddIds(new Set()); setTagRemoveIds(new Set());
     setAllergenAddIds(new Set()); setAllergenRemoveIds(new Set());
     setStationAddIds(new Set()); setStationRemoveIds(new Set());
@@ -400,6 +450,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (tpoMode === 'reset') t('3PO prices → reset to base');
     if (applySaleCategory && saleCategoryValue.trim()) t(`sale category → ${saleCategoryValue.trim()}`);
     if (applyQtyLimit && qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
+    if (taxAction !== 'none') t(`tax → ${taxActionLabel()}`);
     if (tagAddIds.size) t(`+${tagAddIds.size} tag(s)`);
     if (tagRemoveIds.size) t(`−${tagRemoveIds.size} tag(s)`);
     if (allergenAddIds.size) t(`+${allergenAddIds.size} allergen(s)`);
@@ -420,8 +471,10 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (optStockAction !== 'none') t(`stock → ${optStockAction === 'inStock' ? 'In Stock' : '86’ed'}`);
     if (applyOptPrice && optPriceValue) t(`price ${priceModeLabel(optPriceMode)}${optPriceValue}`);
     if (applyOptVisibility) t('visibility channels');
-  } else if (activeLevel === 'category' && applyCatVisibility) {
-    ops.push({ scope: `${categoryIds.length} categor${categoryIds.length !== 1 ? 'ies' : 'y'}`, label: 'visibility channels', color: LEVEL_COLORS.category });
+  } else if (activeLevel === 'category') {
+    const scope = `${categoryIds.length} categor${categoryIds.length !== 1 ? 'ies' : 'y'}`;
+    if (applyCatVisibility) ops.push({ scope, label: 'visibility channels', color: LEVEL_COLORS.category });
+    if (taxAction !== 'none') ops.push({ scope: `items in ${scope}`, label: `tax → ${taxActionLabel()}`, color: LEVEL_COLORS.category });
   } else if (activeLevel === 'menu' && applyMenuVisibility) {
     ops.push({ scope: `${menuIds.length} menu${menuIds.length !== 1 ? 's' : ''}`, label: 'visibility channels', color: LEVEL_COLORS.menu });
   }
@@ -457,7 +510,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       const hasItemFieldEdits =
         applyVisibility || (applyPriceSection && priceValue) || stockAction !== 'none' ||
         tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
-        (applyQtyLimit && qtyLimitValue) ||
+        (applyQtyLimit && qtyLimitValue) || taxAction !== 'none' ||
         tagAddIds.size || tagRemoveIds.size || allergenAddIds.size || allergenRemoveIds.size ||
         stationAddIds.size || stationRemoveIds.size;
 
@@ -489,6 +542,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
             updates.maxLimit = parseInt(qtyLimitValue, 10);
             updates.noMaxLimit = false;
           }
+          if (taxAction !== 'none') Object.assign(updates, taxPatch());
           if (tagAddIds.size || tagRemoveIds.size) {
             let t = item.tagIds;
             if (tagAddIds.size) t = mergeIds(t, [...tagAddIds]);
@@ -552,8 +606,21 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       }
     }
 
-    if (activeLevel === 'category' && applyCatVisibility) {
-      bulkUpdateCategories(categoryIds, () => ({ ...catVis }));
+    if (activeLevel === 'category') {
+      if (applyCatVisibility) {
+        bulkUpdateCategories(categoryIds, () => ({ ...catVis }));
+      }
+      if (taxAction !== 'none') {
+        const catIdSet = new Set(categoryIds);
+        const targetItemIds = [
+          ...new Set(
+            selection.data.categoryItems
+              .filter((ci) => catIdSet.has(ci.categoryId))
+              .map((ci) => ci.itemId),
+          ),
+        ];
+        if (targetItemIds.length) bulkUpdateItems(targetItemIds, () => taxPatch());
+      }
     }
 
     if (activeLevel === 'menu' && applyMenuVisibility) {
@@ -747,6 +814,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                   </div>
                 )}
               </section>
+
+              <TaxSection value={taxAction} onChange={setTaxAction} customTaxes={customTaxes} taxRate={taxRate} />
             </>
           )}
 
@@ -828,12 +897,15 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
           )}
 
           {activeLevel === 'category' && (
-            <VisibilitySection
-              apply={applyCatVisibility}
-              setApply={setApplyCatVisibility}
-              vis={catVis}
-              setVis={setCatVis}
-            />
+            <>
+              <VisibilitySection
+                apply={applyCatVisibility}
+                setApply={setApplyCatVisibility}
+                vis={catVis}
+                setVis={setCatVis}
+              />
+              <TaxSection value={taxAction} onChange={setTaxAction} customTaxes={customTaxes} taxRate={taxRate} />
+            </>
           )}
 
           {activeLevel === 'menu' && (

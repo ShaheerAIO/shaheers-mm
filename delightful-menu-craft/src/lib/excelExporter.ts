@@ -10,6 +10,7 @@ import type {
   Allergen,
   Tag,
   Setting,
+  CustomTax,
 } from '@/types/menu';
 import { serializeVisibility } from '@/lib/visibility';
 
@@ -29,6 +30,7 @@ const SHEET_NAMES = {
   MODIFIER_MODIFIER_OPTIONS: 'Modifier ModifierOptions',
   ALLERGEN: 'Allergen',
   TAG: 'Tag',
+  CUSTOM_TAXES: 'CustomTaxes',
   SETTING: 'Setting',
 };
 
@@ -44,7 +46,7 @@ const HEADERS = {
     'stockStatus', 'stockValue', 'orderQuantityLimit', 'minLimit', 'maxLimit', 'noMaxLimit',
     'stationIds', 'preparationTime', 'calories', 'tagIds', 'inheritTagsFromCategory',
     'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
-    'doordashPrice', 'uberEatsPrice', 'grubHubPrice', 'settingId', 'visibility',
+    'doordashPrice', 'uberEatsPrice', 'grubHubPrice', 'customTaxId', 'settingId', 'visibility',
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
   CATEGORY_MODIFIER_GROUPS: ['categoryId', 'modifierGroupId', 'sortOrder'],
@@ -62,6 +64,7 @@ const HEADERS = {
   MODIFIER_MODIFIER_OPTIONS: ['modifierId', 'modifierOptionId', 'isDefaultSelected', 'maxLimit', 'optionDisplayName', 'sortOrder'],
   ALLERGEN: ['id', 'allergenName', 'iconId', 'isDefault'],
   TAG: ['id', 'tagName', 'iconId', 'isDefault'],
+  CUSTOM_TAXES: ['id', 'name', 'rate'],
   SETTING: ['id', 'type', 'status'],
 };
 
@@ -172,6 +175,8 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
     addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest,
     // 3PO prices: blank (null) when unset, matching real POS files.
     doordashPrice: i.doordashPrice || '', uberEatsPrice: i.uberEatsPrice || '', grubHubPrice: i.grubHubPrice || '',
+    // customTaxId: undefined when standard rate → absent cell (createSheet drops null/undefined).
+    customTaxId: i.customTaxId ?? null,
     settingId: sid.get(i.id) ?? '', visibility: serializeVisibility(i),
   }));
 
@@ -357,6 +362,8 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   );
   append(buildAllergenRows(data.allergens), HEADERS.ALLERGEN, SHEET_NAMES.ALLERGEN);
   append(buildTagRows(data.tags), HEADERS.TAG, SHEET_NAMES.TAG);
+  // CustomTax object keys (id/name/rate) already match the columns.
+  append((data.customTaxes ?? []) as CustomTax[], HEADERS.CUSTOM_TAXES, SHEET_NAMES.CUSTOM_TAXES);
   append(settings, HEADERS.SETTING, SHEET_NAMES.SETTING);
 
   return workbook;
