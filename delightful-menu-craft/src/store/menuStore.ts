@@ -66,6 +66,8 @@ interface MenuState {
   editingCategoryId: number | null;
   editingMenuId: number | null;
   isDataLoaded: boolean;
+  /** True when this tab is viewing a project it doesn't hold the edit lock for. */
+  isReadOnly: boolean;
   isCreatingModifier: boolean;
   isCreatingOption: boolean;
   pendingOption: {
@@ -119,6 +121,8 @@ interface MenuState {
   exportData: () => ExcelMenuData;
   clearData: () => void;
   startFresh: () => void;
+  /** Toggle read-only mode (set by the workspace lock layer). */
+  setReadOnly: (flag: boolean) => void;
   /** Snapshot the data slice (no UI state) for saving to a cloud workspace. */
   serializeWorkspace: () => WorkspaceData;
   /** Load a cloud workspace blob into the store, migrating from an older schema if needed. */
@@ -594,6 +598,7 @@ export const useMenuStore = create<MenuState>()(
       editingCategoryId: null,
       editingMenuId: null,
       isDataLoaded: false,
+      isReadOnly: false,
       isCreatingModifier: false,
       isCreatingOption: false,
       pendingOption: null,
@@ -674,6 +679,7 @@ export const useMenuStore = create<MenuState>()(
       
       // Import/Export Actions
       importData: (data) => {
+        if (get().isReadOnly) return;
         // Derive station catalog from numeric stationIds on items
         const numericIdSet = new Set<number>();
         data.items.forEach((item) => {
@@ -761,7 +767,11 @@ export const useMenuStore = create<MenuState>()(
         });
       },
 
-      clearData: () => set({
+      setReadOnly: (flag) => set({ isReadOnly: flag }),
+
+      clearData: () => {
+        if (get().isReadOnly) return;
+        set({
         menus: [],
         categories: [],
         items: [],
@@ -783,9 +793,10 @@ export const useMenuStore = create<MenuState>()(
         selectedCategoryId: null,
         selectedItemId: null,
         selectedModifierId: null,
-      }),
-      
-      startFresh: () => set({
+        });
+      },
+
+      startFresh: () => { if (get().isReadOnly) return; set({
         menus: [{
           id: 1,
           menuName: 'Main Menu',
@@ -814,8 +825,8 @@ export const useMenuStore = create<MenuState>()(
         selectedCategoryId: null,
         selectedItemId: null,
         selectedModifierId: null,
-      }),
-      
+      }); },
+
       // Helper - Get next ID
       getNextId: (entity) => {
         const state = get();
@@ -966,6 +977,7 @@ export const useMenuStore = create<MenuState>()(
       })),
       reorderItemModifiers: (itemId, fromModifierId, toModifierId) =>
         set((state) => {
+          if (state.isReadOnly) return {};
           const rest = state.itemModifiers.filter((im) => im.itemId !== itemId);
           const ordered = state.itemModifiers
             .filter((im) => im.itemId === itemId)
@@ -1018,6 +1030,7 @@ export const useMenuStore = create<MenuState>()(
       })),
       reorderModifierOptions: (modifierId, fromIndex, toIndex) =>
         set((state) => {
+          if (state.isReadOnly) return {};
           const rest = state.modifierModifierOptions.filter(
             (mmo) => mmo.modifierId !== modifierId
           );
@@ -1281,6 +1294,7 @@ export const useMenuStore = create<MenuState>()(
       })),
 
       applyAiPatches: (patches, newStations) => set((state) => {
+        if (state.isReadOnly) return {};
         let items = [...state.items];
         let categories = [...state.categories];
         let stations = [...state.stations];

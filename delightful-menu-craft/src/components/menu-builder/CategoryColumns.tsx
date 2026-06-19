@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
+import { useIsReadOnly } from '@/lib/workspaceSync';
 import { CategoryColumn } from './CategoryColumn';
 import { Plus, Upload } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
@@ -23,6 +24,7 @@ export function CategoryColumns() {
     isCreatingModifier,
     isCreatingOption,
   } = useMenuStore();
+  const isReadOnly = useIsReadOnly();
 
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
@@ -156,15 +158,17 @@ export function CategoryColumns() {
       ))}
       
       {/* Add Category Button */}
-      <div className="flex items-start p-4 flex-shrink-0">
-        <button 
-          className="btn-add whitespace-nowrap"
-          onClick={handleAddCategory}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add Category
-        </button>
-      </div>
+      {!isReadOnly && (
+        <div className="flex items-start p-4 flex-shrink-0">
+          <button
+            className="btn-add whitespace-nowrap"
+            onClick={handleAddCategory}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Category
+          </button>
+        </div>
+      )}
     </div>
   );
 }

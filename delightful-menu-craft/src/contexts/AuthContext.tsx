@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { leaveWorkspace } from '@/lib/workspaceSync';
 
 export type UserRole = 'admin' | 'member';
 
@@ -52,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Release any held edit lock while the JWT is still valid, then sign out.
+    await leaveWorkspace();
     await supabase.auth.signOut();
   };
 

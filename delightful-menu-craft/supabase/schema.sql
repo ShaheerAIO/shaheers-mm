@@ -35,6 +35,19 @@ alter table public.workspaces drop constraint if exists workspaces_updated_by_fk
 alter table public.workspaces add constraint workspaces_updated_by_fkey
   foreign key (updated_by) references auth.users(id) on delete set null;
 
+-- Single-editor lock ---------------------------------------------------------
+-- The first person to open a workspace becomes the sole editor; everyone else
+-- opens read-only. The lock is advisory (enforced client-side by an atomic
+-- conditional UPDATE) and auto-expires after 30 min of inactivity. The
+-- force_takeover_* columns carry an admin override signal: when set, the
+-- current editor's tab flushes its pending save and releases the lock.
+alter table public.workspaces
+  add column if not exists locked_by         uuid references auth.users(id) on delete set null,
+  add column if not exists locked_by_email   text,
+  add column if not exists locked_at         timestamptz,
+  add column if not exists force_takeover_by uuid references auth.users(id) on delete set null,
+  add column if not exists force_takeover_at timestamptz;
+
 -- Immutable audit trail (who did what, when) --------------------------------
 create table if not exists public.audit_log (
   id             bigint generated always as identity primary key,
@@ -184,6 +197,31 @@ create policy profiles_select on public.profiles
   for select
   to authenticated
   using (true);
+
+-- =============================================================================
+-- Admin force-takeover of the single-editor lock
+-- =============================================================================
+-- Members can only take over a lock that is free or stale (handled client-side).
+-- Admins can force a takeover of a live lock: this RPC sets the signal that the
+-- current editor's tab watches for, prompting it to flush its edits and release.
+-- security definer + an explicit role check keeps the override non-forgeable by
+-- non-admins, even though the flat workspaces policy would otherwise allow the
+-- write. Runs as the caller-checked admin, not the service role.
+create or replace function public.request_force_takeover(p_workspace uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (select role from public.profiles where id = auth.uid()) <> 'admin' then
+    raise exception 'not authorized';
+  end if;
+  update public.workspaces
+     set force_takeover_by = auth.uid(), force_takeover_at = now()
+   where id = p_workspace;
+end;
+$$;
 
 -- -----------------------------------------------------------------------------
 -- ONE-TIME bootstrap: promote the first admin. Run this once after applying

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
+import { useIsReadOnly } from '@/lib/workspaceSync';
 import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
@@ -47,6 +48,7 @@ export function CategoryColumn({
     updateCategory,
     setEditingCategory,
   } = useMenuStore();
+  const isReadOnly = useIsReadOnly();
   const [activeSubcat, setActiveSubcat] = useState<number | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(category.categoryName);
@@ -343,10 +345,10 @@ export function CategoryColumn({
                 autoFocus
               />
             ) : (
-              <span 
-                onClick={() => setIsEditingName(true)}
-                className="truncate cursor-pointer hover:text-primary transition-colors"
-                title="Click to edit"
+              <span
+                onClick={() => { if (!isReadOnly) setIsEditingName(true); }}
+                className={cn('truncate transition-colors', !isReadOnly && 'cursor-pointer hover:text-primary')}
+                title={isReadOnly ? undefined : 'Click to edit'}
               >
                 {category.categoryName}
               </span>
@@ -361,13 +363,15 @@ export function CategoryColumn({
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-              title="Delete category"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                title="Delete category"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -448,7 +452,7 @@ export function CategoryColumn({
                   </button>
                 </>
               )}
-              {editingSubcatId !== subcat.id && (
+              {editingSubcatId !== subcat.id && !isReadOnly && (
                 <button
                   type="button"
                   onClick={(e) => handleDeleteSubcategory(subcat, e)}
@@ -465,14 +469,16 @@ export function CategoryColumn({
               )}
             </div>
           );})}
-          <button
-            onClick={handleAddSubcategory}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
-            title="Add subcategory"
-          >
-            <FolderPlus className="w-3.5 h-3.5" />
-            <span>Add Subcategory</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleAddSubcategory}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
+              title="Add subcategory"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span>Add Subcategory</span>
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -522,35 +528,39 @@ export function CategoryColumn({
                 <span className="text-xs text-muted-foreground">
                   ${item.itemPrice.toFixed(2)}
                 </span>
-                <button
-                  onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                  title="Remove from category"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
+                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Remove from category"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
 
         {/* Add Item Buttons */}
-        <div className="p-3 border-t border-panel-border space-y-2">
-          <button 
-            className="btn-add w-full justify-center"
-            onClick={handleAddItem}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Item
-          </button>
-          <button 
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={() => setShowAddItemsModal(true)}
-          >
-            <Library className="w-3.5 h-3.5" />
-            Add Existing Items
-          </button>
-        </div>
+        {!isReadOnly && (
+          <div className="p-3 border-t border-panel-border space-y-2">
+            <button
+              className="btn-add w-full justify-center"
+              onClick={handleAddItem}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Item
+            </button>
+            <button
+              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+              onClick={() => setShowAddItemsModal(true)}
+            >
+              <Library className="w-3.5 h-3.5" />
+              Add Existing Items
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Items Modal */}

@@ -6,6 +6,7 @@ import { CreateModifierPanel } from '@/components/menu-builder/CreateModifierPan
 import { CreateOptionPanel } from '@/components/menu-builder/CreateOptionPanel';
 import { CategoryDetailPanel } from '@/components/categories/CategoryDetailPanel';
 import { MenuDetailPanel } from '@/components/menu-builder/MenuDetailPanel';
+import { ReadOnlyFieldset } from '@/components/ReadOnlyFieldset';
 import { cn } from '@/lib/utils';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 
@@ -87,7 +88,7 @@ export function RightSidebar() {
               </button>
             </div>
             <div className="flex-1 min-h-0">
-              <MenuDetailPanel menu={editingMenu} />
+              <ReadOnlyFieldset><MenuDetailPanel menu={editingMenu} /></ReadOnlyFieldset>
             </div>
           </aside>
         )}
@@ -114,7 +115,7 @@ export function RightSidebar() {
               </button>
             </div>
             <div className="flex-1 min-h-0">
-              <CategoryDetailPanel category={editingCategory} />
+              <ReadOnlyFieldset><CategoryDetailPanel category={editingCategory} /></ReadOnlyFieldset>
             </div>
           </aside>
         )}
@@ -176,7 +177,7 @@ export function RightSidebar() {
                 </button>
               </div>
               <div className="flex-1 min-h-0">
-                <ItemDetailPanel item={selectedItem} />
+                <ReadOnlyFieldset><ItemDetailPanel item={selectedItem} /></ReadOnlyFieldset>
               </div>
             </aside>
           )

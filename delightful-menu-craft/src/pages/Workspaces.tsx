@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, LogOut, FolderOpen } from 'lucide-react';
+import { Loader2, Plus, Trash2, LogOut, FolderOpen, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   listWorkspaces,
   createWorkspace,
   openWorkspace,
   deleteWorkspace,
+  logWorkspaceLockSnapshot,
+  ABANDONED_MS,
   type WorkspaceMeta,
 } from '@/lib/workspaceSync';
 import { runMigrations, WORKSPACE_DATA_KEYS, type WorkspaceData } from '@/store/menuStore';
@@ -48,14 +52,23 @@ export default function Workspaces() {
 
   useEffect(() => {
     listWorkspaces()
-      .then(setWorkspaces)
+      .then((rows) => {
+        logWorkspaceLockSnapshot(rows);
+        setWorkspaces(rows);
+      })
       .catch((e) => {
         toast.error(`Could not load projects: ${e.message}`);
         setWorkspaces([]);
       });
   }, []);
 
-  const refresh = () => listWorkspaces().then(setWorkspaces).catch(() => {});
+  const refresh = () =>
+    listWorkspaces()
+      .then((rows) => {
+        logWorkspaceLockSnapshot(rows);
+        setWorkspaces(rows);
+      })
+      .catch(() => {});
 
   const handleCreate = async (data?: WorkspaceData) => {
     const name = newName.trim() || 'Untitled project';
@@ -149,8 +162,23 @@ export default function Workspaces() {
           </p>
         ) : (
           <div className="space-y-2">
-            {workspaces.map((ws) => (
-              <Card key={ws.id} className="flex items-center justify-between p-4">
+            {workspaces.map((ws) => {
+              const isOwner = ws.created_by === user?.id;
+              const isWorkedOn = !isOwner && ws.updated_by === user?.id;
+              // Lock is "live" only if held by someone else and refreshed within 30 min.
+              const lockFresh =
+                !!ws.locked_by &&
+                ws.locked_by !== user?.id &&
+                !!ws.locked_at &&
+                Date.now() - new Date(ws.locked_at).getTime() < ABANDONED_MS;
+              return (
+              <Card
+                key={ws.id}
+                className={cn(
+                  'flex items-center justify-between p-4',
+                  isOwner && 'border-l-2 border-l-primary',
+                )}
+              >
                 <button
                   className="flex flex-1 items-center gap-3 text-left"
                   disabled={busy}
@@ -158,12 +186,25 @@ export default function Workspaces() {
                 >
                   <FolderOpen className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <div className="font-medium">{ws.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{ws.name}</span>
+                      {isOwner && <Badge>Owner</Badge>}
+                      {isWorkedOn && <Badge variant="secondary">Worked on</Badge>}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       Updated {new Date(ws.updated_at).toLocaleString()}
                     </div>
                   </div>
                 </button>
+                {lockFresh && (
+                  <span
+                    className="mr-2 inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+                    title={`${ws.locked_by_email ?? 'Someone'} is editing`}
+                  >
+                    <Lock className="h-3 w-3" />
+                    {ws.locked_by_email ?? 'Editing'}
+                  </span>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -173,7 +214,8 @@ export default function Workspaces() {
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

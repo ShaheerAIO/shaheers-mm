@@ -7,8 +7,9 @@ import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import { toast } from 'sonner';
 import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWorkspaceSession, closeWorkspace } from '@/lib/workspaceSync';
+import { useWorkspaceSession, closeWorkspace, useIsReadOnly } from '@/lib/workspaceSync';
 import { useAuth } from '@/contexts/AuthContext';
+import { Eye } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +51,7 @@ export function TopBar() {
 
   const navigate = useNavigate();
   const { currentName, status } = useWorkspaceSession();
+  const isReadOnly = useIsReadOnly();
   const { signOut } = useAuth();
 
   const handleSwitchProject = () => {
@@ -182,12 +184,18 @@ export function TopBar() {
           <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{currentName ?? 'Projects'}</span>
         </button>
-        <span className="flex items-center gap-1 text-xs text-muted-foreground w-[64px]">
-          {status === 'saving' && (<><Loader2 className="w-3 h-3 animate-spin" /> Saving</>)}
-          {status === 'saved' && (<><Check className="w-3 h-3 text-green-500" /> Saved</>)}
-          {status === 'error' && (<><AlertTriangle className="w-3 h-3 text-destructive" /> Error</>)}
-          {status === 'conflict' && (<><AlertTriangle className="w-3 h-3 text-amber-500" /> Conflict</>)}
-        </span>
+        {isReadOnly ? (
+          <span className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+            <Eye className="w-3 h-3" /> View only
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground w-[64px]">
+            {status === 'saving' && (<><Loader2 className="w-3 h-3 animate-spin" /> Saving</>)}
+            {status === 'saved' && (<><Check className="w-3 h-3 text-green-500" /> Saved</>)}
+            {status === 'error' && (<><AlertTriangle className="w-3 h-3 text-destructive" /> Error</>)}
+            {status === 'conflict' && (<><AlertTriangle className="w-3 h-3 text-amber-500" /> Conflict</>)}
+          </span>
+        )}
 
         <div className="w-px h-6 bg-border" />
 
@@ -216,16 +224,24 @@ export function TopBar() {
             <div className="absolute top-full mt-1 left-0 z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg overflow-hidden">
               <button
                 type="button"
+                disabled={isReadOnly}
                 onClick={() => { setFileDropdownOpen(false); handleNewClick(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                  isReadOnly ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground hover:bg-muted',
+                )}
               >
                 <FilePlus className="w-4 h-4 text-muted-foreground" />
                 New
               </button>
               <button
                 type="button"
+                disabled={isReadOnly}
                 onClick={() => { setFileDropdownOpen(false); handleImportClick(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+                  isReadOnly ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground hover:bg-muted',
+                )}
               >
                 <Upload className="w-4 h-4 text-muted-foreground" />
                 Import
@@ -324,7 +340,7 @@ export function TopBar() {
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    {menus.length > 1 && (
+                    {menus.length > 1 && !isReadOnly && (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setSelectedMenu(menu.id); setMenuDropdownOpen(false); setConfirmDeleteMenuOpen(true); }}
@@ -337,16 +353,18 @@ export function TopBar() {
                   </div>
                 );
               })}
-              <div className="border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => { handleAddMenu(); setMenuDropdownOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add menu
-                </button>
-              </div>
+              {!isReadOnly && (
+                <div className="border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => { handleAddMenu(); setMenuDropdownOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add menu
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
