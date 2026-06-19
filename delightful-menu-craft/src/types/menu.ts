@@ -260,7 +260,7 @@ export interface Station {
 // =============================================================================
 
 export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'settings' | 'categories';
-export type ViewMode = 'tree' | 'pos-preview';
+export type ViewMode = 'tree' | 'pos-preview' | 'kiosk-preview';
 
 // =============================================================================
 // Complete Excel Data Structure
