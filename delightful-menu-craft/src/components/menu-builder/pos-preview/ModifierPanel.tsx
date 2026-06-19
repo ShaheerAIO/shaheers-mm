@@ -33,7 +33,7 @@ export function itemHasPopupModifiers(
 }
 
 /** ItemModifiers often list nested mods explicitly; hide any mod that is a child of another linked mod. */
-function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifier[]): Modifier[] {
+export function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifier[]): Modifier[] {
   if (linked.length <= 1) return linked;
   return linked.filter((m) => {
     for (const p of linked) {
@@ -45,9 +45,9 @@ function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifier[]): 
   });
 }
 
-type PizzaSide = 'left' | 'right' | 'whole';
+export type PizzaSide = 'left' | 'right' | 'whole';
 
-function getChildModifiersForInit(modifier: Modifier, allModifiers: Modifier[]): Modifier[] {
+export function getChildModifiersForInit(modifier: Modifier, allModifiers: Modifier[]): Modifier[] {
   if (modifier.modifierIds) {
     const fromIds = modifier.modifierIds
       .split(',')
@@ -61,7 +61,7 @@ function getChildModifiersForInit(modifier: Modifier, allModifiers: Modifier[]):
 }
 
 /** Seed defaults from join table, overlay saved ticket selections, derive pizza sides for edit flows. */
-function buildInitialModifierState(
+export function buildInitialModifierState(
   item: Item,
   initialSelectedOptions: Record<number, number[]> | undefined,
   itemModifiers: ItemModifier[],
@@ -118,7 +118,7 @@ function buildInitialModifierState(
 }
 
 /** Excel often exports booleans as the string "FALSE" — don't show as a rule header. */
-function isMeaningfulOptionalLabel(value: string | undefined): boolean {
+export function isMeaningfulOptionalLabel(value: string | undefined): boolean {
   const t = value?.trim() ?? '';
   if (!t) return false;
   const lower = t.toLowerCase();

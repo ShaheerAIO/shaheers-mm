@@ -18,11 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Item, ModifierModifierOption } from '@/types/menu';
+import type { Item } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 import { ModifierPanel, itemHasPopupModifiers } from './pos-preview/ModifierPanel';
 import { effectiveItemTaxRate } from '@/lib/tax';
+import { modifierSurchargePerUnit } from '@/lib/posPricing';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,26 +39,6 @@ interface TicketLine {
 }
 
 type PosMode = 'qsr' | 'tsr';
-
-/** Sum join-table `maxLimit` for each selected option occurrence (duplicates = multi-qty). */
-function modifierSurchargePerUnit(
-  selectedOptions: Record<number, number[]>,
-  modifierModifierOptions: ModifierModifierOption[],
-): number {
-  let sum = 0;
-  for (const [modIdStr, ids] of Object.entries(selectedOptions)) {
-    const modId = Number(modIdStr);
-    if (!Number.isFinite(modId)) continue;
-    if (!Array.isArray(ids)) continue;
-    for (const optionId of ids) {
-      const mmo = modifierModifierOptions.find(
-        (m) => m.modifierId === modId && m.modifierOptionId === optionId,
-      );
-      sum += mmo?.maxLimit ?? 0;
-    }
-  }
-  return sum;
-}
 
 // ---------------------------------------------------------------------------
 // Component

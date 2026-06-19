@@ -2,6 +2,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { TopBar } from './TopBar';
 import { CategoryColumns } from './CategoryColumns';
 import { POSPreview } from './POSPreview';
+import { KioskPreview } from './kiosk-preview/KioskPreview';
 
 export function MenuBuilderContent() {
   const { viewMode } = useMenuStore();
@@ -12,7 +13,13 @@ export function MenuBuilderContent() {
       {/* relative+absolute ensures the scroll container is exactly sized to this box */}
       <div className="relative flex-1 overflow-hidden">
         <div className="absolute inset-0">
-          {viewMode === 'tree' ? <CategoryColumns /> : <POSPreview />}
+          {viewMode === 'tree' ? (
+            <CategoryColumns />
+          ) : viewMode === 'kiosk-preview' ? (
+            <KioskPreview />
+          ) : (
+            <POSPreview />
+          )}
         </div>
       </div>
     </div>

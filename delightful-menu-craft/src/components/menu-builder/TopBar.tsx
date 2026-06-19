@@ -280,6 +280,12 @@ export function TopBar() {
           >
             POS Preview
           </button>
+          <button
+            onClick={() => setViewMode('kiosk-preview')}
+            className={cn('toggle-button', viewMode === 'kiosk-preview' && 'active')}
+          >
+            Kiosk Preview
+          </button>
         </div>
       </div>
 
