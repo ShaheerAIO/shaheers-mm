@@ -6,8 +6,13 @@ export const SALE_CATEGORIES = [
   'Beer Sales',
   'Wine Sales',
   'Non-Alcoholic Beverages Sales',
-  'Retail',
-  'Non-Taxable',
+  // commented Retail and Non-Taxable as they are not in our menu manager
+  // 'Retail',
+  // 'Non-Taxable',
+  'Non-Food Items',
+  'Cocktails',
+  'Mocktails',
+  'Catering Sales'
 ] as const;
 
 export const DEFAULT_SALE_CATEGORY = 'Food Sales';

@@ -32,6 +32,7 @@ const SHEET_NAMES = {
   TAG: 'Tag',
   CUSTOM_TAXES: 'CustomTaxes',
   SETTING: 'Setting',
+  ITEM_3PO: 'Item 3PO',
 };
 
 // Column headers for each sheet — must match the POS import schema exactly
@@ -66,6 +67,7 @@ const HEADERS = {
   TAG: ['id', 'tagName', 'iconId', 'isDefault'],
   CUSTOM_TAXES: ['id', 'name', 'rate'],
   SETTING: ['id', 'type', 'status'],
+  ITEM_3PO: ['id', 'itemId', 'pickupPrice', 'deliveryPrice', 'inheritGeneralSettings', 'tpoType'],
 };
 
 // Convert data array to worksheet with headers (maps each row object by header key).
@@ -167,7 +169,7 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
     itemPrice: i.itemPrice, taxLinkedWithParentSetting: i.taxLinkedWithParentSetting,
     calculatePricesWithTaxIncluded: i.calculatePricesWithTaxIncluded, takeoutException: i.takeoutException,
     stockStatus: i.stockStatus, stockValue: i.stockValue, orderQuantityLimit: i.orderQuantityLimit,
-    minLimit: i.minLimit, maxLimit: i.maxLimit, noMaxLimit: i.noMaxLimit, stationIds: i.stationIds,
+    minLimit: i.minLimit, maxLimit: i.maxLimit || '', noMaxLimit: i.noMaxLimit, stationIds: i.stationIds,
     preparationTime: i.preparationTime, calories: i.calories, tagIds: i.tagIds,
     // saleCategory is required by the POS importer; default blanks to 'Food Sales'.
     inheritTagsFromCategory: i.inheritTagsFromCategory, saleCategory: (i.saleCategory || '').trim() || 'Food Sales',
@@ -365,6 +367,7 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   // CustomTax object keys (id/name/rate) already match the columns.
   append((data.customTaxes ?? []) as CustomTax[], HEADERS.CUSTOM_TAXES, SHEET_NAMES.CUSTOM_TAXES);
   append(settings, HEADERS.SETTING, SHEET_NAMES.SETTING);
+  append([], HEADERS.ITEM_3PO, SHEET_NAMES.ITEM_3PO);
 
   return workbook;
 };
