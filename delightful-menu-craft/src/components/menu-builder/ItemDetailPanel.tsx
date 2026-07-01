@@ -95,6 +95,31 @@ function buildAvailabilitySummary(draft: DraftState): string {
   return parts.join('  ·  ');
 }
 
+function getItemNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Item name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Item name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 2 || trimmed.length > 60) return 'Item name must be between 2-60 characters';
+  return null;
+}
+
+function getItemPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 2 || trimmed.length > 60) return 'POS name must be between 2-60 characters';
+  return null;
+}
+
+function getItemKdsNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'KDS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'KDS name required';
+  if (trimmed.length < 2 || trimmed.length > 40) return 'KDS name must be between 2-40 characters';
+  return null;
+}
+
 export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const {
     updateItem,
@@ -184,8 +209,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
     stockStatus: item.stockStatus,
     orderQuantityLimit: item.orderQuantityLimit ?? false,
-    minLimit: item.minLimit ?? 0,
-    maxLimit: item.maxLimit ?? 0,
+    minLimit: item.minLimit || 1,
+    maxLimit: item.maxLimit || 1,
     noMaxLimit: item.noMaxLimit ?? true,
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
@@ -241,6 +266,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
+  const [touched, setTouched] = useState({ itemName: false, posDisplayName: false, kdsName: false });
 
   // Reset draft state when item changes
   useEffect(() => {
@@ -259,8 +285,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
-      minLimit: item.minLimit ?? 0,
-      maxLimit: item.maxLimit ?? 0,
+      minLimit: item.minLimit || 1,
+      maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
@@ -293,6 +319,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     );
     setNewStationName('');
     setNamesExpanded(false);
+    setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   }, [item.id]);
 
   // Keep "item name drives POS/KDS" in sync with saved data after save; reset when switching items
@@ -375,6 +402,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft]);
 
   const saleCategoryValid = draft.saleCategory.trim() !== '';
+  const maxLimitValid = draft.noMaxLimit || !draft.orderQuantityLimit || draft.maxLimit >= draft.minLimit;
+
+  const itemNameError = getItemNameError(draft.itemName);
+  const posNameError = getItemPosNameError(draft.posDisplayName);
+  const kdsNameError = getItemKdsNameError(draft.kdsName);
+  const isFormValid = !itemNameError && !posNameError && !kdsNameError;
 
   // Effective tax rate for the live total + the current Select value/label.
   const effectiveTaxRate = effectiveItemTaxRate(draft, customTaxes, taxRate);
@@ -467,8 +500,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
-      minLimit: item.minLimit ?? 0,
-      maxLimit: item.maxLimit ?? 0,
+      minLimit: item.minLimit || 1,
+      maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
@@ -496,6 +529,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setStationDraft(originalStationIds);
     setNewStationName('');
     setItemNameDrivesPosKds(namesInitiallyLinked(item));
+    setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   };
 
   const handlePriceChange = (value: string) => {
@@ -748,9 +782,21 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     : { ...d, itemName: v },
                 );
               }}
+              onBlur={() => {
+                setDraft((d) => {
+                  const trimmed = d.itemName.trim();
+                  return itemNameDrivesPosKds
+                    ? { ...d, itemName: trimmed, posDisplayName: trimmed, kdsName: trimmed }
+                    : { ...d, itemName: trimmed };
+                });
+                setTouched((t) => ({ ...t, itemName: true }));
+              }}
               className="input-field h-8 text-sm font-semibold w-full leading-tight py-1"
               placeholder="Item name"
             />
+            {touched.itemName && itemNameError && (
+              <p className="text-[10px] text-destructive mt-0.5">{itemNameError}</p>
+            )}
 
             {/* POS / KDS toggle */}
             <button
@@ -767,31 +813,49 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
             {namesExpanded && (
               <div className="space-y-1 pl-2 border-l-2 border-border ml-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">POS</span>
-                  <input
-                    type="text"
-                    value={draft.posDisplayName}
-                    onChange={(e) => {
-                      setItemNameDrivesPosKds(false);
-                      setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
-                    }}
-                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                    placeholder="POS display name"
-                  />
+                <div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">POS</span>
+                    <input
+                      type="text"
+                      value={draft.posDisplayName}
+                      onChange={(e) => {
+                        setItemNameDrivesPosKds(false);
+                        setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                      }}
+                      onBlur={() => {
+                        setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                        setTouched((t) => ({ ...t, posDisplayName: true }));
+                      }}
+                      className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                      placeholder="POS display name"
+                    />
+                  </div>
+                  {touched.posDisplayName && posNameError && (
+                    <p className="text-[10px] text-destructive mt-0.5 ml-[2.5rem]">{posNameError}</p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">KDS</span>
-                  <input
-                    type="text"
-                    value={draft.kdsName}
-                    onChange={(e) => {
-                      setItemNameDrivesPosKds(false);
-                      setDraft((d) => ({ ...d, kdsName: e.target.value }));
-                    }}
-                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                    placeholder="KDS display name"
-                  />
+                <div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">KDS</span>
+                    <input
+                      type="text"
+                      value={draft.kdsName}
+                      onChange={(e) => {
+                        setItemNameDrivesPosKds(false);
+                        setDraft((d) => ({ ...d, kdsName: e.target.value }));
+                      }}
+                      onBlur={() => {
+                        setDraft((d) => ({ ...d, kdsName: d.kdsName.trim() }));
+                        setTouched((t) => ({ ...t, kdsName: true }));
+                      }}
+                      className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                      placeholder="KDS display name"
+                    />
+                  </div>
+                  {touched.kdsName && kdsNameError && (
+                    <p className="text-[10px] text-destructive mt-0.5 ml-[2.5rem]">{kdsNameError}</p>
+                  )}
                 </div>
                 {!itemNameDrivesPosKds && (
                   <button
@@ -1953,7 +2017,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </button>
         <button
           onClick={handleSave}
-          disabled={!hasChanges || !saleCategoryValid}
+          disabled={!hasChanges || !saleCategoryValid || !maxLimitValid || !isFormValid}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Save className="w-4 h-4" />
