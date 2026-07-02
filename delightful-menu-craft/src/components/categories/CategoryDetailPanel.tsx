@@ -128,6 +128,8 @@ export function CategoryDetailPanel({ category }: Props) {
   const [menuIds, setMenuIds] = useState<Set<number>>(() => new Set(parseIds(category.menuIds)));
 
   const [touched, setTouched] = useState({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
+  // KDS auto-populates from the name while linked; a manual KDS edit unlinks it.
+  const [kdsLinked, setKdsLinked] = useState(() => category.kdsDisplayName === category.categoryName);
 
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
@@ -198,6 +200,7 @@ export function CategoryDetailPanel({ category }: Props) {
     setGroupSearch('');
     setApplyFeedback(null);
     setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
+    setKdsLinked(category.kdsDisplayName === category.categoryName);
   }, [category.id]);
 
   const isDirty =
@@ -252,6 +255,7 @@ export function CategoryDetailPanel({ category }: Props) {
     setBulkStart('');
     setBulkEnd('');
     setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
+    setKdsLinked(category.kdsDisplayName === category.categoryName);
   };
 
   const handleCreateTag = () => {
@@ -321,8 +325,8 @@ export function CategoryDetailPanel({ category }: Props) {
                       ...d,
                       categoryName: e.target.value,
                       posDisplayName: e.target.value,
-                      // Auto-populate KDS only while it's still tracking the name (not manually diverged).
-                      kdsDisplayName: d.kdsDisplayName === d.categoryName ? e.target.value : d.kdsDisplayName,
+                      // Auto-populate KDS while linked (until the user edits KDS directly).
+                      kdsDisplayName: kdsLinked ? e.target.value : d.kdsDisplayName,
                     }))}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, categoryName: d.categoryName.trim(), posDisplayName: d.posDisplayName.trim() }));
@@ -359,7 +363,10 @@ export function CategoryDetailPanel({ category }: Props) {
                   <input
                     className="input-field h-7 text-xs flex-1 min-w-0 py-1"
                     value={draft.kdsDisplayName}
-                    onChange={(e) => setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }))}
+                    onChange={(e) => {
+                      setKdsLinked(false);
+                      setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }));
+                    }}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, kdsDisplayName: d.kdsDisplayName.trim() }));
                       setTouched((t) => ({ ...t, kdsDisplayName: true }));
