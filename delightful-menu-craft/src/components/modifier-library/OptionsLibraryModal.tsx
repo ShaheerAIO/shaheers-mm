@@ -14,6 +14,22 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { ModifierOption } from '@/types/menu';
 
+function getOptionNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Option name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Option name required';
+  if (trimmed.length > 72) return 'Option name must be 1–72 characters';
+  return null;
+}
+
+function getOptionPosNameError(value: string): string | null {
+  if (value.length === 0) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length > 60) return 'POS name must be 1–60 characters';
+  return null;
+}
+
 interface OptionsLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,12 +55,14 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   const [newPosDisplayName, setNewPosDisplayName] = useState('');
   const [newIsStockAvailable, setNewIsStockAvailable] = useState(true);
   const [newIsSizeModifier, setNewIsSizeModifier] = useState(false);
+  const [newTouched, setNewTouched] = useState({ optionName: false, posDisplayName: false });
 
   // Edit form state
   const [editOptionName, setEditOptionName] = useState('');
   const [editPosDisplayName, setEditPosDisplayName] = useState('');
   const [editIsStockAvailable, setEditIsStockAvailable] = useState(true);
   const [editIsSizeModifier, setEditIsSizeModifier] = useState(false);
+  const [editTouched, setEditTouched] = useState({ optionName: false, posDisplayName: false });
 
   // Filter options by search
   const filteredOptions = useMemo(() => {
@@ -70,8 +88,10 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   };
 
   const handleCreateOption = () => {
-    if (newOptionName.trim().length < 2) {
-      toast.error('Option name must be at least 2 characters.');
+    const nameErr = getOptionNameError(newOptionName);
+    const posErr = getOptionPosNameError(newPosDisplayName);
+    if (nameErr || posErr) {
+      setNewTouched({ optionName: true, posDisplayName: true });
       return;
     }
 
@@ -91,6 +111,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
     setNewPosDisplayName('');
     setNewIsStockAvailable(true);
     setNewIsSizeModifier(false);
+    setNewTouched({ optionName: false, posDisplayName: false });
     setShowCreateForm(false);
   };
 
@@ -100,12 +121,16 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
     setEditPosDisplayName(option.posDisplayName);
     setEditIsStockAvailable(option.isStockAvailable);
     setEditIsSizeModifier(option.isSizeModifier);
+    setEditTouched({ optionName: false, posDisplayName: false });
   };
 
   const saveEdit = () => {
     if (!editingOptionId) return;
-    if (editOptionName.trim().length < 2) {
-      toast.error('Option name must be at least 2 characters.');
+    const nameErr = getOptionNameError(editOptionName);
+    const posErr = getOptionPosNameError(editPosDisplayName);
+    if (nameErr || posErr) {
+      setEditTouched({ optionName: true, posDisplayName: true });
+      toast.error(nameErr ?? posErr ?? '');
       return;
     }
 
@@ -189,10 +214,17 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                     type="text"
                     value={newOptionName}
                     onChange={(e) => setNewOptionName(e.target.value)}
+                    onBlur={() => {
+                      setNewOptionName(newOptionName.trim());
+                      setNewTouched(t => ({ ...t, optionName: true }));
+                    }}
                     placeholder="e.g., Extra Cheese"
                     className="w-full px-3 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                     autoFocus
                   />
+                  {newTouched.optionName && getOptionNameError(newOptionName) && (
+                    <p className="text-xs text-destructive">{getOptionNameError(newOptionName)}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">POS Display Name</Label>
@@ -200,9 +232,16 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                     type="text"
                     value={newPosDisplayName}
                     onChange={(e) => setNewPosDisplayName(e.target.value)}
+                    onBlur={() => {
+                      setNewPosDisplayName(newPosDisplayName.trim());
+                      setNewTouched(t => ({ ...t, posDisplayName: true }));
+                    }}
                     placeholder="Leave blank to use name"
                     className="w-full px-3 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                   />
+                  {newTouched.posDisplayName && getOptionPosNameError(newPosDisplayName) && (
+                    <p className="text-xs text-destructive">{getOptionPosNameError(newPosDisplayName)}</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-6">
@@ -282,7 +321,16 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                               type="text"
                               value={editOptionName}
                               onChange={(e) => setEditOptionName(e.target.value)}
-                              className="w-full px-2 py-1 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                              onBlur={() => {
+                                setEditOptionName(editOptionName.trim());
+                                setEditTouched(t => ({ ...t, optionName: true }));
+                              }}
+                              className={cn(
+                                "w-full px-2 py-1 text-sm rounded border bg-background focus:outline-none focus:ring-1",
+                                editTouched.optionName && getOptionNameError(editOptionName)
+                                  ? "border-destructive focus:ring-destructive"
+                                  : "border-input focus:ring-ring"
+                              )}
                               autoFocus
                             />
                           </div>
@@ -291,7 +339,16 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                               type="text"
                               value={editPosDisplayName}
                               onChange={(e) => setEditPosDisplayName(e.target.value)}
-                              className="w-full px-2 py-1 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                              onBlur={() => {
+                                setEditPosDisplayName(editPosDisplayName.trim());
+                                setEditTouched(t => ({ ...t, posDisplayName: true }));
+                              }}
+                              className={cn(
+                                "w-full px-2 py-1 text-sm rounded border bg-background focus:outline-none focus:ring-1",
+                                editTouched.posDisplayName && getOptionPosNameError(editPosDisplayName)
+                                  ? "border-destructive focus:ring-destructive"
+                                  : "border-input focus:ring-ring"
+                              )}
                             />
                           </div>
                           <div className="col-span-2 flex justify-center gap-2">
