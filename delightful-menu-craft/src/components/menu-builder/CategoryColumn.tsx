@@ -170,9 +170,11 @@ export function CategoryColumn({
 
   const handleNameSubmit = () => {
     if (tempName.trim() && tempName !== category.categoryName) {
-      updateCategory(category.id, { 
+      updateCategory(category.id, {
         categoryName: tempName.trim(),
         posDisplayName: tempName.trim(),
+        // Auto-populate KDS while it's still tracking the name (not manually customized).
+        ...(category.kdsDisplayName === category.categoryName ? { kdsDisplayName: tempName.trim() } : {}),
       });
     }
     setIsEditingName(false);
