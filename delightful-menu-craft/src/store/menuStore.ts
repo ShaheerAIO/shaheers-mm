@@ -804,7 +804,9 @@ export const useMenuStore = create<MenuState>()(
         });
       },
 
-      startFresh: () => { if (get().isReadOnly) return; set({
+      startFresh: () => { if (get().isReadOnly) return;
+        const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+        set({
         menus: [{
           id: 1,
           menuName: 'Main Menu',
@@ -812,6 +814,7 @@ export const useMenuStore = create<MenuState>()(
           posButtonColor: DEFAULT_MENU_COLOR,
           picture: '',
           sortOrder: 1,
+          ...dv(),
         }],
         categories: [],
         items: [],

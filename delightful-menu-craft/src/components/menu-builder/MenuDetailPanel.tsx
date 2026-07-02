@@ -19,7 +19,7 @@ import { ColorPalettePicker } from '@/components/ColorPalettePicker';
 import { MENU_COLOR_PALETTE, DEFAULT_MENU_COLOR } from '@/lib/posColors';
 
 type VisDraft = Pick<Menu,
-  'visibilityPos' | 'visibilityKiosk' | 'visibilityQr' |
+  'visibilityPos' | 'visibilityKiosk' | 'visibilityMenuBoard' | 'visibilityQr' |
   'visibilityWebsite' | 'visibilityMobileApp' | 'visibilityDoordash'
 >;
 
@@ -71,6 +71,7 @@ export function MenuDetailPanel({ menu }: Props) {
     posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
     visibilityPos: menu.visibilityPos ?? true,
     visibilityKiosk: menu.visibilityKiosk ?? true,
+    visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
     visibilityQr: menu.visibilityQr ?? true,
     visibilityWebsite: menu.visibilityWebsite ?? true,
     visibilityMobileApp: menu.visibilityMobileApp ?? true,
@@ -108,6 +109,7 @@ export function MenuDetailPanel({ menu }: Props) {
     draft.posButtonColor !== (menu.posButtonColor || DEFAULT_MENU_COLOR) ||
     draft.visibilityPos !== (menu.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (menu.visibilityKiosk ?? true) ||
+    draft.visibilityMenuBoard !== (menu.visibilityMenuBoard ?? true) ||
     draft.visibilityQr !== (menu.visibilityQr ?? true) ||
     draft.visibilityWebsite !== (menu.visibilityWebsite ?? true) ||
     draft.visibilityMobileApp !== (menu.visibilityMobileApp ?? true) ||

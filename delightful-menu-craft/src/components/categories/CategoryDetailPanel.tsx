@@ -317,7 +317,13 @@ export function CategoryDetailPanel({ category }: Props) {
                   <input
                     className="input-field h-8 text-sm font-semibold flex-1 min-w-0 py-1"
                     value={draft.categoryName}
-                    onChange={(e) => setDraft((d) => ({ ...d, categoryName: e.target.value, posDisplayName: e.target.value }))}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      categoryName: e.target.value,
+                      posDisplayName: e.target.value,
+                      // Auto-populate KDS only while it's still tracking the name (not manually diverged).
+                      kdsDisplayName: d.kdsDisplayName === d.categoryName ? e.target.value : d.kdsDisplayName,
+                    }))}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, categoryName: d.categoryName.trim(), posDisplayName: d.posDisplayName.trim() }));
                       setTouched((t) => ({ ...t, categoryName: true }));
