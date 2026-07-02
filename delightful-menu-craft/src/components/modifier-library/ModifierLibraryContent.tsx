@@ -167,7 +167,7 @@ export function ModifierLibraryContent() {
 
   const handleAddGroup = () => {
     const name = newGroupName.trim();
-    if (!name) return;
+    if (getGroupNameError(newGroupName)) return;
     const newGroup: ModifierGroup = {
       id: getNextId('modifierGroups'),
       groupName: name,
@@ -462,13 +462,16 @@ export function ModifierLibraryContent() {
                   <button
                     type="button"
                     onClick={handleAddGroup}
-                    disabled={!newGroupName.trim()}
+                    disabled={!!getGroupNameError(newGroupName)}
                     className="btn-add disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add
                   </button>
                 </div>
+                {newGroupName.length > 0 && getGroupNameError(newGroupName) && (
+                  <p className="text-[10px] text-destructive mt-1">{getGroupNameError(newGroupName)}</p>
+                )}
               </div>
               {/* Group search */}
               <div className="px-3 py-2 border-b border-panel-border">
@@ -602,6 +605,39 @@ interface ModifierDetailProps {
   modifier: Modifier;
 }
 
+function getGroupNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Group name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Group name required';
+  if (trimmed.length > 24) return 'Group name must be 1–24 characters';
+  return null;
+}
+
+function getGroupPosNameError(value: string): string | null {
+  if (value.length === 0) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length > 60) return 'POS name must be 1–60 characters';
+  return null;
+}
+
+function getModifierNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Modifier name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Modifier name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 1 || trimmed.length > 40) return 'Modifier name must be between 1-40 characters';
+  return null;
+}
+
+function getModifierPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 1 || trimmed.length > 60) return 'POS name must be between 1-60 characters';
+  return null;
+}
+
 /** Same rule as item detail: POS can track modifier name until POS or Prefix is edited separately. */
 function modifierNamesInitiallyLinked(m: Modifier): boolean {
   const name = m.modifierName?.trim() ?? '';
@@ -668,6 +704,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const [modifierNameDrivesPos, setModifierNameDrivesPos] = useState(() =>
     modifierNamesInitiallyLinked(modifier),
   );
+  const [touched, setTouched] = useState({ modifierName: false, posDisplayName: false });
 
   // Draft state for modifier fields
   const [draft, setDraft] = useState<ModifierDraft>({
@@ -724,6 +761,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setBulkCreateText('');
     setDragIndex(null);
     setDragOverIndex(null);
+    setTouched({ modifierName: false, posDisplayName: false });
   }, [modifier.id]);
 
   useEffect(() => {
@@ -743,6 +781,15 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   useEffect(() => {
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
   }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
+
+  // Sync minSelector with selection type
+  useEffect(() => {
+    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
+      if (draft.minSelector === 0) setDraft(d => ({ ...d, minSelector: 1 }));
+    } else if (draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional') {
+      if (draft.minSelector !== 0) setDraft(d => ({ ...d, minSelector: 0 }));
+    }
+  }, [draft.isOptional]);
 
   const currentStructureFingerprint = useMemo(
     () =>
@@ -807,6 +854,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const hasStructureChanges = currentStructureFingerprint !== structureBaseline;
 
   const hasChanges = hasMetadataChanges || hasStructureChanges;
+  const maxSelectorValid = draft.noMaxSelection || draft.maxSelector >= draft.minSelector;
+  const modifierNameError = getModifierNameError(draft.modifierName);
+  const posNameError = getModifierPosNameError(draft.posDisplayName);
+  const isNamesValid = !modifierNameError && !posNameError;
 
   const handleSave = () => {
     if (hasMetadataChanges) {
@@ -861,6 +912,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
+    setTouched({ modifierName: false, posDisplayName: false });
     // Clears "dirty" for option/nested edits without reverting store (those are already persisted).
     setStructureBaseline(
       fingerprintModifierStructure(
@@ -1303,10 +1355,22 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         : { ...d, modifierName: v },
                     );
                   }}
+                  onBlur={() => {
+                    const trimmed = draft.modifierName.trim();
+                    setDraft((d) =>
+                      modifierNameDrivesPos
+                        ? { ...d, modifierName: trimmed, posDisplayName: trimmed }
+                        : { ...d, modifierName: trimmed },
+                    );
+                    setTouched((t) => ({ ...t, modifierName: true }));
+                  }}
                   className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
                   placeholder="Modifier name"
                 />
               </div>
+              {touched.modifierName && modifierNameError && (
+                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{modifierNameError}</p>
+              )}
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
                   POS
@@ -1318,10 +1382,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     setModifierNameDrivesPos(false);
                     setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
                   }}
+                  onBlur={() => {
+                    setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                    setTouched((t) => ({ ...t, posDisplayName: true }));
+                  }}
                   className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
                   placeholder="POS display name"
                 />
               </div>
+              {touched.posDisplayName && posNameError && (
+                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{posNameError}</p>
+              )}
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
                   Prefix
@@ -1854,9 +1925,15 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 type="text"
                 inputMode="numeric"
                 value={draft.minSelector}
+                // optional types lock min at 0; required types allow editing from 1 up to max
+                disabled={draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional'}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraft(d => ({ ...d, minSelector: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-                className="input-field w-full"
+                onChange={(e) => setDraft(d => {
+                  const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
+                  const floor = isRequired ? 1 : 0;
+                  return { ...d, minSelector: Math.max(floor, Math.min(parseInt(e.target.value, 10) || floor, d.noMaxSelection ? Infinity : d.maxSelector)) };
+                })}
+                className="input-field w-full disabled:opacity-50"
               />
             </div>
             <div className="space-y-2">
@@ -1866,7 +1943,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 inputMode="numeric"
                 value={draft.maxSelector}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
+                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.max(parseInt(e.target.value, 10) || 1, d.minSelector) }))}
                 disabled={draft.noMaxSelection}
                 className="input-field w-full"
               />
@@ -1961,8 +2038,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              disabled={!hasChanges || !maxSelectorValid || !isNamesValid}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
               Save
@@ -2088,8 +2165,10 @@ interface ModifierGroupDetailProps {
 function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }: ModifierGroupDetailProps) {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(group.groupName);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [editingPosName, setEditingPosName] = useState(false);
   const [draftPosName, setDraftPosName] = useState(group.posDisplayName);
+  const [posNameError, setPosNameError] = useState<string | null>(null);
   const [modPickerOpen, setModPickerOpen] = useState(false);
   const [modPickerSearch, setModPickerSearch] = useState('');
   const modPickerRef = useRef<HTMLDivElement>(null);
@@ -2099,6 +2178,8 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
     setDraftPosName(group.posDisplayName);
     setEditingName(false);
     setEditingPosName(false);
+    setNameError(null);
+    setPosNameError(null);
   }, [group.id]);
 
   useLayoutEffect(() => {
@@ -2138,12 +2219,17 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
   };
 
   const saveName = () => {
-    const name = draftName.trim();
-    if (name) updateModifierGroup(group.id, { groupName: name });
+    const err = getGroupNameError(draftName);
+    if (err) { setNameError(err); return; }
+    setNameError(null);
+    updateModifierGroup(group.id, { groupName: draftName.trim() });
     setEditingName(false);
   };
 
   const savePosName = () => {
+    const err = getGroupPosNameError(draftPosName);
+    if (err) { setPosNameError(err); return; }
+    setPosNameError(null);
     updateModifierGroup(group.id, { posDisplayName: draftPosName.trim() || group.groupName });
     setEditingPosName(false);
   };
@@ -2154,23 +2240,26 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
       <div className="p-4 border-b border-panel-border flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {editingName ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveName();
-                  if (e.key === 'Escape') setEditingName(false);
-                }}
-                className="input-field text-sm font-semibold flex-1"
-              />
-              <button type="button" onClick={saveName} className="p-1 text-primary hover:text-primary/80">
-                <Save className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setEditingName(false)} className="p-1 text-muted-foreground hover:text-foreground">
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={draftName}
+                  onChange={(e) => { setDraftName(e.target.value); setNameError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveName();
+                    if (e.key === 'Escape') { setEditingName(false); setNameError(null); }
+                  }}
+                  className="input-field text-sm font-semibold flex-1"
+                />
+                <button type="button" onClick={saveName} className="p-1 text-primary hover:text-primary/80">
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => { setEditingName(false); setNameError(null); }} className="p-1 text-muted-foreground hover:text-foreground">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {nameError && <p className="text-[10px] text-destructive mt-0.5">{nameError}</p>}
             </div>
           ) : (
             <button
@@ -2201,23 +2290,26 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
             POS Display Name
           </p>
           {editingPosName ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={draftPosName}
-                onChange={(e) => setDraftPosName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') savePosName();
-                  if (e.key === 'Escape') setEditingPosName(false);
-                }}
-                className="input-field text-sm flex-1"
-              />
-              <button type="button" onClick={savePosName} className="p-1 text-primary hover:text-primary/80">
-                <Save className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setEditingPosName(false)} className="p-1 text-muted-foreground hover:text-foreground">
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={draftPosName}
+                  onChange={(e) => { setDraftPosName(e.target.value); setPosNameError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') savePosName();
+                    if (e.key === 'Escape') { setEditingPosName(false); setPosNameError(null); }
+                  }}
+                  className="input-field text-sm flex-1"
+                />
+                <button type="button" onClick={savePosName} className="p-1 text-primary hover:text-primary/80">
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => { setEditingPosName(false); setPosNameError(null); }} className="p-1 text-muted-foreground hover:text-foreground">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {posNameError && <p className="text-[10px] text-destructive mt-0.5">{posNameError}</p>}
             </div>
           ) : (
             <button
