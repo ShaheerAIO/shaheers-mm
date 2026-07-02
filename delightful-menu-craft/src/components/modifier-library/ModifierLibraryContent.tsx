@@ -1977,7 +1977,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <Switch
                 checked={draft.noMaxSelection}
                 onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxSelection: checked }))}
-                disabled={isFinite(selectionCeiling)}
               />
             </div>
           </div>

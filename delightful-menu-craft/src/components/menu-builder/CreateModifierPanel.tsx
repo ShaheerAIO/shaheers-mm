@@ -861,7 +861,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     </div>
                     <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
                       <Label htmlFor="noMaxSelection" className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">No max</Label>
-                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} disabled={isFinite(selectionCeiling)} />
+                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
                     </div>
                   </div>
                   <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
