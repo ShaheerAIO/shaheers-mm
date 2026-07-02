@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
+import { modifierSelectionCeiling } from '@/lib/posPricing';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -108,6 +109,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [isSizeModifier, setIsSizeModifier] = useState(false);
   const [modifierOptionPriceType, setModifierOptionPriceType] = useState('NoCharge');
   const [multiSelect, setMultiSelect] = useState(false);
+  // Default true to preserve the prior export value (was hardcoded true); repeat is opt-out.
+  const [canGuestSelectMoreModifiers, setCanGuestSelectMoreModifiers] = useState(true);
 
   // Modifier type mode — mutually exclusive
   type ModifierMode = 'flat' | 'nested';
@@ -387,7 +390,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       isNested: false,
       addNested: false,
       modifierOptionPriceType,
-      canGuestSelectMoreModifiers: true,
+      canGuestSelectMoreModifiers,
       multiSelect,
       limitIndividualModifierSelection: options.some(o => o.maxQtyPerOption !== 1),
       prefix: prefix.trim(),
@@ -555,6 +558,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setIsSizeModifier(false);
     setModifierOptionPriceType('NoCharge');
     setMultiSelect(false);
+    setCanGuestSelectMoreModifiers(true);
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
@@ -573,6 +577,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     !modifierNameError && !posNameError &&
     (modifierMode === 'flat' ? options.length > 0 : nestedModifierIds.length > 0) &&
     (noMaxSelection || maxSelector >= minSelector);
+
+  const selectionCeiling = modifierSelectionCeiling({
+    multiSelect,
+    allowRepeat: canGuestSelectMoreModifiers,
+    limitPerOption: options.some(o => o.maxQtyPerOption !== 1),
+    optionCount: options.length,
+    perOptionLimits: options.map(o => o.maxQtyPerOption),
+  });
 
   return (
     <div className="flex flex-col h-full">
@@ -842,17 +854,20 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         inputMode="numeric"
                         value={maxSelector}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => setMaxSelector(Math.max(parseInt(e.target.value, 10) || 1, minSelector))}
+                        onChange={(e) => setMaxSelector(Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, minSelector)))}
                         disabled={noMaxSelection}
                         className="input-field w-full text-sm h-8 disabled:opacity-50"
                       />
                     </div>
                     <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
                       <Label htmlFor="noMaxSelection" className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">No max</Label>
-                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
+                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} disabled={isFinite(selectionCeiling)} />
                     </div>
                   </div>
                   <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
+                  {isFinite(selectionCeiling) && (
+                    <p className="text-[9px] text-muted-foreground leading-tight">Max {selectionCeiling} selections</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -897,6 +912,16 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     Allow multiple selections
                   </Label>
                   <Switch id="multiSelect" checked={multiSelect} onCheckedChange={setMultiSelect} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="canGuestSelectMoreModifiers"
+                    title="Guest can pick the same option more than once"
+                    className="text-xs font-normal cursor-pointer"
+                  >
+                    Allow same option more than once
+                  </Label>
+                  <Switch id="canGuestSelectMoreModifiers" checked={canGuestSelectMoreModifiers} onCheckedChange={setCanGuestSelectMoreModifiers} />
                 </div>
               </div>
             </AccordionContent>

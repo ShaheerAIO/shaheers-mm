@@ -42,6 +42,15 @@ interface ItemDetailPanelProps {
   item: Item;
 }
 
+function parseIds(csv: string | undefined): number[] {
+  if (!csv?.trim()) return [];
+  return csv.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0);
+}
+
+function serializeIds(ids: number[]): string {
+  return [...new Set(ids)].sort((a, b) => a - b).join(',');
+}
+
 interface DraftState {
   itemName: string;
   posDisplayName: string;
@@ -123,6 +132,7 @@ function getItemKdsNameError(value: string): string | null {
 export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const {
     updateItem,
+    items,
     modifiers,
     modifierGroups,
     modifierOptions,
@@ -249,6 +259,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
       : []
   );
+  const [addonDraft, setAddonDraft] = useState<number[]>(parseIds(item.addonIds));
+  const [addonSearch, setAddonSearch] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
   const [pendingDeleteTagId, setPendingDeleteTagId] = useState<number | null>(null);
@@ -317,6 +329,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
         : []
     );
+    setAddonDraft(parseIds(item.addonIds));
+    setAddonSearch('');
     setNewStationName('');
     setNamesExpanded(false);
     setTouched({ itemName: false, posDisplayName: false, kdsName: false });
@@ -357,6 +371,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     [item.stationIds],
   );
 
+  const originalAddonIds = useMemo(() => parseIds(item.addonIds), [item.addonIds]);
+
   // Check if there are unsaved changes
   const hasChanges = useMemo(() => {
     const originalStationsSorted = [...originalStationIds].sort();
@@ -364,6 +380,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     const stationsChanged =
       originalStationsSorted.length !== draftStationsSorted.length ||
       originalStationsSorted.some((id, idx) => id !== draftStationsSorted[idx]);
+
+    const addonsChanged = serializeIds(addonDraft) !== serializeIds(originalAddonIds);
 
     return (
       draft.itemName !== item.itemName ||
@@ -397,9 +415,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       serializeGroupSchedules(draft.daySchedulesByGroup) !== (item.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
       pendingModifierIds.length > 0 ||
       pendingRemovedModifierIds.length > 0 ||
-      stationsChanged
+      stationsChanged ||
+      addonsChanged
     );
-  }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft]);
+  }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft, originalAddonIds, addonDraft]);
 
   const saleCategoryValid = draft.saleCategory.trim() !== '';
   const maxLimitValid = draft.noMaxLimit || !draft.orderQuantityLimit || draft.maxLimit >= draft.minLimit;
@@ -451,6 +470,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       calories: draft.calories,
       saleCategory: draft.saleCategory.trim() || 'Food Sales',
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
+      addonIds: serializeIds(addonDraft),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
       visibilityMenuBoard: draft.visibilityMenuBoard,
@@ -527,6 +547,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setStationDraft(originalStationIds);
+    setAddonDraft(originalAddonIds);
     setNewStationName('');
     setItemNameDrivesPosKds(namesInitiallyLinked(item));
     setTouched({ itemName: false, posDisplayName: false, kdsName: false });
@@ -756,6 +777,25 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       return [...prev, stationId];
     });
   };
+
+  const handleToggleAddon = (addonItemId: number) => {
+    setAddonDraft((prev) => {
+      if (prev.includes(addonItemId)) {
+        return prev.filter((id) => id !== addonItemId);
+      }
+      return [...prev, addonItemId];
+    });
+  };
+
+  // Selectable add-on items — all menu items except this one.
+  const addonCandidates = items.filter((i) => i.id !== item.id);
+  const filteredAddonCandidates = addonSearch.trim()
+    ? addonCandidates.filter((i) =>
+        `${i.posDisplayName || i.itemName} ${i.id}`
+          .toLowerCase()
+          .includes(addonSearch.trim().toLowerCase()),
+      )
+    : addonCandidates;
 
   return (
     <div className="flex flex-col h-full">
@@ -1871,6 +1911,60 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   >
                     <Plus className="w-3 h-3" /> New allergen
                   </button>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="addons" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Add-Ons
+                {addonDraft.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                    ({addonDraft.length})
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Link other menu items as add-ons for this item.
+                </p>
+                {addonCandidates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No other items exist yet.</p>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={addonSearch}
+                      onChange={(e) => setAddonSearch(e.target.value)}
+                      placeholder="Search items..."
+                      className="input-field w-full text-xs"
+                    />
+                    {filteredAddonCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No items match your search.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                        {filteredAddonCandidates.map((candidate) => (
+                          <label
+                            key={candidate.id}
+                            className="flex items-center gap-2 text-xs cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={addonDraft.includes(candidate.id)}
+                              onCheckedChange={() => handleToggleAddon(candidate.id)}
+                            />
+                            <span className="text-muted-foreground">
+                              {candidate.posDisplayName || candidate.itemName}
+                            </span>
+                            <span className="text-muted-foreground/50 tabular-nums">#{candidate.id}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </AccordionContent>

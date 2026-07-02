@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
+import { modifierSelectionCeiling } from '@/lib/posPricing';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -657,6 +658,7 @@ interface ModifierDraft {
   isOptional: string;
   modifierOptionPriceType: string;
   multiSelect: boolean;
+  canGuestSelectMoreModifiers: boolean;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
   // Channel visibility
@@ -719,6 +721,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     isOptional: modifier.isOptional,
     modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
     multiSelect: modifier.multiSelect ?? false,
+    canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
     ...defaultVisibility(),
@@ -745,6 +748,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
       multiSelect: modifier.multiSelect ?? false,
+      canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -846,6 +850,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       draft.isOptional !== modifier.isOptional ||
       draft.modifierOptionPriceType !== (modifier.modifierOptionPriceType ?? 'NoCharge') ||
       draft.multiSelect !== (modifier.multiSelect ?? false) ||
+      draft.canGuestSelectMoreModifiers !== (modifier.canGuestSelectMoreModifiers ?? true) ||
       draft.pizzaSelection !== modifier.pizzaSelection ||
       draft.isSizeModifier !== modifier.isSizeModifier
     );
@@ -873,6 +878,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         isOptional: draft.isOptional,
         modifierOptionPriceType: draft.modifierOptionPriceType,
         multiSelect: draft.multiSelect,
+        canGuestSelectMoreModifiers: draft.canGuestSelectMoreModifiers,
         pizzaSelection: draft.pizzaSelection,
         isSizeModifier: draft.isSizeModifier,
         visibilityPos: draft.visibilityPos,
@@ -900,6 +906,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
       multiSelect: modifier.multiSelect ?? false,
+      canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -935,6 +942,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       }));
   }, [modifierModifierOptions, modifier.id, modifierOptions]);
   
+  // Dynamic Max SELECTION ceiling from the three toggles (see modifierSelectionCeiling)
+  const selectionCeiling = useMemo(
+    () =>
+      modifierSelectionCeiling({
+        multiSelect: draft.multiSelect,
+        allowRepeat: draft.canGuestSelectMoreModifiers,
+        limitPerOption: modifierOptionAssignments.some(a => (a.maxQtyPerOption ?? 1) !== 1),
+        optionCount: modifierOptionAssignments.length,
+        perOptionLimits: modifierOptionAssignments.map(a => a.maxQtyPerOption ?? 1),
+      }),
+    [draft.multiSelect, draft.canGuestSelectMoreModifiers, modifierOptionAssignments],
+  );
+
   // Filter options by search
   const filteredOptionAssignments = useMemo(() => {
     if (!optionSearch.trim()) return modifierOptionAssignments;
@@ -1943,17 +1963,21 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 inputMode="numeric"
                 value={draft.maxSelector}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.max(parseInt(e.target.value, 10) || 1, d.minSelector) }))}
+                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, d.minSelector)) }))}
                 disabled={draft.noMaxSelection}
                 className="input-field w-full"
               />
               <p className="text-[10px] text-muted-foreground">Combination limit</p>
+              {isFinite(selectionCeiling) && (
+                <p className="text-[10px] text-muted-foreground">Max {selectionCeiling} selections</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="section-header">No maximum</Label>
               <Switch
                 checked={draft.noMaxSelection}
                 onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxSelection: checked }))}
+                disabled={isFinite(selectionCeiling)}
               />
             </div>
           </div>
@@ -1968,6 +1992,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               id="multiSelect"
               checked={draft.multiSelect}
               onCheckedChange={(checked) => setDraft(d => ({ ...d, multiSelect: checked }))}
+            />
+          </div>
+
+          {/* Allow repeat — same option more than once */}
+          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+            <div>
+              <Label htmlFor="canGuestSelectMoreModifiers" className="text-sm">Allow same option more than once</Label>
+              <p className="text-xs text-muted-foreground">Guest can pick the same option multiple times</p>
+            </div>
+            <Switch
+              id="canGuestSelectMoreModifiers"
+              checked={draft.canGuestSelectMoreModifiers}
+              onCheckedChange={(checked) => setDraft(d => ({ ...d, canGuestSelectMoreModifiers: checked }))}
             />
           </div>
 

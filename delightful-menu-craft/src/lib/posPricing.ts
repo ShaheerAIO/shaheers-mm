@@ -58,3 +58,33 @@ export function effectiveUnitPrice(
   const base = sizeAbsolute !== null ? sizeAbsolute : itemPrice;
   return base + surcharge;
 }
+
+/**
+ * Dynamic ceiling for a modifier's Max SELECTION cap, driven by three toggles:
+ *   T1 multiSelect      — allow selecting more than one option
+ *   T2 allowRepeat      — allow selecting the SAME option more than once
+ *   T3 limitPerOption   — per-option individual max limits (maxQtyPerOption)
+ *
+ * Rules:
+ *   T1 off                       → ceiling = 1 (single select)
+ *   T1 on, T2 off                → Scenario A: ceiling = optionCount
+ *   T1 on, T2 on, T3 off         → Scenario B: ceiling = Infinity (unbounded)
+ *   T1 on, T2 on, T3 on          → Scenario C: ceiling = sum of per-option
+ *                                  maxQtyPerOption; a limit of 0 means "unlimited",
+ *                                  so any 0 makes the ceiling Infinity.
+ */
+export function modifierSelectionCeiling(opts: {
+  multiSelect: boolean;
+  allowRepeat: boolean; // canGuestSelectMoreModifiers
+  limitPerOption: boolean; // limitIndividualModifierSelection
+  optionCount: number;
+  perOptionLimits: number[]; // maxQtyPerOption for each option
+}): number {
+  const { multiSelect, allowRepeat, limitPerOption, optionCount, perOptionLimits } = opts;
+  if (!multiSelect) return 1;
+  if (!allowRepeat) return optionCount; // Scenario A
+  if (!limitPerOption) return Infinity; // Scenario B
+  // Scenario C: sum per-option limits; 0 = unlimited → Infinity
+  if (perOptionLimits.some((n) => n === 0)) return Infinity;
+  return perOptionLimits.reduce((sum, n) => sum + n, 0);
+}
