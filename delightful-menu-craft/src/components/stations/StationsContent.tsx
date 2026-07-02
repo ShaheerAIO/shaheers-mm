@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import type { Station } from '@/types/menu';
-import { Upload, Radio, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Upload, Radio, Plus, Pencil, Trash2, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { StationItemsModal } from './StationItemsModal';
 
 export function StationsContent() {
   const {
@@ -37,6 +38,7 @@ export function StationsContent() {
   const [editingLabel, setEditingLabel] = useState('');
   const [itemSearch, setItemSearch] = useState('');
   const [view, setView] = useState<'stations' | 'unmapped'>('stations');
+  const [managingStationId, setManagingStationId] = useState<number | null>(null);
 
   // Fallback: derive stations from items if store.stations is empty
   const derivedStationsFromItems = useMemo((): Station[] => {
@@ -248,6 +250,14 @@ export function StationsContent() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setManagingStationId(station.id)}
+                      className="p-1 text-muted-foreground hover:text-foreground"
+                      title="Manage items"
+                    >
+                      <ListChecks className="w-3.5 h-3.5" />
+                    </button>
                     {!isEditing && (
                       <button
                         type="button"
@@ -417,6 +427,15 @@ export function StationsContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {managingStationId !== null && (
+        <StationItemsModal
+          key={managingStationId}
+          stationId={managingStationId}
+          isOpen
+          onClose={() => setManagingStationId(null)}
+        />
+      )}
     </div>
   );
 }

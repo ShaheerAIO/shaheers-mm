@@ -19,29 +19,39 @@ interface StationItemsModalProps {
   onClose: () => void;
 }
 
+function getInitialSelectedIds(
+  items: ReturnType<typeof useMenuStore.getState>['items'],
+  stationId: number,
+): Set<number> {
+  const set = new Set<number>();
+  items.forEach((item) => {
+    const ids = item.stationIds
+      ? item.stationIds
+          .split(',')
+          .map((id) => parseInt(id.trim(), 10))
+          .filter((n) => !isNaN(n) && n > 0)
+      : [];
+    if (ids.includes(stationId)) {
+      set.add(item.id);
+    }
+  });
+  return set;
+}
+
 export function StationItemsModal({ stationId, isOpen, onClose }: StationItemsModalProps) {
   const { items, stations, bulkSetItemsForStation } = useMenuStore();
   const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() =>
+    getInitialSelectedIds(items, stationId),
+  );
 
   const stationLabel = `Station ${stationId}`;
 
   // Initialize selected items when modal opens or station/items change
-  const initialSelectedIds = useMemo(() => {
-    const set = new Set<number>();
-    items.forEach((item) => {
-      const ids = item.stationIds
-        ? item.stationIds
-            .split(',')
-            .map((id) => parseInt(id.trim(), 10))
-            .filter((n) => !isNaN(n) && n > 0)
-        : [];
-      if (ids.includes(stationId)) {
-        set.add(item.id);
-      }
-    });
-    return set;
-  }, [items, stationId]);
+  const initialSelectedIds = useMemo(
+    () => getInitialSelectedIds(items, stationId),
+    [items, stationId],
+  );
 
   // Keep local state in sync with current data when opened
   const handleOpenChange = (open: boolean) => {

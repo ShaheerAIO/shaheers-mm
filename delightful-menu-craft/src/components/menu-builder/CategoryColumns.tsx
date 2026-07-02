@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
 import { CategoryColumn } from './CategoryColumn';
@@ -23,8 +23,14 @@ export function CategoryColumns() {
     editingMenuId,
     isCreatingModifier,
     isCreatingOption,
+    reorderCategories,
   } = useMenuStore();
   const isReadOnly = useIsReadOnly();
+
+  // Native DnD state for reordering root category columns.
+  const [colDragIndex, setColDragIndex] = useState<number | null>(null);
+  const [colDragOverIndex, setColDragOverIndex] = useState<number | null>(null);
+  const [colDragArmed, setColDragArmed] = useState(false);
 
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
@@ -47,33 +53,41 @@ export function CategoryColumns() {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories, selectedMenuId]);
 
-  // Get subcategories for a parent
-  const getSubcategories = (parentId: number): Category[] => {
-    return categories
-      .filter(c => c.parentCategoryId === parentId)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+  // Collect a category id plus all of its descendant ids (recursive, cycle-safe).
+  const collectSubtreeIds = (rootId: number): number[] => {
+    const visited = new Set<number>();
+    const stack = [rootId];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const c of categories) {
+        if (c.parentCategoryId === id && !visited.has(c.id)) stack.push(c.id);
+      }
+    }
+    return Array.from(visited);
   };
 
-  // Get items for a category using the categoryItems join table
+  // Get items for a category using the categoryItems join table.
+  // Rolls up items from the full descendant subtree, deduped so an item that
+  // appears under multiple descendants is only counted once.
   const getItemsForCategory = (catId: number): Item[] => {
-    // Get all items that belong to this category via categoryItems join table
-    const matchingCategoryItems = categoryItems.filter(ci => ci.categoryId === catId);
-    
-    const categoryItemIds = matchingCategoryItems
+    const subtreeIds = new Set(collectSubtreeIds(catId));
+    const seenItemIds = new Set<number>();
+    const orderedItemIds: number[] = [];
+
+    categoryItems
+      .filter(ci => subtreeIds.has(ci.categoryId))
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(ci => ci.itemId);
-    
-    // Also include items from subcategories
-    const subcats = getSubcategories(catId);
-    subcats.forEach(subcat => {
-      const subcatItemIds = categoryItems
-        .filter(ci => ci.categoryId === subcat.id)
-        .map(ci => ci.itemId);
-      categoryItemIds.push(...subcatItemIds);
-    });
+      .forEach(ci => {
+        if (!seenItemIds.has(ci.itemId)) {
+          seenItemIds.add(ci.itemId);
+          orderedItemIds.push(ci.itemId);
+        }
+      });
 
     // Map item IDs to actual items
-    return categoryItemIds
+    return orderedItemIds
       .map(itemId => items.find(i => i.id === itemId))
       .filter((item): item is Item => item !== undefined);
   };
@@ -146,14 +160,46 @@ export function CategoryColumns() {
       style={{ paddingRight: panelWidth }}
     >
       {/* All categories in their natural order */}
-      {menuCategories.map((category) => (
+      {menuCategories.map((category, index) => (
         <CategoryColumn
           key={category.id}
           category={category}
-          subcategories={getSubcategories(category.id)}
           items={getItemsForCategory(category.id)}
           isExpanded={selectedCategoryId === category.id}
           onExpand={() => handleCategoryClick(category.id)}
+          dragHandlers={{
+            draggable: !isReadOnly && colDragArmed,
+            isDragOver: colDragOverIndex === index && colDragIndex !== index,
+            onHandleMouseDown: () => { if (!isReadOnly) setColDragArmed(true); },
+            onHandleMouseUp: () => setColDragArmed(false),
+            onDragStart: (e) => {
+              if (isReadOnly || !colDragArmed) { e.preventDefault(); return; }
+              setColDragIndex(index);
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', String(index));
+            },
+            onDragOver: (e) => {
+              if (colDragIndex === null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (index !== colDragOverIndex) setColDragOverIndex(index);
+            },
+            onDrop: (e) => {
+              e.preventDefault();
+              if (colDragIndex === null) return;
+              const from = colDragIndex;
+              setColDragIndex(null);
+              setColDragOverIndex(null);
+              setColDragArmed(false);
+              if (from === index) return;
+              reorderCategories(null, from, index);
+            },
+            onDragEnd: () => {
+              setColDragIndex(null);
+              setColDragOverIndex(null);
+              setColDragArmed(false);
+            },
+          }}
         />
       ))}
       

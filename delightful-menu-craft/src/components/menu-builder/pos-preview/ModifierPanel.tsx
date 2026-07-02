@@ -18,17 +18,45 @@ export function getEffectiveModType(mod: Modifier): 'Required' | 'Push Optional'
   return 'Optional';
 }
 
-/** True if the item has any modifier that should trigger the modifier popup (Required or Push Optional). */
+/**
+ * True if the item has any attached modifier that — itself or via its nested
+ * descendant modifiers — exposes at least one selectable option. This is the
+ * open-gate for the modifier popup in both QSR and TSR. Items with no attached
+ * modifiers (or whose modifiers have no options anywhere in the tree) fast-add
+ * instead. Enforcement of required selections is handled separately by
+ * `canPressDone`, so optional-only modifiers still open the popup (making their
+ * options reachable) but won't block Done.
+ */
 export function itemHasPopupModifiers(
   itemId: number,
   itemModifiers: ItemModifier[],
   modifiers: Modifier[],
+  modifierModifierOptions: ModifierModifierOption[],
+  modifierOptions: ModifierOption[],
 ): boolean {
+  const optionCountForModifier = (modifierId: number): number => {
+    const joinCount = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId).length;
+    if (joinCount > 0) return joinCount;
+    return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
+  };
+
+  // Recurse into nested modifiers using the same child resolution as canPressDone,
+  // with a visited-set cycle guard against malformed/cyclic modifierIds.
+  const modifierHasOptions = (mod: Modifier, visited: Set<number>): boolean => {
+    if (visited.has(mod.id)) return false;
+    visited.add(mod.id);
+    const children = getChildModifiersForInit(mod, modifiers);
+    if (children.length > 0) {
+      return children.some((child) => modifierHasOptions(child, visited));
+    }
+    return optionCountForModifier(mod.id) > 0;
+  };
+
   return itemModifiers
     .filter((im) => im.itemId === itemId)
     .some((im) => {
       const mod = modifiers.find((m) => m.id === im.modifierId);
-      return mod ? getEffectiveModType(mod) !== 'Optional' : false;
+      return mod ? modifierHasOptions(mod, new Set<number>()) : false;
     });
 }
 
@@ -454,7 +482,7 @@ export function ModifierPanel({
                 </span>
                 {surcharge > 0 ? (
                   <span className="text-[10px] font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums leading-none shrink-0">
-                    +${surcharge.toFixed(2)}
+                    {mod.isSizeModifier ? `$${surcharge.toFixed(2)}` : `+$${surcharge.toFixed(2)}`}
                   </span>
                 ) : null}
                 {/* Pizza side badge */}

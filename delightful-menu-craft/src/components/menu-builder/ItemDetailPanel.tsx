@@ -1388,7 +1388,20 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               )}
                             </div>
                             <span className="text-muted-foreground shrink-0">
-                              {opt.maxLimit > 0 ? `+$${opt.maxLimit.toFixed(2)}` : '$0.00'}
+                              {modifier.isSizeModifier ? (
+                                <>
+                                  ${(opt.maxLimit > 0 ? opt.maxLimit : 0).toFixed(2)}
+                                  {effectiveTaxRate > 0 && (
+                                    <span className="ml-1 text-muted-foreground/70">
+                                      (${((opt.maxLimit > 0 ? opt.maxLimit : 0) * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
+                                    </span>
+                                  )}
+                                </>
+                              ) : opt.maxLimit > 0 ? (
+                                `+$${opt.maxLimit.toFixed(2)}`
+                              ) : (
+                                '$0.00'
+                              )}
                             </span>
                           </div>
                         ))}

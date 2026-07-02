@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -98,6 +98,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [bulkCreateText, setBulkCreateText] = useState('');
   const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
   const [bulkLibrarySearch, setBulkLibrarySearch] = useState('');
@@ -274,6 +276,40 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   const handleRemoveOption = (optionId: string) => {
     setOptions(options.filter(opt => opt.id !== optionId));
+  };
+
+  const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleOptionDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (dragIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (index !== dragOverIndex) setDragOverIndex(index);
+  };
+
+  const handleOptionDrop = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (dragIndex === null) return;
+    const from = dragIndex;
+    const to = index;
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (from === to) return;
+    setOptions(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const handleOptionDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleOptionPriceChange = (optionId: string, price: number) => {
@@ -735,25 +771,30 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2.5 pb-1">
+                <div className="text-xs text-muted-foreground">
+                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
+                </div>
                 <div className="space-y-1">
                   <div className="flex items-end gap-2 flex-wrap">
                     <div className="space-y-1 w-14 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
                       <input
-                        type="number"
-                        min={0}
+                        type="text"
+                        inputMode="numeric"
                         value={minSelector}
-                        onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setMinSelector(Math.max(0, parseInt(e.target.value, 10) || 0))}
                         className="input-field w-full text-sm h-8"
                       />
                     </div>
                     <div className="space-y-1 w-14 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
                       <input
-                        type="number"
-                        min={1}
+                        type="text"
+                        inputMode="numeric"
                         value={maxSelector}
-                        onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setMaxSelector(Math.max(1, parseInt(e.target.value, 10) || 1))}
                         disabled={noMaxSelection}
                         className="input-field w-full text-sm h-8 disabled:opacity-50"
                       />
@@ -868,11 +909,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </p>
           ) : (
             <div className="space-y-2">
-              {options.map((option) => (
+              {options.map((option, index) => (
                 <div
                   key={option.id}
-                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
+                  draggable
+                  onDragStart={(e) => handleOptionDragStart(e, index)}
+                  onDragOver={(e) => handleOptionDragOver(e, index)}
+                  onDrop={(e) => handleOptionDrop(e, index)}
+                  onDragEnd={handleOptionDragEnd}
+                  className={cn(
+                    "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                    dragIndex === index && "opacity-40",
+                    dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
+                  )}
                 >
+                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
                   <div className="flex-1">
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -899,12 +950,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">$</span>
                       <input
-                        type="number"
-                        step="0.01"
-                        min={0}
+                        type="text"
+                        inputMode="decimal"
                         value={option.price}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
-                          handleOptionPriceChange(option.id, parseFloat(e.target.value) || 0)
+                          handleOptionPriceChange(option.id, Math.max(0, parseFloat(e.target.value) || 0))
                         }
                         className="input-field w-20 text-sm"
                         placeholder="0.00"
@@ -912,14 +963,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                       <span className="text-xs text-muted-foreground" title="Max times a guest can select this option (0 = unlimited)">Qty</span>
                       <div className="flex items-center gap-1">
                         <input
-                          type="number"
-                          min={0}
-                          step={1}
+                          type="text"
+                          inputMode="numeric"
                           value={option.maxQtyPerOption}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) =>
                             setOptions(opts => opts.map(o =>
                               o.id === option.id
-                                ? { ...o, maxQtyPerOption: Math.max(0, parseInt(e.target.value) || 0) }
+                                ? { ...o, maxQtyPerOption: Math.max(0, parseInt(e.target.value, 10) || 0) }
                                 : o
                             ))
                           }
@@ -1032,12 +1083,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         className="input-field flex-1 text-sm"
                       />
                       <input
-                        type="number"
-                        min={0}
-                        step={0.01}
+                        type="text"
+                        inputMode="decimal"
                         value={opt.price === 0 ? '' : opt.price}
+                        onFocus={e => e.target.select()}
                         onChange={e => setChildOptions(prev =>
-                          prev.map((o, j) => j === i ? { ...o, price: parseFloat(e.target.value) || 0 } : o)
+                          prev.map((o, j) => j === i ? { ...o, price: Math.max(0, parseFloat(e.target.value) || 0) } : o)
                         )}
                         placeholder="$0.00"
                         className="input-field w-16 text-sm text-right"
