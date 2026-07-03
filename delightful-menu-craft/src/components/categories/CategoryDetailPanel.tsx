@@ -60,6 +60,13 @@ function getPosNameError(value: string): string | null {
   return null;
 }
 
+// KDS tracks the category name until the user customizes it. It's still
+// "linked" while KDS is empty (imported/legacy categories with no KDS column)
+// or equal to the name; a KDS that differs from the name is user-customized.
+function isKdsLinked(kds: string, name: string): boolean {
+  return !kds || kds === name;
+}
+
 function getKdsNameError(value: string): string | null {
   const trimmed = value.trim();
   if (value.length > 0 && trimmed.length === 0) return 'KDS name cannot contain spaces only';
@@ -128,8 +135,6 @@ export function CategoryDetailPanel({ category }: Props) {
   const [menuIds, setMenuIds] = useState<Set<number>>(() => new Set(parseIds(category.menuIds)));
 
   const [touched, setTouched] = useState({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
-  // KDS auto-populates from the name while linked; a manual KDS edit unlinks it.
-  const [kdsLinked, setKdsLinked] = useState(() => category.kdsDisplayName === category.categoryName);
 
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
@@ -200,7 +205,6 @@ export function CategoryDetailPanel({ category }: Props) {
     setGroupSearch('');
     setApplyFeedback(null);
     setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
-    setKdsLinked(category.kdsDisplayName === category.categoryName);
   }, [category.id]);
 
   const isDirty =
@@ -255,7 +259,6 @@ export function CategoryDetailPanel({ category }: Props) {
     setBulkStart('');
     setBulkEnd('');
     setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
-    setKdsLinked(category.kdsDisplayName === category.categoryName);
   };
 
   const handleCreateTag = () => {
@@ -325,8 +328,9 @@ export function CategoryDetailPanel({ category }: Props) {
                       ...d,
                       categoryName: e.target.value,
                       posDisplayName: e.target.value,
-                      // Auto-populate KDS while linked (until the user edits KDS directly).
-                      kdsDisplayName: kdsLinked ? e.target.value : d.kdsDisplayName,
+                      // Auto-populate KDS while it still tracks the name (or is empty);
+                      // a KDS the user has customized to differ is left untouched.
+                      kdsDisplayName: isKdsLinked(d.kdsDisplayName, d.categoryName) ? e.target.value : d.kdsDisplayName,
                     }))}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, categoryName: d.categoryName.trim(), posDisplayName: d.posDisplayName.trim() }));
@@ -363,10 +367,7 @@ export function CategoryDetailPanel({ category }: Props) {
                   <input
                     className="input-field h-7 text-xs flex-1 min-w-0 py-1"
                     value={draft.kdsDisplayName}
-                    onChange={(e) => {
-                      setKdsLinked(false);
-                      setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }));
-                    }}
+                    onChange={(e) => setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }))}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, kdsDisplayName: d.kdsDisplayName.trim() }));
                       setTouched((t) => ({ ...t, kdsDisplayName: true }));

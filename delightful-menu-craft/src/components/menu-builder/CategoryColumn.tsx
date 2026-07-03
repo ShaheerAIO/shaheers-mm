@@ -174,7 +174,8 @@ export function CategoryColumn({
         categoryName: tempName.trim(),
         posDisplayName: tempName.trim(),
         // Auto-populate KDS while it's still tracking the name (not manually customized).
-        ...(category.kdsDisplayName === category.categoryName ? { kdsDisplayName: tempName.trim() } : {}),
+        // Empty KDS (imported/legacy categories) counts as uncustomized too.
+        ...(!category.kdsDisplayName || category.kdsDisplayName === category.categoryName ? { kdsDisplayName: tempName.trim() } : {}),
       });
     }
     setIsEditingName(false);
