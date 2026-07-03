@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
 import { ModifierPanel, itemHasPopupModifiers } from './ModifierPanel';
 import { POS_TILE_FRAME } from './posTileStyles';
-import { isVisibleOnChannel } from '@/lib/visibility';
+import { isAvailableOnChannelAt } from '@/lib/visibility';
 
 interface TSRMenuPanelProps {
   onAddToTicket: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
@@ -17,7 +17,16 @@ interface TSRMenuPanelProps {
 type DrillLevel = 'categories' | 'subcategories' | 'items' | 'modifiers';
 
 export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery = '' }: TSRMenuPanelProps) {
-  const { categories, items, categoryItems, selectedMenuId, itemModifiers, modifiers } = useMenuStore();
+  const {
+    categories,
+    items,
+    categoryItems,
+    selectedMenuId,
+    itemModifiers,
+    modifiers,
+    modifierModifierOptions,
+    modifierOptions,
+  } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
   const [activeSubcategoryId, setActiveSubcategoryId] = useState<number | null>(null);
@@ -59,7 +68,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       if (seen.has(ci.itemId)) continue;
       seen.add(ci.itemId);
       const item = items.find((i) => i.id === ci.itemId);
-      if (item && isVisibleOnChannel(item, 'visibilityPos')) ordered.push(item);
+      if (item && isAvailableOnChannelAt(item, 'visibilityPos')) ordered.push(item);
     }
     return ordered;
   }, [activeCategoryId, categoryItems, items]);
@@ -75,7 +84,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
         if (seen.has(ci.itemId)) continue;
         seen.add(ci.itemId);
         const item = items.find((i) => i.id === ci.itemId);
-        if (item && isVisibleOnChannel(item, 'visibilityPos')) ordered.push(item);
+        if (item && isAvailableOnChannelAt(item, 'visibilityPos')) ordered.push(item);
       }
       return ordered;
     },
@@ -118,7 +127,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       if (seen.has(ci.itemId)) continue;
       seen.add(ci.itemId);
       const item = items.find((i) => i.id === ci.itemId);
-      if (!item || !isVisibleOnChannel(item, 'visibilityPos')) continue;
+      if (!item || !isAvailableOnChannelAt(item, 'visibilityPos')) continue;
       const cat = categories.find((c) => c.id === ci.categoryId);
       result.push({
         item,
@@ -192,7 +201,15 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
   };
 
   const handleItemClick = (item: Item) => {
-    if (!itemHasPopupModifiers(item.id, itemModifiers, modifiers)) {
+    if (
+      !itemHasPopupModifiers(
+        item.id,
+        itemModifiers,
+        modifiers,
+        modifierModifierOptions,
+        modifierOptions,
+      )
+    ) {
       onAddToTicket(item, {}, 1);
       return;
     }

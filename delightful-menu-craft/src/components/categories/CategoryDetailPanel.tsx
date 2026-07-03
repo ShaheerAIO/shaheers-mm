@@ -60,6 +60,13 @@ function getPosNameError(value: string): string | null {
   return null;
 }
 
+// KDS tracks the category name until the user customizes it. It's still
+// "linked" while KDS is empty (imported/legacy categories with no KDS column)
+// or equal to the name; a KDS that differs from the name is user-customized.
+function isKdsLinked(kds: string, name: string): boolean {
+  return !kds || kds === name;
+}
+
 function getKdsNameError(value: string): string | null {
   const trimmed = value.trim();
   if (value.length > 0 && trimmed.length === 0) return 'KDS name cannot contain spaces only';
@@ -317,7 +324,14 @@ export function CategoryDetailPanel({ category }: Props) {
                   <input
                     className="input-field h-8 text-sm font-semibold flex-1 min-w-0 py-1"
                     value={draft.categoryName}
-                    onChange={(e) => setDraft((d) => ({ ...d, categoryName: e.target.value, posDisplayName: e.target.value }))}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      categoryName: e.target.value,
+                      posDisplayName: e.target.value,
+                      // Auto-populate KDS while it still tracks the name (or is empty);
+                      // a KDS the user has customized to differ is left untouched.
+                      kdsDisplayName: isKdsLinked(d.kdsDisplayName, d.categoryName) ? e.target.value : d.kdsDisplayName,
+                    }))}
                     onBlur={() => {
                       setDraft((d) => ({ ...d, categoryName: d.categoryName.trim(), posDisplayName: d.posDisplayName.trim() }));
                       setTouched((t) => ({ ...t, categoryName: true }));

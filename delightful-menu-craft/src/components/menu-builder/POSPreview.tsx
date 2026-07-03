@@ -23,7 +23,7 @@ import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 import { ModifierPanel, itemHasPopupModifiers } from './pos-preview/ModifierPanel';
 import { effectiveItemTaxRate } from '@/lib/tax';
-import { modifierSurchargePerUnit } from '@/lib/posPricing';
+import { effectiveUnitPrice } from '@/lib/posPricing';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +45,7 @@ type PosMode = 'qsr' | 'tsr';
 // ---------------------------------------------------------------------------
 
 export function POSPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifierModifierOptions, taxRate, customTaxes } =
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, itemModifiers, modifiers, modifierModifierOptions, taxRate, customTaxes } =
     useMenuStore();
 
   // POS mode toggle
@@ -115,8 +115,21 @@ export function POSPreview() {
   // otherwise fast-adds to ticket. Reads fresh state from the store directly
   // to avoid any stale-closure issues with React's render snapshot.
   const handleQsrItemClick = (item: Item) => {
-    const { itemModifiers: freshItemModifiers, modifiers: freshModifiers } = useMenuStore.getState();
-    if (!itemHasPopupModifiers(item.id, freshItemModifiers, freshModifiers)) {
+    const {
+      itemModifiers: freshItemModifiers,
+      modifiers: freshModifiers,
+      modifierModifierOptions: freshModifierModifierOptions,
+      modifierOptions: freshModifierOptions,
+    } = useMenuStore.getState();
+    if (
+      !itemHasPopupModifiers(
+        item.id,
+        freshItemModifiers,
+        freshModifiers,
+        freshModifierModifierOptions,
+        freshModifierOptions,
+      )
+    ) {
       addToTicket(item, {}, 1);
       return;
     }
@@ -139,20 +152,20 @@ export function POSPreview() {
   const subtotal = useMemo(
     () =>
       ticketLines.reduce((s, l) => {
-        const mod = modifierSurchargePerUnit(l.selectedOptions, modifierModifierOptions);
-        return s + (l.item.itemPrice + mod) * l.qty;
+        const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+        return s + unit * l.qty;
       }, 0),
-    [ticketLines, modifierModifierOptions],
+    [ticketLines, modifiers, modifierModifierOptions],
   );
   const tax = useMemo(() => {
     const raw = ticketLines.reduce((s, l) => {
-      const mod = modifierSurchargePerUnit(l.selectedOptions, modifierModifierOptions);
-      const base = (l.item.itemPrice + mod) * l.qty;
+      const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+      const base = unit * l.qty;
       const rate = effectiveItemTaxRate(l.item, customTaxes, taxRate);
       return s + base * (rate / 100);
     }, 0);
     return Math.round(raw * 100) / 100;
-  }, [ticketLines, modifierModifierOptions, customTaxes, taxRate]);
+  }, [ticketLines, modifiers, modifierModifierOptions, customTaxes, taxRate]);
   const total = Math.round((subtotal + tax) * 100) / 100;
 
   // ---------------------------------------------------------------------------
@@ -237,8 +250,8 @@ export function POSPreview() {
             ) : (
               ticketLines.map((line) => {
                 const hasModifiers = itemModifiers.some((im) => im.itemId === line.item.id);
-                const modPerUnit = modifierSurchargePerUnit(line.selectedOptions, modifierModifierOptions);
-                const lineTotal = (line.item.itemPrice + modPerUnit) * line.qty;
+                const unitPrice = effectiveUnitPrice(line.item.itemPrice, line.selectedOptions, modifiers, modifierModifierOptions);
+                const lineTotal = unitPrice * line.qty;
                 return (
                 <div
                   key={line.lineId}

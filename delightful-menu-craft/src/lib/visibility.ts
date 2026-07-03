@@ -71,6 +71,74 @@ export function isVisibleOnChannel(
 }
 
 /**
+ * Resolve the visibility group a channel belongs to.
+ * Derived from VISIBILITY_CHANNELS — never hardcode the mapping.
+ */
+export function groupForChannel(channel: VisibilityChannelKey): VisibilityGroup {
+  const def = VISIBILITY_CHANNELS.find((c) => c.key === channel);
+  // Every key in VisibilityChannelKey comes from VISIBILITY_CHANNELS, so this
+  // lookup always succeeds; the assertion keeps the return type non-nullable.
+  return (def as typeof VISIBILITY_CHANNELS[number]).group;
+}
+
+/**
+ * Map a JS Date to the project's DayKey.
+ * JS getDay(): 0=Sun..6=Sat; DayKey order: 'Mon'..'Sun'.
+ */
+export function dayKeyForDate(date: Date): DayKey {
+  // getDay() index → DayKey
+  const byJsDay: DayKey[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return byJsDay[date.getDay()];
+}
+
+/** Parse "HH:MM" to minutes-since-midnight, or null if blank/unparseable. */
+function parseHHMM(value: string): number | null {
+  if (!value || !value.trim()) return null;
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/**
+ * True when `date` falls within a single day's schedule.
+ *   - disabled day → false
+ *   - no start and no end → open all day → true
+ *   - start <= end → open when start <= t < end
+ *   - start  > end → overnight window → open when t >= start OR t < end
+ *   - only one bound set → the missing side is open-ended
+ */
+export function isWithinDaySchedule(sched: DaySchedule, date: Date): boolean {
+  if (!sched.enabled) return false;
+  const start = parseHHMM(sched.start);
+  const end = parseHHMM(sched.end);
+  if (start === null && end === null) return true;
+  const t = date.getHours() * 60 + date.getMinutes();
+  if (start !== null && end === null) return t >= start;
+  if (start === null && end !== null) return t < end;
+  // both bounds set
+  if (start! <= end!) return t >= start! && t < end!;
+  return t >= start! || t < end!;
+}
+
+/**
+ * Combined runtime gate: visible on the channel AND currently within the
+ * day/time schedule for that channel's group.
+ */
+export function isAvailableOnChannelAt(
+  entity: VisibilityItem & { daySchedulesByGroup?: string; daySchedules?: string },
+  channel: VisibilityChannelKey,
+  now: Date = new Date(),
+): boolean {
+  if (!isVisibleOnChannel(entity, channel)) return false;
+  const schedules = parseGroupSchedules(entity.daySchedulesByGroup, entity.daySchedules);
+  const sched = schedules[groupForChannel(channel)][dayKeyForDate(now)];
+  return isWithinDaySchedule(sched, now);
+}
+
+/**
  * Default visibility for a newly-created entity — all channels enabled.
  */
 export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {
