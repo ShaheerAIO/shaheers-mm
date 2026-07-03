@@ -192,7 +192,7 @@ export function CategoryColumns() {
               setColDragOverIndex(null);
               setColDragArmed(false);
               if (from === index) return;
-              reorderCategories(null, from, index);
+              reorderCategories(null, from, index, selectedMenuId ?? undefined);
             },
             onDragEnd: () => {
               setColDragIndex(null);

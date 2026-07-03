@@ -138,7 +138,7 @@ interface MenuState {
   updateCategory: (id: number, updates: Partial<Category>) => void;
   deleteCategory: (id: number) => void;
   /** Reorder a category among its siblings (same parentCategoryId, null for root). Renumbers siblings' sortOrder. */
-  reorderCategories: (parentId: number | null, fromIndex: number, toIndex: number) => void;
+  reorderCategories: (parentId: number | null, fromIndex: number, toIndex: number, menuId?: number) => void;
   
   // Actions - Items
   addItem: (item: Item) => void;
@@ -914,14 +914,21 @@ export const useMenuStore = create<MenuState>()(
         categories: state.categories.filter((c) => c.id !== id),
         categoryItems: state.categoryItems.filter((ci) => ci.categoryId !== id),
       })),
-      reorderCategories: (parentId, fromIndex, toIndex) =>
+      reorderCategories: (parentId, fromIndex, toIndex, menuId) =>
         set((state) => {
           if (state.isReadOnly) return {};
           // Siblings share the same parentCategoryId. Treat null/0/undefined as
           // "root" so the matcher lines up with how root categories are stored.
+          // Root columns are also scoped to the current menu so indices match the
+          // menu-filtered list the UI renders (a category belongs to a menu via menuIds).
           const isRoot = !parentId;
+          const belongsToMenu = (c: Category) => {
+            if (menuId == null) return true;
+            const ids = c.menuIds?.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) || [];
+            return ids.includes(menuId);
+          };
           const sameScope = (c: Category) =>
-            isRoot ? !c.parentCategoryId : c.parentCategoryId === parentId;
+            (isRoot ? !c.parentCategoryId : c.parentCategoryId === parentId) && belongsToMenu(c);
 
           const siblings = state.categories
             .filter(sameScope)
@@ -978,10 +985,17 @@ export const useMenuStore = create<MenuState>()(
           .map((im) => ({ ...im, itemId: newItemId }));
 
         // Clone CategoryItem joins (fresh id, same categories, new itemId).
+        // Append the copy to the end of each category with a fresh sortOrder so it
+        // doesn't collide with the source's sortOrder (must stay unique per group).
         let nextCatItemId = getMaxId(state.categoryItems) + 1;
         const newCategoryItems: CategoryItem[] = state.categoryItems
           .filter((ci) => ci.itemId === itemId)
-          .map((ci) => ({ ...ci, id: nextCatItemId++, itemId: newItemId }));
+          .map((ci) => {
+            const maxSort = state.categoryItems
+              .filter((x) => x.categoryId === ci.categoryId)
+              .reduce((m, x) => Math.max(m, x.sortOrder), -1);
+            return { ...ci, id: nextCatItemId++, itemId: newItemId, sortOrder: maxSort + 1 };
+          });
 
         set((s) => ({
           items: [...s.items, newItem],
