@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ImageIcon, Trash2, Upload } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
+import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
 import {
   VISIBILITY_CHANNELS,
   DAYS,
@@ -27,6 +28,7 @@ type Draft = {
   menuName: string;
   posDisplayName: string;
   posButtonColor: string;
+  picture: string;
   daySchedulesByGroup: ChannelGroupSchedules;
 } & VisDraft;
 
@@ -69,6 +71,7 @@ export function MenuDetailPanel({ menu }: Props) {
     menuName: menu.menuName,
     posDisplayName: menu.posDisplayName,
     posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
+    picture: menu.picture || '',
     visibilityPos: menu.visibilityPos ?? true,
     visibilityKiosk: menu.visibilityKiosk ?? true,
     visibilityQr: menu.visibilityQr ?? true,
@@ -82,12 +85,14 @@ export function MenuDetailPanel({ menu }: Props) {
   const [expandedDay, setExpandedDay] = useState<DayKey | null>(null);
   const [bulkStart, setBulkStart] = useState('');
   const [bulkEnd, setBulkEnd] = useState('');
+  const [imageModalOpen, setImageModalOpen] = useState(false);
 
   useEffect(() => {
     setDraft({
       menuName: menu.menuName,
       posDisplayName: menu.posDisplayName,
       posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
+      picture: menu.picture || '',
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityQr: menu.visibilityQr ?? true,
@@ -100,12 +105,14 @@ export function MenuDetailPanel({ menu }: Props) {
     setExpandedDay(null);
     setBulkStart('');
     setBulkEnd('');
+    setImageModalOpen(false);
   }, [menu.id]);
 
   const isDirty =
     draft.menuName !== menu.menuName ||
     draft.posDisplayName !== menu.posDisplayName ||
     draft.posButtonColor !== (menu.posButtonColor || DEFAULT_MENU_COLOR) ||
+    draft.picture !== (menu.picture || '') ||
     draft.visibilityPos !== (menu.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (menu.visibilityKiosk ?? true) ||
     draft.visibilityQr !== (menu.visibilityQr ?? true) ||
@@ -126,6 +133,7 @@ export function MenuDetailPanel({ menu }: Props) {
       menuName: menu.menuName,
       posDisplayName: menu.posDisplayName,
       posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
+      picture: menu.picture || '',
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityQr: menu.visibilityQr ?? true,
@@ -194,6 +202,47 @@ export function MenuDetailPanel({ menu }: Props) {
                 Preview
               </span>
             </div>
+          </section>
+
+          {/* Menu image */}
+          <section>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Image</p>
+              {draft.picture && (
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, picture: '' }))}
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove
+                </button>
+              )}
+            </div>
+
+            {draft.picture ? (
+              <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                <div className="relative aspect-[2/1] bg-muted/40">
+                  <img src={draft.picture} alt={`${draft.menuName} menu`} className="h-full w-full object-cover" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImageModalOpen(true)}
+                  className="inline-flex w-full items-center justify-center gap-1 border-t border-border py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Upload className="h-3 w-3" /> Replace
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setImageModalOpen(true)}
+                className="flex aspect-[2/1] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/20 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+              >
+                <ImageIcon className="h-7 w-7 opacity-70" />
+                <span className="text-xs font-medium">Upload menu image</span>
+                <span className="text-[10px]">JPG, PNG, or WebP</span>
+              </button>
+            )}
           </section>
 
           {/* Availability */}
@@ -405,6 +454,13 @@ export function MenuDetailPanel({ menu }: Props) {
           Discard
         </button>
       </div>
+
+      <CategoryImageLibraryModal
+        open={imageModalOpen}
+        title="Menu image"
+        onOpenChange={setImageModalOpen}
+        onSelect={(url) => setDraft((current) => ({ ...current, picture: url }))}
+      />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, X, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, X, Plus, Trash2, ChevronDown, ChevronRight, ImageIcon, Upload } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { ColorPalettePicker } from '@/components/ColorPalettePicker';
+import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
 import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMenuStore } from '@/store/menuStore';
@@ -20,6 +21,16 @@ import {
   type VisibilityGroup,
 } from '@/lib/visibility';
 import type { Category } from '@/types/menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 type VisDraft = Pick<Category,
   'visibilityPos' | 'visibilityKiosk' | 'visibilityMenuBoard' | 'visibilityQr' |
@@ -31,6 +42,8 @@ type Draft = {
   posDisplayName: string;
   kdsDisplayName: string;
   color: string;
+  image: string;
+  kioskImage: string;
   daySchedulesByGroup: ChannelGroupSchedules;
 } & VisDraft;
 
@@ -89,6 +102,8 @@ export function CategoryDetailPanel({ category }: Props) {
     posDisplayName: category.posDisplayName,
     kdsDisplayName: category.kdsDisplayName,
     color: category.color || DEFAULT_CATEGORY_COLOR,
+    image: category.image || '',
+    kioskImage: category.kioskImage || '',
     visibilityPos: category.visibilityPos ?? true,
     visibilityKiosk: category.visibilityKiosk ?? true,
     visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -115,6 +130,8 @@ export function CategoryDetailPanel({ category }: Props) {
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
   const [groupSearch, setGroupSearch] = useState('');
   const [applyFeedback, setApplyFeedback] = useState<string | null>(null);
+  const [imageModalTarget, setImageModalTarget] = useState<'image' | 'kioskImage' | null>(null);
+  const [confirmDeleteImages, setConfirmDeleteImages] = useState(false);
   const applyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modifierDropdownRef = useRef<HTMLDivElement>(null);
   const groupDropdownRef = useRef<HTMLDivElement>(null);
@@ -147,6 +164,8 @@ export function CategoryDetailPanel({ category }: Props) {
       posDisplayName: category.posDisplayName,
       kdsDisplayName: category.kdsDisplayName,
       color: category.color || DEFAULT_CATEGORY_COLOR,
+      image: category.image || '',
+      kioskImage: category.kioskImage || '',
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -170,6 +189,8 @@ export function CategoryDetailPanel({ category }: Props) {
     setGroupDropdownOpen(false);
     setGroupSearch('');
     setApplyFeedback(null);
+    setImageModalTarget(null);
+    setConfirmDeleteImages(false);
   }, [category.id]);
 
   const isDirty =
@@ -177,6 +198,8 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.posDisplayName !== category.posDisplayName ||
     draft.kdsDisplayName !== category.kdsDisplayName ||
     draft.color !== (category.color || DEFAULT_CATEGORY_COLOR) ||
+    draft.image !== (category.image || '') ||
+    draft.kioskImage !== (category.kioskImage || '') ||
     draft.visibilityPos !== (category.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (category.visibilityKiosk ?? true) ||
     draft.visibilityMenuBoard !== (category.visibilityMenuBoard ?? true) ||
@@ -203,6 +226,8 @@ export function CategoryDetailPanel({ category }: Props) {
       posDisplayName: category.posDisplayName,
       kdsDisplayName: category.kdsDisplayName,
       color: category.color || DEFAULT_CATEGORY_COLOR,
+      image: category.image || '',
+      kioskImage: category.kioskImage || '',
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
@@ -228,6 +253,17 @@ export function CategoryDetailPanel({ category }: Props) {
     setTagIds((prev) => new Set([...prev, id]));
     setNewTagName('');
     setShowTagInput(false);
+  };
+
+  const handleImageSelected = (url: string) => {
+    if (!imageModalTarget) return;
+    setDraft((current) => {
+      // The first image chosen for a category seeds both channel-specific fields.
+      if (!current.image && !current.kioskImage) {
+        return { ...current, image: url, kioskImage: url };
+      }
+      return { ...current, [imageModalTarget]: url };
+    });
   };
 
   const assignedCatMods = categoryModifiers
@@ -325,6 +361,73 @@ export function CategoryDetailPanel({ category }: Props) {
                 Preview
               </span>
             </div>
+          </section>
+
+          {/* Channel-specific category images */}
+          <section>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Images</p>
+              {(draft.image || draft.kioskImage) && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteImages(true)}
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove both
+                </button>
+              )}
+            </div>
+            {!draft.image && !draft.kioskImage ? (
+              <button
+                type="button"
+                onClick={() => setImageModalTarget('image')}
+                className="flex aspect-[2/1] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/20 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+              >
+                <Upload className="h-7 w-7 opacity-70" />
+                <span className="text-xs font-medium">Upload category image</span>
+                <span className="text-[10px]">JPG or PNG</span>
+              </button>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { field: 'image' as const, label: 'POS / MPOS' },
+                    { field: 'kioskImage' as const, label: 'Kiosk' },
+                  ]).map(({ field, label }) => {
+                    const url = draft[field];
+                    return (
+                      <div key={field} className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                        <div className="relative aspect-[4/3] bg-muted/40">
+                          {url ? (
+                            <img src={url} alt={`${label} category`} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
+                              <ImageIcon className="h-6 w-6 opacity-60" />
+                              <span className="text-[10px]">No image</span>
+                            </div>
+                          )}
+                          <span className="absolute left-2 top-2 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-semibold shadow-sm backdrop-blur-sm">
+                            {label}
+                          </span>
+                        </div>
+                        <div className="border-t border-border">
+                          <button
+                            type="button"
+                            onClick={() => setImageModalTarget(field)}
+                            className="inline-flex w-full items-center justify-center gap-1 py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Upload className="h-3 w-3" /> {url ? 'Replace' : 'Upload'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                  Upload or replace each channel image independently.
+                </p>
+              </>
+            )}
           </section>
 
           {/* Availability — channels + per-group schedule */}
@@ -496,7 +599,7 @@ export function CategoryDetailPanel({ category }: Props) {
                                     isAssigned ? 'opacity-100' : 'opacity-35 hover:opacity-60',
                                   )}
                                   style={{ backgroundColor: bgColor }}
-                                  onClick={() => setTagIds((s) => { const n = new Set(s); isAssigned ? n.delete(tag.id) : n.add(tag.id); return n; })}
+                                  onClick={() => setTagIds((s) => { const n = new Set(s); if (isAssigned) n.delete(tag.id); else n.add(tag.id); return n; })}
                                 >
                                   <TagIcon className="w-[18px] h-[18px] text-white drop-shadow-sm" />
                                 </div>
@@ -534,7 +637,7 @@ export function CategoryDetailPanel({ category }: Props) {
                       return (
                         <span
                           key={tag.id}
-                          onClick={() => setTagIds((s) => { const n = new Set(s); isAssigned ? n.delete(tag.id) : n.add(tag.id); return n; })}
+                          onClick={() => setTagIds((s) => { const n = new Set(s); if (isAssigned) n.delete(tag.id); else n.add(tag.id); return n; })}
                           className={cn(
                             'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
                             isAssigned ? 'bg-muted border-primary/40 text-foreground' : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30',
@@ -813,7 +916,8 @@ export function CategoryDetailPanel({ category }: Props) {
                       onChange={() => {
                         setMenuIds((s) => {
                           const n = new Set(s);
-                          assigned ? n.delete(menu.id) : n.add(menu.id);
+                          if (assigned) n.delete(menu.id);
+                          else n.add(menu.id);
                           return n;
                         });
                       }}
@@ -853,6 +957,36 @@ export function CategoryDetailPanel({ category }: Props) {
           Discard
         </button>
       </div>
+
+      <CategoryImageLibraryModal
+        open={imageModalTarget != null}
+        title={imageModalTarget === 'kioskImage' ? 'Kiosk category image' : 'POS / MPOS category image'}
+        onOpenChange={(open) => { if (!open) setImageModalTarget(null); }}
+        onSelect={handleImageSelected}
+      />
+
+      <AlertDialog open={confirmDeleteImages} onOpenChange={setConfirmDeleteImages}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove category images?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This clears both the POS / MPOS and Kiosk image fields. The change is not persisted until you save the category.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDraft((current) => ({ ...current, image: '', kioskImage: '' }));
+                setConfirmDeleteImages(false);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove both
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
