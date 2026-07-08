@@ -57,18 +57,18 @@ export function CategoryImageLibraryModal({
       <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-5 py-4 border-b border-border">
           <DialogTitle className="text-base">{title}</DialogTitle>
-          <DialogDescription className="text-xs">Upload a JPG, PNG, or WebP image.</DialogDescription>
+          <DialogDescription className="text-xs">Upload a JPG or PNG image.</DialogDescription>
         </DialogHeader>
 
         <div className="p-5">
           <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-center">
             <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-            <p className="text-sm font-medium">Upload JPG, PNG, or WebP</p>
+            <p className="text-sm font-medium">Upload JPG or PNG</p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">The file uploads directly to S3. Only its permanent public URL is saved.</p>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png"
               className="hidden"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />

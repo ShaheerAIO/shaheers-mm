@@ -45,8 +45,8 @@ function signedUploadDataFromResponse(data: unknown): SignedUploadData | null {
 export async function uploadCategoryImage(file: File): Promise<string> {
   // Fail fast client-side; the edge function re-validates this too, but no
   // need to round-trip to the server for a type we already know is wrong.
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Only JPEG, PNG, and WebP images are allowed.');
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    throw new Error('Only JPEG and PNG images are allowed.');
   }
 
   // Step 1: ask the edge function for a short-lived, pre-authorized upload URL.

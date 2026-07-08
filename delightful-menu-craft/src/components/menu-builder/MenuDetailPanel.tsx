@@ -3,6 +3,7 @@ import { ChevronDown, ImageIcon, Trash2, Upload } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
+import { LoadingImage } from '@/components/ui/loading-image';
 import {
   VISIBILITY_CHANNELS,
   DAYS,
@@ -224,7 +225,7 @@ export function MenuDetailPanel({ menu }: Props) {
             {draft.picture ? (
               <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
                 <div className="relative aspect-[2/1] bg-muted/40">
-                  <img src={draft.picture} alt={`${draft.menuName} menu`} className="h-full w-full object-cover" />
+                  <LoadingImage src={draft.picture} alt={`${draft.menuName} menu`} className="h-full w-full object-cover" />
                 </div>
                 <button
                   type="button"
@@ -242,7 +243,7 @@ export function MenuDetailPanel({ menu }: Props) {
               >
                 <ImageIcon className="h-7 w-7 opacity-70" />
                 <span className="text-xs font-medium">Upload menu image</span>
-                <span className="text-[10px]">JPG, PNG, or WebP</span>
+                <span className="text-[10px]">JPG or PNG</span>
               </button>
             )}
           </section>

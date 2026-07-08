@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/accordion';
 import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink, ImageIcon, Upload } from 'lucide-react';
 import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
@@ -982,7 +983,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             >
               <ImageIcon className="mb-4 h-11 w-11 stroke-[1.8]" />
               <span className="text-base font-medium text-foreground">Add image</span>
-              <span className="mt-0.5 text-xs">Upload jpg, jpeg, png, or webp</span>
+              <span className="mt-0.5 text-xs">Upload jpg, jpeg, or png</span>
             </button>
           ) : (
             <>
@@ -993,7 +994,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     <div key={field} className="overflow-hidden rounded-lg border border-border bg-muted/20">
                       <div className="relative aspect-square bg-muted/40">
                         {url ? (
-                          <img src={url} alt={`${label} item`} className="h-full w-full object-cover" />
+                          <LoadingImage src={url} alt={`${label} item`} className="h-full w-full object-cover" />
                         ) : (
                           <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
                             <ImageIcon className="h-6 w-6 opacity-60" />
@@ -1046,8 +1047,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </div>
             {draft.landscapeImage ? (
               <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
-                <div className="aspect-video bg-muted/40">
-                  <img src={draft.landscapeImage} alt="Landscape item" className="h-full w-full object-cover" />
+                <div className="relative aspect-video bg-muted/40">
+                  <LoadingImage src={draft.landscapeImage} alt="Landscape item" className="h-full w-full object-cover" />
                 </div>
                 <button
                   type="button"
@@ -1065,7 +1066,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               >
                 <ImageIcon className="mb-4 h-11 w-11 stroke-[1.8]" />
                 <span className="text-base font-medium text-foreground">Add image</span>
-                <span className="mt-0.5 text-xs">Upload jpg, jpeg, png, or webp</span>
+                <span className="mt-0.5 text-xs">Upload jpg, jpeg, or png</span>
               </button>
             )}
           </div>

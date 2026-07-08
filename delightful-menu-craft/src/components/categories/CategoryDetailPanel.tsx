@@ -6,6 +6,7 @@ import { ColorPalettePicker } from '@/components/ColorPalettePicker';
 import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
 import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import {
@@ -474,7 +475,7 @@ export function CategoryDetailPanel({ category }: Props) {
                       <div key={field} className="overflow-hidden rounded-lg border border-border bg-muted/20">
                         <div className="relative aspect-[4/3] bg-muted/40">
                           {url ? (
-                            <img src={url} alt={`${label} category`} className="h-full w-full object-cover" />
+                            <LoadingImage src={url} alt={`${label} category`} className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
                               <ImageIcon className="h-6 w-6 opacity-60" />
