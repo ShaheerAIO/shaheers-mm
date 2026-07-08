@@ -18,11 +18,14 @@ import {
   ArrowUpDown,
   Layers,
   Pencil,
+  Copy,
+  Table as TableIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
+import { modifierSelectionCeiling } from '@/lib/posPricing';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -111,10 +114,12 @@ export function ModifierLibraryContent() {
     modifierOptions,
     modifierModifierOptions,
     modifierGroups,
+    itemModifiers,
     selectedModifierId,
     setSelectedModifier,
     addModifier,
     deleteModifier,
+    duplicateModifier,
     addModifierGroup,
     updateModifierGroup,
     deleteModifierGroup,
@@ -122,7 +127,8 @@ export function ModifierLibraryContent() {
     getNextId,
   } = useMenuStore();
 
-  const [libView, setLibView] = useState<'modifiers' | 'groups'>('modifiers');
+  const [libView, setLibView] = useState<'modifiers' | 'groups' | 'overview'>('modifiers');
+  const [overviewFilter, setOverviewFilter] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [groupSearch, setGroupSearch] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -162,7 +168,7 @@ export function ModifierLibraryContent() {
 
   const handleAddGroup = () => {
     const name = newGroupName.trim();
-    if (!name) return;
+    if (getGroupNameError(newGroupName)) return;
     const newGroup: ModifierGroup = {
       id: getNextId('modifierGroups'),
       groupName: name,
@@ -258,9 +264,27 @@ export function ModifierLibraryContent() {
               <Layers className="w-3.5 h-3.5" />
               Groups
             </button>
+            <button
+              type="button"
+              onClick={() => setLibView('overview')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
+                libView === 'overview'
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              Overview
+            </button>
           </div>
 
-          {libView === 'modifiers' ? (
+          {libView === 'overview' ? (
+            <div className="p-4 text-xs text-muted-foreground space-y-2">
+              <p>Read-only overview of every modifier → option assignment with its price, quantity, and default flag.</p>
+              <p>Use the filter above the table to narrow results.</p>
+            </div>
+          ) : libView === 'modifiers' ? (
             <>
           <div className="p-4 border-b border-panel-border">
             <div className="flex items-center justify-between mb-3">
@@ -333,7 +357,10 @@ export function ModifierLibraryContent() {
               const childModifierCount = modifiers.filter(
                 m => m.parentModifierId === modifier.id
               ).length;
-              
+              const usedByCount = itemModifiers.filter(
+                im => im.modifierId === modifier.id
+              ).length;
+
               return (
                 <div
                   key={modifier.id}
@@ -360,6 +387,14 @@ export function ModifierLibraryContent() {
                     ) : (
                       <span>0 options</span>
                     )}
+                    <span className="bg-muted text-muted-foreground px-1 rounded">
+                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                    </span>
+                    {usedByCount > 0 && (
+                      <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
+                        used by {usedByCount}
+                      </span>
+                    )}
                     {modifier.addNested && (
                       <span className="flex items-center gap-0.5 text-primary">
                         <GitBranch className="w-3 h-3" />
@@ -377,6 +412,17 @@ export function ModifierLibraryContent() {
                       </span>
                     )}
                   </div>
+                  </button>
+                  <button
+                    type="button"
+                    title="Duplicate modifier"
+                    className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      duplicateModifier(modifier.id);
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
@@ -417,13 +463,16 @@ export function ModifierLibraryContent() {
                   <button
                     type="button"
                     onClick={handleAddGroup}
-                    disabled={!newGroupName.trim()}
+                    disabled={!!getGroupNameError(newGroupName)}
                     className="btn-add disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add
                   </button>
                 </div>
+                {newGroupName.length > 0 && getGroupNameError(newGroupName) && (
+                  <p className="text-[10px] text-destructive mt-1">{getGroupNameError(newGroupName)}</p>
+                )}
               </div>
               {/* Group search */}
               <div className="px-3 py-2 border-b border-panel-border">
@@ -500,7 +549,15 @@ export function ModifierLibraryContent() {
 
         {/* Detail Panel */}
         <div className="flex-1 bg-background min-h-0 h-full">
-          {libView === 'modifiers' ? (
+          {libView === 'overview' ? (
+            <ModifierOptionOverview
+              modifiers={modifiers}
+              modifierOptions={modifierOptions}
+              modifierModifierOptions={modifierModifierOptions}
+              filter={overviewFilter}
+              setFilter={setOverviewFilter}
+            />
+          ) : libView === 'modifiers' ? (
             selectedModifier ? (
               <ModifierDetail modifier={selectedModifier} />
             ) : (
@@ -549,6 +606,39 @@ interface ModifierDetailProps {
   modifier: Modifier;
 }
 
+function getGroupNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Group name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Group name required';
+  if (trimmed.length > 24) return 'Group name must be 1–24 characters';
+  return null;
+}
+
+function getGroupPosNameError(value: string): string | null {
+  if (value.length === 0) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length > 60) return 'POS name must be 1–60 characters';
+  return null;
+}
+
+function getModifierNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Modifier name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Modifier name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 1 || trimmed.length > 40) return 'Modifier name must be between 1-40 characters';
+  return null;
+}
+
+function getModifierPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 1 || trimmed.length > 60) return 'POS name must be between 1-60 characters';
+  return null;
+}
+
 /** Same rule as item detail: POS can track modifier name until POS or Prefix is edited separately. */
 function modifierNamesInitiallyLinked(m: Modifier): boolean {
   const name = m.modifierName?.trim() ?? '';
@@ -568,6 +658,7 @@ interface ModifierDraft {
   isOptional: string;
   modifierOptionPriceType: string;
   multiSelect: boolean;
+  canGuestSelectMoreModifiers: boolean;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
   // Channel visibility
@@ -589,8 +680,11 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     modifiers,
     modifierOptions,
     modifierModifierOptions,
+    items,
+    itemModifiers,
     addModifierOption,
     addModifierModifierOption,
+    updateModifierOption,
     updateModifierModifierOption,
     removeModifierModifierOption,
     reorderModifierOptions,
@@ -612,6 +706,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const [modifierNameDrivesPos, setModifierNameDrivesPos] = useState(() =>
     modifierNamesInitiallyLinked(modifier),
   );
+  const [touched, setTouched] = useState({ modifierName: false, posDisplayName: false });
 
   // Draft state for modifier fields
   const [draft, setDraft] = useState<ModifierDraft>({
@@ -626,6 +721,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     isOptional: modifier.isOptional,
     modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
     multiSelect: modifier.multiSelect ?? false,
+    canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
     ...defaultVisibility(),
@@ -652,6 +748,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
       multiSelect: modifier.multiSelect ?? false,
+      canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -668,6 +765,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setBulkCreateText('');
     setDragIndex(null);
     setDragOverIndex(null);
+    setTouched({ modifierName: false, posDisplayName: false });
   }, [modifier.id]);
 
   useEffect(() => {
@@ -677,9 +775,25 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     }
   }, [bulkFromLibraryOpen]);
 
+  // Auto-set minSelector to 1 when "Required" is selected (don't clobber a user-set min > 1)
+  useEffect(() => {
+    if (draft.isOptional === 'Required' && draft.minSelector === 0) {
+      setDraft(d => ({ ...d, minSelector: 1 }));
+    }
+  }, [draft.isOptional, draft.minSelector]);
+
   useEffect(() => {
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
   }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
+
+  // Sync minSelector with selection type
+  useEffect(() => {
+    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
+      if (draft.minSelector === 0) setDraft(d => ({ ...d, minSelector: 1 }));
+    } else if (draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional') {
+      if (draft.minSelector !== 0) setDraft(d => ({ ...d, minSelector: 0 }));
+    }
+  }, [draft.isOptional]);
 
   const currentStructureFingerprint = useMemo(
     () =>
@@ -736,6 +850,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       draft.isOptional !== modifier.isOptional ||
       draft.modifierOptionPriceType !== (modifier.modifierOptionPriceType ?? 'NoCharge') ||
       draft.multiSelect !== (modifier.multiSelect ?? false) ||
+      draft.canGuestSelectMoreModifiers !== (modifier.canGuestSelectMoreModifiers ?? true) ||
       draft.pizzaSelection !== modifier.pizzaSelection ||
       draft.isSizeModifier !== modifier.isSizeModifier
     );
@@ -744,6 +859,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const hasStructureChanges = currentStructureFingerprint !== structureBaseline;
 
   const hasChanges = hasMetadataChanges || hasStructureChanges;
+  const maxSelectorValid = draft.noMaxSelection || draft.maxSelector >= draft.minSelector;
+  const modifierNameError = getModifierNameError(draft.modifierName);
+  const posNameError = getModifierPosNameError(draft.posDisplayName);
+  const isNamesValid = !modifierNameError && !posNameError;
 
   const handleSave = () => {
     if (hasMetadataChanges) {
@@ -759,6 +878,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         isOptional: draft.isOptional,
         modifierOptionPriceType: draft.modifierOptionPriceType,
         multiSelect: draft.multiSelect,
+        canGuestSelectMoreModifiers: draft.canGuestSelectMoreModifiers,
         pizzaSelection: draft.pizzaSelection,
         isSizeModifier: draft.isSizeModifier,
         visibilityPos: draft.visibilityPos,
@@ -786,6 +906,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       isOptional: modifier.isOptional,
       modifierOptionPriceType: modifier.modifierOptionPriceType ?? 'NoCharge',
       multiSelect: modifier.multiSelect ?? false,
+      canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
       ...defaultVisibility(),
@@ -798,6 +919,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
+    setTouched({ modifierName: false, posDisplayName: false });
     // Clears "dirty" for option/nested edits without reverting store (those are already persisted).
     setStructureBaseline(
       fingerprintModifierStructure(
@@ -820,6 +942,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       }));
   }, [modifierModifierOptions, modifier.id, modifierOptions]);
   
+  // Dynamic Max SELECTION ceiling from the three toggles (see modifierSelectionCeiling)
+  const selectionCeiling = useMemo(
+    () =>
+      modifierSelectionCeiling({
+        multiSelect: draft.multiSelect,
+        allowRepeat: draft.canGuestSelectMoreModifiers,
+        limitPerOption: modifierOptionAssignments.some(a => (a.maxQtyPerOption ?? 1) !== 1),
+        optionCount: modifierOptionAssignments.length,
+        perOptionLimits: modifierOptionAssignments.map(a => a.maxQtyPerOption ?? 1),
+      }),
+    [draft.multiSelect, draft.canGuestSelectMoreModifiers, modifierOptionAssignments],
+  );
+
   // Filter options by search
   const filteredOptionAssignments = useMemo(() => {
     if (!optionSearch.trim()) return modifierOptionAssignments;
@@ -933,6 +1068,36 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       sortOrder: modifierOptionAssignments.length,
       maxQtyPerOption: 1,
     });
+  };
+
+  // Size modifiers: add a blank size inline (no modal) — the user edits name + cost in the row.
+  const handleAddSize = () => {
+    const newOptionId = getNextId('modifierOptions');
+    const count = modifierModifierOptions.filter((m) => m.modifierId === modifier.id).length;
+    addModifierOption({
+      id: newOptionId,
+      optionName: '',
+      posDisplayName: '',
+      parentModifierId: modifier.id,
+      isStockAvailable: true,
+      isSizeModifier: true,
+      ...defaultVisibility(),
+    });
+    addModifierModifierOption({
+      modifierId: modifier.id,
+      modifierOptionId: newOptionId,
+      isDefaultSelected: false,
+      maxLimit: 0,
+      optionDisplayName: '',
+      sortOrder: count,
+      maxQtyPerOption: 1,
+    });
+  };
+
+  // Editing a size's name keeps the option name, its POS name, and the assignment label in sync.
+  const handleSizeNameChange = (optionId: number, name: string) => {
+    updateModifierOption(optionId, { optionName: name, posDisplayName: name });
+    updateModifierModifierOption(modifier.id, optionId, { optionDisplayName: name });
   };
 
   const handleOptionPriceChange = (optionId: number, maxLimit: number) => {
@@ -1069,6 +1234,16 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     return modifiers.filter(m => m.parentModifierId === modifier.id);
   }, [childModifierIds, modifiers, modifier.id]);
 
+  // Items that use this modifier (read-only) — via the itemModifiers join.
+  const usedByItems = useMemo(() => {
+    const itemIds = itemModifiers
+      .filter(im => im.modifierId === modifier.id)
+      .map(im => im.itemId);
+    return items
+      .filter(it => itemIds.includes(it.id))
+      .map(it => it.itemName || it.posDisplayName || `#${it.id}`);
+  }, [itemModifiers, items, modifier.id]);
+
   // Derive effective mode from existing data:
   // - has children → nested
   // - has direct options → flat
@@ -1088,6 +1263,15 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   }, [modifier.id, detectedMode]);
 
   const effectiveMode = detectedMode ?? chosenMode;
+
+  // A size modifier is inherently a flat list of sizes. Reveal the Sizes editor
+  // even for a persisted size modifier opened with no options yet — toggling
+  // alone only fires on user interaction, not when the panel mounts.
+  useEffect(() => {
+    if (draft.isSizeModifier && childModifiers.length === 0 && effectiveMode !== 'flat') {
+      setChosenMode('flat');
+    }
+  }, [draft.isSizeModifier, childModifiers.length, effectiveMode]);
 
   const handleSwitchMode = (targetMode: 'flat' | 'nested') => {
     if (effectiveMode === targetMode) return;
@@ -1191,10 +1375,22 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         : { ...d, modifierName: v },
                     );
                   }}
+                  onBlur={() => {
+                    const trimmed = draft.modifierName.trim();
+                    setDraft((d) =>
+                      modifierNameDrivesPos
+                        ? { ...d, modifierName: trimmed, posDisplayName: trimmed }
+                        : { ...d, modifierName: trimmed },
+                    );
+                    setTouched((t) => ({ ...t, modifierName: true }));
+                  }}
                   className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
                   placeholder="Modifier name"
                 />
               </div>
+              {touched.modifierName && modifierNameError && (
+                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{modifierNameError}</p>
+              )}
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
                   POS
@@ -1206,10 +1402,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     setModifierNameDrivesPos(false);
                     setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
                   }}
+                  onBlur={() => {
+                    setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                    setTouched((t) => ({ ...t, posDisplayName: true }));
+                  }}
                   className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
                   placeholder="POS display name"
                 />
               </div>
+              {touched.posDisplayName && posNameError && (
+                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{posNameError}</p>
+              )}
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
                   Prefix
@@ -1227,6 +1430,32 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 />
               </div>
             </div>
+            {/* Selection limits summary */}
+            <div className="text-xs text-muted-foreground pt-1 flex items-center gap-2 flex-wrap">
+              {draft.isOptional?.trim() ? `${draft.isOptional} • ` : ''}
+              <span className="font-medium text-foreground">
+                Min: {draft.minSelector} / Max: {draft.noMaxSelection ? '∞' : draft.maxSelector}
+              </span>
+            </div>
+          </div>
+
+          {/* Used by items — read-only modifier→item linkage */}
+          <div className="flex items-start gap-2 px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs">
+            <span className="text-muted-foreground font-medium shrink-0 pt-0.5">Used by items:</span>
+            {usedByItems.length === 0 ? (
+              <span className="text-muted-foreground">Not attached to any items.</span>
+            ) : (
+              <span className="flex flex-wrap gap-1">
+                {usedByItems.map((name, i) => (
+                  <span
+                    key={i}
+                    className="text-foreground font-medium bg-background border border-border px-1.5 py-0.5 rounded"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
 
           {/* Nested status badge — shown when this modifier is a child */}
@@ -1411,7 +1640,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
           {(effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat')) &&
           <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Label className="section-header">Options ({modifierOptionAssignments.length})</Label>
+              <Label className="section-header">{draft.isSizeModifier ? 'Sizes' : 'Options'} ({modifierOptionAssignments.length})</Label>
               <div className="flex flex-wrap gap-2">
                 {availableOptions.length > 0 && (
                   <Button
@@ -1424,9 +1653,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     Add from library…
                   </Button>
                 )}
-                <button type="button" className="btn-add" onClick={() => setShowCreateOption(true)}>
+                <button type="button" className="btn-add" onClick={() => draft.isSizeModifier ? handleAddSize() : setShowCreateOption(true)}>
                   <Plus className="w-3.5 h-3.5" />
-                  New Option
+                  {draft.isSizeModifier ? 'New Size' : 'New Option'}
                 </button>
               </div>
             </div>
@@ -1503,20 +1732,37 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                   />
                   <div className="flex-1 min-w-0 space-y-1">
                     <div>
-                      <span className="text-sm font-medium">
-                        {assignment.option?.optionName || assignment.optionDisplayName}
-                      </span>
-                      <input
-                        type="text"
-                        value={assignment.optionDisplayName}
-                        onChange={(e) => handleOptionDisplayNameChange(
-                          assignment.modifierOptionId,
-                          e.target.value,
-                        )}
-                        placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
-                        className="input-field text-xs h-7 w-full max-w-[220px] mt-0.5"
-                        aria-label="Option display name"
-                      />
+                      {draft.isSizeModifier ? (
+                        <input
+                          type="text"
+                          value={assignment.option?.optionName ?? ''}
+                          onChange={(e) => handleSizeNameChange(
+                            assignment.modifierOptionId,
+                            e.target.value,
+                          )}
+                          placeholder='Size name (e.g. Small, 10")'
+                          className="input-field text-sm h-8 w-full max-w-[220px] font-medium"
+                          aria-label="Size name"
+                          autoFocus={!assignment.option?.optionName}
+                        />
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium">
+                            {assignment.option?.optionName || assignment.optionDisplayName}
+                          </span>
+                          <input
+                            type="text"
+                            value={assignment.optionDisplayName}
+                            onChange={(e) => handleOptionDisplayNameChange(
+                              assignment.modifierOptionId,
+                              e.target.value,
+                            )}
+                            placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
+                            className="input-field text-xs h-7 w-full max-w-[220px] mt-0.5"
+                            aria-label="Option display name"
+                          />
+                        </>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {assignment.isDefaultSelected && (
@@ -1535,13 +1781,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     <div className="flex items-center gap-1">
                       <span className="text-muted-foreground text-xs">$</span>
                       <input
-                        type="number"
-                        step="0.01"
-                        min={0}
+                        type="text"
+                        inputMode="decimal"
                         value={assignment.maxLimit}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => handleOptionPriceChange(
                           assignment.modifierOptionId,
-                          parseFloat(e.target.value) || 0
+                          Math.max(0, parseFloat(e.target.value) || 0)
                         )}
                         className="input-field w-20"
                       />
@@ -1549,13 +1795,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
                       <span className="text-muted-foreground text-xs">Qty</span>
                       <input
-                        type="number"
-                        min={0}
-                        step={1}
+                        type="text"
+                        inputMode="numeric"
                         value={assignment.maxQtyPerOption ?? 1}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => handleOptionQtyChange(
                           assignment.modifierOptionId,
-                          Math.max(0, parseInt(e.target.value) || 0)
+                          Math.max(0, parseInt(e.target.value, 10) || 0)
                         )}
                         className="input-field w-14 text-center"
                       />
@@ -1598,7 +1844,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
               {modifierOptionAssignments.length === 0 && !optionSearch && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No options added yet. Click "New Option" to create one.
+                  {draft.isSizeModifier
+                    ? 'No sizes added yet. Click "New Size" (or use bulk create) to add sizes and their prices.'
+                    : 'No options added yet. Click "New Option" to create one.'}
                 </p>
               )}
             </div>
@@ -1679,7 +1927,12 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <Switch
                 id="isSizeModifier"
                 checked={draft.isSizeModifier}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, isSizeModifier: checked }))}
+                onCheckedChange={(checked) => {
+                  setDraft(d => ({ ...d, isSizeModifier: checked }));
+                  // Sizes are flat options — switch to flat mode so the options editor
+                  // (where sizes + their prices are entered) is revealed.
+                  if (checked && childModifiers.length === 0) setChosenMode('flat');
+                }}
               />
             </div>
           </div>
@@ -1689,24 +1942,35 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             <div className="space-y-2">
               <Label className="section-header">Min Selection</Label>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
                 value={draft.minSelector}
-                onChange={(e) => setDraft(d => ({ ...d, minSelector: parseInt(e.target.value) || 0 }))}
-                className="input-field w-full"
+                // optional types lock min at 0; required types allow editing from 1 up to max
+                disabled={draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional'}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setDraft(d => {
+                  const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
+                  const floor = isRequired ? 1 : 0;
+                  return { ...d, minSelector: Math.max(floor, Math.min(parseInt(e.target.value, 10) || floor, d.noMaxSelection ? Infinity : d.maxSelector)) };
+                })}
+                className="input-field w-full disabled:opacity-50"
               />
             </div>
             <div className="space-y-2">
               <Label className="section-header">Max Selection</Label>
               <input
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
                 value={draft.maxSelector}
-                onChange={(e) => setDraft(d => ({ ...d, maxSelector: parseInt(e.target.value) || 1 }))}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, d.minSelector)) }))}
                 disabled={draft.noMaxSelection}
                 className="input-field w-full"
               />
               <p className="text-[10px] text-muted-foreground">Combination limit</p>
+              {isFinite(selectionCeiling) && (
+                <p className="text-[10px] text-muted-foreground">Max {selectionCeiling} selections</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="section-header">No maximum</Label>
@@ -1727,6 +1991,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               id="multiSelect"
               checked={draft.multiSelect}
               onCheckedChange={(checked) => setDraft(d => ({ ...d, multiSelect: checked }))}
+            />
+          </div>
+
+          {/* Allow repeat — same option more than once */}
+          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+            <div>
+              <Label htmlFor="canGuestSelectMoreModifiers" className="text-sm">Allow same option more than once</Label>
+              <p className="text-xs text-muted-foreground">Guest can pick the same option multiple times</p>
+            </div>
+            <Switch
+              id="canGuestSelectMoreModifiers"
+              checked={draft.canGuestSelectMoreModifiers}
+              onCheckedChange={(checked) => setDraft(d => ({ ...d, canGuestSelectMoreModifiers: checked }))}
             />
           </div>
 
@@ -1797,8 +2074,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              disabled={!hasChanges || !maxSelectorValid || !isNamesValid}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
               Save
@@ -1924,8 +2201,10 @@ interface ModifierGroupDetailProps {
 function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }: ModifierGroupDetailProps) {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(group.groupName);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [editingPosName, setEditingPosName] = useState(false);
   const [draftPosName, setDraftPosName] = useState(group.posDisplayName);
+  const [posNameError, setPosNameError] = useState<string | null>(null);
   const [modPickerOpen, setModPickerOpen] = useState(false);
   const [modPickerSearch, setModPickerSearch] = useState('');
   const modPickerRef = useRef<HTMLDivElement>(null);
@@ -1935,6 +2214,8 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
     setDraftPosName(group.posDisplayName);
     setEditingName(false);
     setEditingPosName(false);
+    setNameError(null);
+    setPosNameError(null);
   }, [group.id]);
 
   useLayoutEffect(() => {
@@ -1974,12 +2255,17 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
   };
 
   const saveName = () => {
-    const name = draftName.trim();
-    if (name) updateModifierGroup(group.id, { groupName: name });
+    const err = getGroupNameError(draftName);
+    if (err) { setNameError(err); return; }
+    setNameError(null);
+    updateModifierGroup(group.id, { groupName: draftName.trim() });
     setEditingName(false);
   };
 
   const savePosName = () => {
+    const err = getGroupPosNameError(draftPosName);
+    if (err) { setPosNameError(err); return; }
+    setPosNameError(null);
     updateModifierGroup(group.id, { posDisplayName: draftPosName.trim() || group.groupName });
     setEditingPosName(false);
   };
@@ -1990,23 +2276,26 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
       <div className="p-4 border-b border-panel-border flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {editingName ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveName();
-                  if (e.key === 'Escape') setEditingName(false);
-                }}
-                className="input-field text-sm font-semibold flex-1"
-              />
-              <button type="button" onClick={saveName} className="p-1 text-primary hover:text-primary/80">
-                <Save className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setEditingName(false)} className="p-1 text-muted-foreground hover:text-foreground">
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={draftName}
+                  onChange={(e) => { setDraftName(e.target.value); setNameError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveName();
+                    if (e.key === 'Escape') { setEditingName(false); setNameError(null); }
+                  }}
+                  className="input-field text-sm font-semibold flex-1"
+                />
+                <button type="button" onClick={saveName} className="p-1 text-primary hover:text-primary/80">
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => { setEditingName(false); setNameError(null); }} className="p-1 text-muted-foreground hover:text-foreground">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {nameError && <p className="text-[10px] text-destructive mt-0.5">{nameError}</p>}
             </div>
           ) : (
             <button
@@ -2037,23 +2326,26 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
             POS Display Name
           </p>
           {editingPosName ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={draftPosName}
-                onChange={(e) => setDraftPosName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') savePosName();
-                  if (e.key === 'Escape') setEditingPosName(false);
-                }}
-                className="input-field text-sm flex-1"
-              />
-              <button type="button" onClick={savePosName} className="p-1 text-primary hover:text-primary/80">
-                <Save className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => setEditingPosName(false)} className="p-1 text-muted-foreground hover:text-foreground">
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={draftPosName}
+                  onChange={(e) => { setDraftPosName(e.target.value); setPosNameError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') savePosName();
+                    if (e.key === 'Escape') { setEditingPosName(false); setPosNameError(null); }
+                  }}
+                  className="input-field text-sm flex-1"
+                />
+                <button type="button" onClick={savePosName} className="p-1 text-primary hover:text-primary/80">
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => { setEditingPosName(false); setPosNameError(null); }} className="p-1 text-muted-foreground hover:text-foreground">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {posNameError && <p className="text-[10px] text-destructive mt-0.5">{posNameError}</p>}
             </div>
           ) : (
             <button
@@ -2149,6 +2441,131 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modifier Option & Pricing Overview (read-only)
+// ---------------------------------------------------------------------------
+interface ModifierOptionOverviewProps {
+  modifiers: Modifier[];
+  modifierOptions: ModifierOption[];
+  modifierModifierOptions: ReturnType<typeof useMenuStore.getState>['modifierModifierOptions'];
+  filter: string;
+  setFilter: (v: string) => void;
+}
+
+const OVERVIEW_ROW_CAP = 1000;
+
+function ModifierOptionOverview({
+  modifiers,
+  modifierOptions,
+  modifierModifierOptions,
+  filter,
+  setFilter,
+}: ModifierOptionOverviewProps) {
+  const rows = useMemo(() => {
+    return modifierModifierOptions.map((mmo) => {
+      const modifier = modifiers.find((m) => m.id === mmo.modifierId);
+      const option = modifierOptions.find((o) => o.id === mmo.modifierOptionId);
+      return {
+        key: `${mmo.modifierId}-${mmo.modifierOptionId}`,
+        modifierName: modifier?.modifierName ?? `#${mmo.modifierId}`,
+        optionName: option?.optionName ?? `#${mmo.modifierOptionId}`,
+        displayName: mmo.optionDisplayName || option?.optionName || '',
+        price: mmo.maxLimit ?? 0,
+        qty: mmo.maxQtyPerOption ?? 1,
+        isDefault: mmo.isDefaultSelected,
+      };
+    });
+  }, [modifierModifierOptions, modifiers, modifierOptions]);
+
+  const filteredRows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.modifierName.toLowerCase().includes(q) ||
+        r.optionName.toLowerCase().includes(q) ||
+        r.displayName.toLowerCase().includes(q),
+    );
+  }, [rows, filter]);
+
+  const cappedRows = filteredRows.slice(0, OVERVIEW_ROW_CAP);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-panel-border space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Option & Pricing Overview</h2>
+          <span className="text-xs text-muted-foreground">
+            {filteredRows.length} assignment{filteredRows.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Filter by modifier, option, or display name…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {filter && (
+            <button
+              onClick={() => setFilter('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto scrollbar-thin">
+        {filteredRows.length === 0 ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">
+            {rows.length === 0 ? 'No modifier options assigned yet.' : `No assignments match "${filter}"`}
+          </div>
+        ) : (
+          <table className="w-full text-sm border-collapse">
+            <thead className="sticky top-0 bg-panel-bg z-10">
+              <tr className="text-left text-xs text-muted-foreground border-b border-panel-border">
+                <th className="px-4 py-2 font-medium">Modifier</th>
+                <th className="px-4 py-2 font-medium">Option</th>
+                <th className="px-4 py-2 font-medium">Display name</th>
+                <th className="px-4 py-2 font-medium text-right">Price</th>
+                <th className="px-4 py-2 font-medium text-center">Qty</th>
+                <th className="px-4 py-2 font-medium text-center">Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cappedRows.map((r) => (
+                <tr key={r.key} className="border-b border-border/50 hover:bg-item-hover">
+                  <td className="px-4 py-2 font-medium text-foreground">{r.modifierName}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.optionName}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.displayName}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">${r.price.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-center tabular-nums">{r.qty === 0 ? '∞' : r.qty}</td>
+                  <td className="px-4 py-2 text-center">
+                    {r.isDefault ? (
+                      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">Default</span>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {filteredRows.length > OVERVIEW_ROW_CAP && (
+          <div className="p-3 text-center text-xs text-muted-foreground">
+            Showing first {OVERVIEW_ROW_CAP} of {filteredRows.length} assignments. Use the filter to narrow results.
+          </div>
+        )}
       </div>
     </div>
   );

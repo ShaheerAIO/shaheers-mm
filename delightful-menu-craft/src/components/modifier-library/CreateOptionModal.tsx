@@ -1,5 +1,21 @@
 import { useState } from 'react';
 import { X, Save } from 'lucide-react';
+
+function getOptionNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Option name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Option name required';
+  if (trimmed.length > 72) return 'Option name must be 1–72 characters';
+  return null;
+}
+
+function getOptionPosNameError(value: string): string | null {
+  if (value.length === 0) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length > 60) return 'POS name must be 1–60 characters';
+  return null;
+}
 import {
   Dialog,
   DialogContent,
@@ -27,12 +43,17 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
   const [optionName, setOptionName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
   const [posDisplayNameTouched, setPosDisplayNameTouched] = useState(false);
+  const [touched, setTouched] = useState({ optionName: false, posDisplayName: false });
   const [price, setPrice] = useState('0.00');
   const [isStockAvailable, setIsStockAvailable] = useState(true);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
+  const optionNameError = getOptionNameError(optionName);
+  const posNameError = getOptionPosNameError(posDisplayName);
+  const isValid = !optionNameError && !posNameError;
+
   const handleSave = () => {
-    if (optionName.trim().length < 2) return;
+    if (!isValid) return;
 
     onSave({
       optionName: optionName.trim(),
@@ -46,6 +67,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
     setOptionName('');
     setPosDisplayName('');
     setPosDisplayNameTouched(false);
+    setTouched({ optionName: false, posDisplayName: false });
     setPrice('0.00');
     setIsStockAvailable(true);
     setIsSizeModifier(false);
@@ -56,13 +78,12 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
     setOptionName('');
     setPosDisplayName('');
     setPosDisplayNameTouched(false);
+    setTouched({ optionName: false, posDisplayName: false });
     setPrice('0.00');
     setIsStockAvailable(true);
     setIsSizeModifier(false);
     onClose();
   };
-
-  const isValid = optionName.trim().length >= 2;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -88,12 +109,18 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
                   setPosDisplayName(e.target.value);
                 }
               }}
+              onBlur={() => {
+                const trimmed = optionName.trim();
+                setOptionName(trimmed);
+                if (!posDisplayNameTouched) setPosDisplayName(trimmed);
+                setTouched(t => ({ ...t, optionName: true }));
+              }}
               placeholder="e.g., Extra Cheese, No Onions"
               className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               autoFocus
             />
-            {optionName.trim().length === 1 && (
-              <p className="text-xs text-destructive">Name must be at least 2 characters.</p>
+            {touched.optionName && optionNameError && (
+              <p className="text-xs text-destructive">{optionNameError}</p>
             )}
           </div>
 
@@ -108,12 +135,17 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
                 setPosDisplayName(e.target.value);
                 setPosDisplayNameTouched(true);
               }}
+              onBlur={() => {
+                setPosDisplayName(posDisplayName.trim());
+                setTouched(t => ({ ...t, posDisplayName: true }));
+              }}
               placeholder="Leave blank to use option name"
               className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <p className="text-xs text-muted-foreground">
-              How it appears on the POS screen
-            </p>
+            {touched.posDisplayName && posNameError
+              ? <p className="text-xs text-destructive">{posNameError}</p>
+              : <p className="text-xs text-muted-foreground">How it appears on the POS screen</p>
+            }
           </div>
 
           {/* Price */}

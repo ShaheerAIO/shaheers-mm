@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { ShoppingCart } from 'lucide-react';
 import type { Item } from '@/types/menu';
-import { isVisibleOnChannel } from '@/lib/visibility';
+import { isVisibleOnChannel, isAvailableOnChannelAt } from '@/lib/visibility';
 import { KioskItemCard } from './KioskItemCard';
 
 interface KioskMenuScreenProps {
@@ -56,7 +56,7 @@ export function KioskMenuScreen({ onSelectItem, cartCount, subtotal, onViewCart 
         .filter((ci) => ci.categoryId === categoryId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((ci) => items.find((i) => i.id === ci.itemId))
-        .filter((i): i is Item => i !== undefined && isVisibleOnChannel(i, 'visibilityKiosk'));
+        .filter((i): i is Item => i !== undefined && isAvailableOnChannelAt(i, 'visibilityKiosk'));
 
     const seen = new Set<number>();
     const flat: Item[] = [];

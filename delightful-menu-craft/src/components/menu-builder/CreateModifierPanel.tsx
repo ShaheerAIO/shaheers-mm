@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
+import { modifierSelectionCeiling } from '@/lib/posPricing';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -54,6 +55,23 @@ type OptionDraft = {
   | { type: 'existing'; existingOptionId: number }
   | { type: 'new'; isStockAvailable: boolean; isSizeModifier: boolean }
 );
+
+function getModifierNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Modifier name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Modifier name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 1 || trimmed.length > 40) return 'Modifier name must be between 1-40 characters';
+  return null;
+}
+
+function getModifierPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 1 || trimmed.length > 60) return 'POS name must be between 1-60 characters';
+  return null;
+}
 
 export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const {
@@ -91,6 +109,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [isSizeModifier, setIsSizeModifier] = useState(false);
   const [modifierOptionPriceType, setModifierOptionPriceType] = useState('NoCharge');
   const [multiSelect, setMultiSelect] = useState(false);
+  // Default true to preserve the prior export value (was hardcoded true); repeat is opt-out.
+  const [canGuestSelectMoreModifiers, setCanGuestSelectMoreModifiers] = useState(true);
 
   // Modifier type mode — mutually exclusive
   type ModifierMode = 'flat' | 'nested';
@@ -98,11 +118,15 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [bulkCreateText, setBulkCreateText] = useState('');
   const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
   const [bulkLibrarySearch, setBulkLibrarySearch] = useState('');
   const [bulkLibrarySelection, setBulkLibrarySelection] = useState<number[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
+
+  const [touched, setTouched] = useState({ modifierName: false, posDisplayName: false });
 
   // Nested modifier IDs selected during creation
   const [nestedModifierIds, setNestedModifierIds] = useState<number[]>([]);
@@ -136,12 +160,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     }
   }, [bulkFromLibraryOpen]);
 
-  // Auto-set minSelector to 1 when "Required" is selected
+  // Sync minSelector with selection type
   useEffect(() => {
-    if (isOptional === 'Required' && minSelector === 0) {
-      setMinSelector(1);
+    if (isOptional === 'Required' || isOptional === 'Select one') {
+      if (minSelector === 0) setMinSelector(1);
+    } else if (isOptional === 'Select any' || isOptional === 'Push Optional') {
+      if (minSelector !== 0) setMinSelector(0);
     }
-  }, [isOptional, minSelector]);
+  }, [isOptional]);
 
   useEffect(() => {
     if (posDisplayMode === 'match_modifier') {
@@ -276,6 +302,40 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setOptions(options.filter(opt => opt.id !== optionId));
   };
 
+  const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleOptionDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (dragIndex === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (index !== dragOverIndex) setDragOverIndex(index);
+  };
+
+  const handleOptionDrop = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (dragIndex === null) return;
+    const from = dragIndex;
+    const to = index;
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (from === to) return;
+    setOptions(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const handleOptionDragEnd = () => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   const handleOptionPriceChange = (optionId: string, price: number) => {
     setOptions(
       options.map(opt =>
@@ -330,7 +390,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       isNested: false,
       addNested: false,
       modifierOptionPriceType,
-      canGuestSelectMoreModifiers: true,
+      canGuestSelectMoreModifiers,
       multiSelect,
       limitIndividualModifierSelection: options.some(o => o.maxQtyPerOption !== 1),
       prefix: prefix.trim(),
@@ -498,18 +558,33 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setIsSizeModifier(false);
     setModifierOptionPriceType('NoCharge');
     setMultiSelect(false);
+    setCanGuestSelectMoreModifiers(true);
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
     setBulkCreateText('');
     setBulkFromLibraryOpen(false);
     setBulkLibrarySelection([]);
+    setTouched({ modifierName: false, posDisplayName: false });
     resetChildForm();
   };
 
+  // Optional / Push Optional modifiers cannot require a minimum selection (POS rule)
+  const isOptionalType = isOptional === 'Select any' || isOptional === 'Push Optional';
+  const modifierNameError = getModifierNameError(modifierName);
+  const posNameError = posDisplayMode === 'custom_pos' ? getModifierPosNameError(posDisplayName) : null;
   const isValid =
-    modifierName.trim().length > 0 &&
-    (modifierMode === 'flat' ? options.length > 0 : nestedModifierIds.length > 0);
+    !modifierNameError && !posNameError &&
+    (modifierMode === 'flat' ? options.length > 0 : nestedModifierIds.length > 0) &&
+    (noMaxSelection || maxSelector >= minSelector);
+
+  const selectionCeiling = modifierSelectionCeiling({
+    multiSelect,
+    allowRepeat: canGuestSelectMoreModifiers,
+    limitPerOption: options.some(o => o.maxQtyPerOption !== 1),
+    optionCount: options.length,
+    perOptionLimits: options.map(o => o.maxQtyPerOption),
+  });
 
   return (
     <div className="flex flex-col h-full">
@@ -533,10 +608,17 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             type="text"
             value={modifierName}
             onChange={(e) => setModifierName(e.target.value)}
+            onBlur={() => {
+              setModifierName((v) => v.trim());
+              setTouched((t) => ({ ...t, modifierName: true }));
+            }}
             className="input-field text-base sm:text-lg font-semibold w-full"
             placeholder="e.g., Toppings, Size, Add-ons"
             autoFocus
           />
+          {touched.modifierName && modifierNameError && (
+            <p className="text-[10px] text-destructive">{modifierNameError}</p>
+          )}
         </div>
 
         {/* Flat vs nested — compact toggle buttons */}
@@ -623,13 +705,22 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     </SelectContent>
                   </Select>
                   {posDisplayMode === 'custom_pos' && (
-                    <input
-                      type="text"
-                      value={posDisplayName}
-                      onChange={(e) => setPosDisplayName(e.target.value)}
-                      className="input-field w-full text-sm"
-                      placeholder="Guest-facing POS label"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={posDisplayName}
+                        onChange={(e) => setPosDisplayName(e.target.value)}
+                        onBlur={() => {
+                          setPosDisplayName((v) => v.trim());
+                          setTouched((t) => ({ ...t, posDisplayName: true }));
+                        }}
+                        className="input-field w-full text-sm"
+                        placeholder="Guest-facing POS label"
+                      />
+                      {touched.posDisplayName && posNameError && (
+                        <p className="text-[10px] text-destructive">{posNameError}</p>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="space-y-1.5">
@@ -735,25 +826,35 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2.5 pb-1">
+                <div className="text-xs text-muted-foreground">
+                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
+                </div>
                 <div className="space-y-1">
                   <div className="flex items-end gap-2 flex-wrap">
                     <div className="space-y-1 w-14 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
                       <input
-                        type="number"
-                        min={0}
+                        type="text"
+                        inputMode="numeric"
                         value={minSelector}
-                        onChange={(e) => setMinSelector(parseInt(e.target.value) || 0)}
-                        className="input-field w-full text-sm h-8"
+                        disabled={isOptionalType}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const isRequired = isOptional === 'Required' || isOptional === 'Select one';
+                          const floor = isRequired ? 1 : 0;
+                          setMinSelector(Math.max(floor, Math.min(parseInt(e.target.value, 10) || floor, noMaxSelection ? Infinity : maxSelector)));
+                        }}
+                        className="input-field w-full text-sm h-8 disabled:opacity-50"
                       />
                     </div>
                     <div className="space-y-1 w-14 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
                       <input
-                        type="number"
-                        min={1}
+                        type="text"
+                        inputMode="numeric"
                         value={maxSelector}
-                        onChange={(e) => setMaxSelector(parseInt(e.target.value) || 1)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setMaxSelector(Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, minSelector)))}
                         disabled={noMaxSelection}
                         className="input-field w-full text-sm h-8 disabled:opacity-50"
                       />
@@ -764,6 +865,9 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     </div>
                   </div>
                   <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
+                  {isFinite(selectionCeiling) && (
+                    <p className="text-[9px] text-muted-foreground leading-tight">Max {selectionCeiling} selections</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -808,6 +912,16 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     Allow multiple selections
                   </Label>
                   <Switch id="multiSelect" checked={multiSelect} onCheckedChange={setMultiSelect} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="canGuestSelectMoreModifiers"
+                    title="Guest can pick the same option more than once"
+                    className="text-xs font-normal cursor-pointer"
+                  >
+                    Allow same option more than once
+                  </Label>
+                  <Switch id="canGuestSelectMoreModifiers" checked={canGuestSelectMoreModifiers} onCheckedChange={setCanGuestSelectMoreModifiers} />
                 </div>
               </div>
             </AccordionContent>
@@ -868,11 +982,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             </p>
           ) : (
             <div className="space-y-2">
-              {options.map((option) => (
+              {options.map((option, index) => (
                 <div
                   key={option.id}
-                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg group"
+                  draggable
+                  onDragStart={(e) => handleOptionDragStart(e, index)}
+                  onDragOver={(e) => handleOptionDragOver(e, index)}
+                  onDrop={(e) => handleOptionDrop(e, index)}
+                  onDragEnd={handleOptionDragEnd}
+                  className={cn(
+                    "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                    dragIndex === index && "opacity-40",
+                    dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
+                  )}
                 >
+                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
                   <div className="flex-1">
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -899,12 +1023,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">$</span>
                       <input
-                        type="number"
-                        step="0.01"
-                        min={0}
+                        type="text"
+                        inputMode="decimal"
                         value={option.price}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
-                          handleOptionPriceChange(option.id, parseFloat(e.target.value) || 0)
+                          handleOptionPriceChange(option.id, Math.max(0, parseFloat(e.target.value) || 0))
                         }
                         className="input-field w-20 text-sm"
                         placeholder="0.00"
@@ -912,14 +1036,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                       <span className="text-xs text-muted-foreground" title="Max times a guest can select this option (0 = unlimited)">Qty</span>
                       <div className="flex items-center gap-1">
                         <input
-                          type="number"
-                          min={0}
-                          step={1}
+                          type="text"
+                          inputMode="numeric"
                           value={option.maxQtyPerOption}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) =>
                             setOptions(opts => opts.map(o =>
                               o.id === option.id
-                                ? { ...o, maxQtyPerOption: Math.max(0, parseInt(e.target.value) || 0) }
+                                ? { ...o, maxQtyPerOption: Math.max(0, parseInt(e.target.value, 10) || 0) }
                                 : o
                             ))
                           }
@@ -1032,12 +1156,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         className="input-field flex-1 text-sm"
                       />
                       <input
-                        type="number"
-                        min={0}
-                        step={0.01}
+                        type="text"
+                        inputMode="decimal"
                         value={opt.price === 0 ? '' : opt.price}
+                        onFocus={e => e.target.select()}
                         onChange={e => setChildOptions(prev =>
-                          prev.map((o, j) => j === i ? { ...o, price: parseFloat(e.target.value) || 0 } : o)
+                          prev.map((o, j) => j === i ? { ...o, price: Math.max(0, parseFloat(e.target.value) || 0) } : o)
                         )}
                         placeholder="$0.00"
                         className="input-field w-16 text-sm text-right"

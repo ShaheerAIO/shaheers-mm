@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, Minus, Plus, UtensilsCrossed, Check } from 'lucide-react';
 import type { Item, Modifier } from '@/types/menu';
-import { modifierSurchargePerUnit } from '@/lib/posPricing';
+import { effectiveUnitPrice } from '@/lib/posPricing';
 import {
   getEffectiveModType,
   buildInitialModifierState,
@@ -151,8 +151,8 @@ export function KioskCustomizeScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachedModifiers, selectedOptions, sizeModifier, sizeIsSelected, modifiers, modifierModifierOptions, modifierOptions]);
 
-  const surchargePerUnit = modifierSurchargePerUnit(selectedOptions, modifierModifierOptions);
-  const linePrice = (item.itemPrice + surchargePerUnit) * qty;
+  const unitPrice = effectiveUnitPrice(item.itemPrice, selectedOptions, attachedModifiers, modifierModifierOptions);
+  const linePrice = unitPrice * qty;
   const showImage = item.kioskItemImage && !imgError;
 
   /** Render a modifier group (recurses into nested child groups). */
@@ -219,7 +219,7 @@ export function KioskCustomizeScreen({
             </span>
             {surcharge > 0 && (
               <span className="text-xs font-semibold tabular-nums text-[#ED7C69]">
-                +${surcharge.toFixed(2)}
+                {mod.isSizeModifier ? `$${surcharge.toFixed(2)}` : `+$${surcharge.toFixed(2)}`}
               </span>
             )}
           </div>

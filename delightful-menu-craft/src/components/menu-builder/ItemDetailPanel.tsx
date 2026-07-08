@@ -43,6 +43,15 @@ interface ItemDetailPanelProps {
   item: Item;
 }
 
+function parseIds(csv: string | undefined): number[] {
+  if (!csv?.trim()) return [];
+  return csv.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0);
+}
+
+function serializeIds(ids: number[]): string {
+  return [...new Set(ids)].sort((a, b) => a - b).join(',');
+}
+
 interface DraftState {
   itemName: string;
   posDisplayName: string;
@@ -111,9 +120,35 @@ function buildAvailabilitySummary(draft: DraftState): string {
   return parts.join('  ·  ');
 }
 
+function getItemNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Item name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Item name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 2 || trimmed.length > 60) return 'Item name must be between 2-60 characters';
+  return null;
+}
+
+function getItemPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 2 || trimmed.length > 60) return 'POS name must be between 2-60 characters';
+  return null;
+}
+
+function getItemKdsNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'KDS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'KDS name required';
+  if (trimmed.length < 2 || trimmed.length > 40) return 'KDS name must be between 2-40 characters';
+  return null;
+}
+
 export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const {
     updateItem,
+    items,
     modifiers,
     modifierGroups,
     modifierOptions,
@@ -205,8 +240,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
     stockStatus: item.stockStatus,
     orderQuantityLimit: item.orderQuantityLimit ?? false,
-    minLimit: item.minLimit ?? 0,
-    maxLimit: item.maxLimit ?? 0,
+    minLimit: item.minLimit || 1,
+    maxLimit: item.maxLimit || 1,
     noMaxLimit: item.noMaxLimit ?? true,
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
@@ -245,6 +280,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
       : []
   );
+  const [addonDraft, setAddonDraft] = useState<number[]>(parseIds(item.addonIds));
+  const [addonSearch, setAddonSearch] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
   const [pendingDeleteTagId, setPendingDeleteTagId] = useState<number | null>(null);
@@ -263,6 +300,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
   const [imageModalTarget, setImageModalTarget] = useState<ItemUploadField | null>(null);
+  const [touched, setTouched] = useState({ itemName: false, posDisplayName: false, kdsName: false });
 
   // Reset draft state when item changes
   useEffect(() => {
@@ -286,8 +324,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
-      minLimit: item.minLimit ?? 0,
-      maxLimit: item.maxLimit ?? 0,
+      minLimit: item.minLimit || 1,
+      maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
@@ -318,9 +356,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
         : []
     );
+    setAddonDraft(parseIds(item.addonIds));
+    setAddonSearch('');
     setNewStationName('');
     setNamesExpanded(false);
     setImageModalTarget(null);
+    setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   }, [item.id]);
 
   // Keep "item name drives POS/KDS" in sync with saved data after save; reset when switching items
@@ -358,6 +399,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     [item.stationIds],
   );
 
+  const originalAddonIds = useMemo(() => parseIds(item.addonIds), [item.addonIds]);
+
   // Check if there are unsaved changes
   const hasChanges = useMemo(() => {
     const originalStationsSorted = [...originalStationIds].sort();
@@ -365,6 +408,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     const stationsChanged =
       originalStationsSorted.length !== draftStationsSorted.length ||
       originalStationsSorted.some((id, idx) => id !== draftStationsSorted[idx]);
+
+    const addonsChanged = serializeIds(addonDraft) !== serializeIds(originalAddonIds);
 
     return (
       draft.itemName !== item.itemName ||
@@ -403,11 +448,18 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       serializeGroupSchedules(draft.daySchedulesByGroup) !== (item.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
       pendingModifierIds.length > 0 ||
       pendingRemovedModifierIds.length > 0 ||
-      stationsChanged
+      stationsChanged ||
+      addonsChanged
     );
-  }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft]);
+  }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft, originalAddonIds, addonDraft]);
 
   const saleCategoryValid = draft.saleCategory.trim() !== '';
+  const maxLimitValid = draft.noMaxLimit || !draft.orderQuantityLimit || draft.maxLimit >= draft.minLimit;
+
+  const itemNameError = getItemNameError(draft.itemName);
+  const posNameError = getItemPosNameError(draft.posDisplayName);
+  const kdsNameError = getItemKdsNameError(draft.kdsName);
+  const isFormValid = !itemNameError && !posNameError && !kdsNameError;
 
   // Effective tax rate for the live total + the current Select value/label.
   const effectiveTaxRate = effectiveItemTaxRate(draft, customTaxes, taxRate);
@@ -456,6 +508,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       calories: draft.calories,
       saleCategory: draft.saleCategory.trim() || 'Food Sales',
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
+      addonIds: serializeIds(addonDraft),
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
       visibilityMenuBoard: draft.visibilityMenuBoard,
@@ -510,8 +563,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
       orderQuantityLimit: item.orderQuantityLimit ?? false,
-      minLimit: item.minLimit ?? 0,
-      maxLimit: item.maxLimit ?? 0,
+      minLimit: item.minLimit || 1,
+      maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
       preparationTime: item.preparationTime,
@@ -537,8 +590,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setStationDraft(originalStationIds);
+    setAddonDraft(originalAddonIds);
     setNewStationName('');
     setItemNameDrivesPosKds(namesInitiallyLinked(item));
+    setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   };
 
   const handlePriceChange = (value: string) => {
@@ -766,6 +821,25 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     });
   };
 
+  const handleToggleAddon = (addonItemId: number) => {
+    setAddonDraft((prev) => {
+      if (prev.includes(addonItemId)) {
+        return prev.filter((id) => id !== addonItemId);
+      }
+      return [...prev, addonItemId];
+    });
+  };
+
+  // Selectable add-on items — all menu items except this one.
+  const addonCandidates = items.filter((i) => i.id !== item.id);
+  const filteredAddonCandidates = addonSearch.trim()
+    ? addonCandidates.filter((i) =>
+        `${i.posDisplayName || i.itemName} ${i.id}`
+          .toLowerCase()
+          .includes(addonSearch.trim().toLowerCase()),
+      )
+    : addonCandidates;
+
   return (
     <div className="flex flex-col h-full">
       {/* Unsaved changes indicator */}
@@ -791,9 +865,21 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     : { ...d, itemName: v },
                 );
               }}
+              onBlur={() => {
+                setDraft((d) => {
+                  const trimmed = d.itemName.trim();
+                  return itemNameDrivesPosKds
+                    ? { ...d, itemName: trimmed, posDisplayName: trimmed, kdsName: trimmed }
+                    : { ...d, itemName: trimmed };
+                });
+                setTouched((t) => ({ ...t, itemName: true }));
+              }}
               className="input-field h-8 text-sm font-semibold w-full leading-tight py-1"
               placeholder="Item name"
             />
+            {touched.itemName && itemNameError && (
+              <p className="text-[10px] text-destructive mt-0.5">{itemNameError}</p>
+            )}
 
             {/* POS / KDS toggle */}
             <button
@@ -810,31 +896,49 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
             {namesExpanded && (
               <div className="space-y-1 pl-2 border-l-2 border-border ml-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">POS</span>
-                  <input
-                    type="text"
-                    value={draft.posDisplayName}
-                    onChange={(e) => {
-                      setItemNameDrivesPosKds(false);
-                      setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
-                    }}
-                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                    placeholder="POS display name"
-                  />
+                <div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">POS</span>
+                    <input
+                      type="text"
+                      value={draft.posDisplayName}
+                      onChange={(e) => {
+                        setItemNameDrivesPosKds(false);
+                        setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                      }}
+                      onBlur={() => {
+                        setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                        setTouched((t) => ({ ...t, posDisplayName: true }));
+                      }}
+                      className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                      placeholder="POS display name"
+                    />
+                  </div>
+                  {touched.posDisplayName && posNameError && (
+                    <p className="text-[10px] text-destructive mt-0.5 ml-[2.5rem]">{posNameError}</p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">KDS</span>
-                  <input
-                    type="text"
-                    value={draft.kdsName}
-                    onChange={(e) => {
-                      setItemNameDrivesPosKds(false);
-                      setDraft((d) => ({ ...d, kdsName: e.target.value }));
-                    }}
-                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                    placeholder="KDS display name"
-                  />
+                <div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-8">KDS</span>
+                    <input
+                      type="text"
+                      value={draft.kdsName}
+                      onChange={(e) => {
+                        setItemNameDrivesPosKds(false);
+                        setDraft((d) => ({ ...d, kdsName: e.target.value }));
+                      }}
+                      onBlur={() => {
+                        setDraft((d) => ({ ...d, kdsName: d.kdsName.trim() }));
+                        setTouched((t) => ({ ...t, kdsName: true }));
+                      }}
+                      className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                      placeholder="KDS display name"
+                    />
+                  </div>
+                  {touched.kdsName && kdsNameError && (
+                    <p className="text-[10px] text-destructive mt-0.5 ml-[2.5rem]">{kdsNameError}</p>
+                  )}
                 </div>
                 {!itemNameDrivesPosKds && (
                   <button
@@ -1533,7 +1637,20 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               )}
                             </div>
                             <span className="text-muted-foreground shrink-0">
-                              {opt.maxLimit > 0 ? `+$${opt.maxLimit.toFixed(2)}` : '$0.00'}
+                              {modifier.isSizeModifier ? (
+                                <>
+                                  ${(opt.maxLimit > 0 ? opt.maxLimit : 0).toFixed(2)}
+                                  {effectiveTaxRate > 0 && (
+                                    <span className="ml-1 text-muted-foreground/70">
+                                      (${((opt.maxLimit > 0 ? opt.maxLimit : 0) * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
+                                    </span>
+                                  )}
+                                </>
+                              ) : opt.maxLimit > 0 ? (
+                                `+$${opt.maxLimit.toFixed(2)}`
+                              ) : (
+                                '$0.00'
+                              )}
                             </span>
                           </div>
                         ))}
@@ -1944,6 +2061,60 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
+          <AccordionItem value="addons" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Add-Ons
+                {addonDraft.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                    ({addonDraft.length})
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Link other menu items as add-ons for this item.
+                </p>
+                {addonCandidates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No other items exist yet.</p>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={addonSearch}
+                      onChange={(e) => setAddonSearch(e.target.value)}
+                      placeholder="Search items..."
+                      className="input-field w-full text-xs"
+                    />
+                    {filteredAddonCandidates.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No items match your search.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                        {filteredAddonCandidates.map((candidate) => (
+                          <label
+                            key={candidate.id}
+                            className="flex items-center gap-2 text-xs cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={addonDraft.includes(candidate.id)}
+                              onCheckedChange={() => handleToggleAddon(candidate.id)}
+                            />
+                            <span className="text-muted-foreground">
+                              {candidate.posDisplayName || candidate.itemName}
+                            </span>
+                            <span className="text-muted-foreground/50 tabular-nums">#{candidate.id}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
           <AccordionItem value="third-party" className="border-b border-border px-3">
             <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Third-party delivery prices
@@ -2098,7 +2269,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         </button>
         <button
           onClick={handleSave}
-          disabled={!hasChanges || !saleCategoryValid}
+          disabled={!hasChanges || !saleCategoryValid || !maxLimitValid || !isFormValid}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Save className="w-4 h-4" />

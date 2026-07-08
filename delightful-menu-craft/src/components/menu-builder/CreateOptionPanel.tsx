@@ -4,17 +4,38 @@ import { X, Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 
+function getOptionNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Option name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Option name required';
+  if (trimmed.length > 72) return 'Option name must be 1–72 characters';
+  return null;
+}
+
+function getOptionPosNameError(value: string): string | null {
+  if (value.length === 0) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length > 60) return 'POS name must be 1–60 characters';
+  return null;
+}
+
 export function CreateOptionPanel() {
   const { setIsCreatingOption, setPendingOption } = useMenuStore();
 
   const [optionName, setOptionName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
   const [posDisplayNameTouched, setPosDisplayNameTouched] = useState(false);
+  const [touched, setTouched] = useState({ optionName: false, posDisplayName: false });
   const [isStockAvailable, setIsStockAvailable] = useState(true);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
 
+  const optionNameError = getOptionNameError(optionName);
+  const posNameError = getOptionPosNameError(posDisplayName);
+  const isValid = !optionNameError && !posNameError;
+
   const handleSave = () => {
-    if (optionName.trim().length < 2) return;
+    if (!isValid) return;
 
     setPendingOption({
       optionName: optionName.trim(),
@@ -30,6 +51,7 @@ export function CreateOptionPanel() {
     setOptionName('');
     setPosDisplayName('');
     setPosDisplayNameTouched(false);
+    setTouched({ optionName: false, posDisplayName: false });
     setIsStockAvailable(true);
     setIsSizeModifier(false);
   };
@@ -40,11 +62,10 @@ export function CreateOptionPanel() {
     setOptionName('');
     setPosDisplayName('');
     setPosDisplayNameTouched(false);
+    setTouched({ optionName: false, posDisplayName: false });
     setIsStockAvailable(true);
     setIsSizeModifier(false);
   };
-
-  const isValid = optionName.trim().length >= 2;
 
   return (
     <div className="flex flex-col h-full">
@@ -76,12 +97,18 @@ export function CreateOptionPanel() {
                 setPosDisplayName(e.target.value);
               }
             }}
+            onBlur={() => {
+              const trimmed = optionName.trim();
+              setOptionName(trimmed);
+              if (!posDisplayNameTouched) setPosDisplayName(trimmed);
+              setTouched(t => ({ ...t, optionName: true }));
+            }}
             placeholder="e.g., Extra Cheese, No Onions"
             className="input-field w-full"
             autoFocus
           />
-          {optionName.trim().length === 1 && (
-            <p className="text-xs text-destructive">Name must be at least 2 characters.</p>
+          {touched.optionName && optionNameError && (
+            <p className="text-xs text-destructive">{optionNameError}</p>
           )}
         </div>
 
@@ -98,12 +125,17 @@ export function CreateOptionPanel() {
               setPosDisplayName(e.target.value);
               setPosDisplayNameTouched(true);
             }}
+            onBlur={() => {
+              setPosDisplayName(posDisplayName.trim());
+              setTouched(t => ({ ...t, posDisplayName: true }));
+            }}
             placeholder="Leave blank to use option name"
             className="input-field w-full"
           />
-          <p className="text-xs text-muted-foreground">
-            How it appears on the POS screen
-          </p>
+          {touched.posDisplayName && posNameError
+            ? <p className="text-xs text-destructive">{posNameError}</p>
+            : <p className="text-xs text-muted-foreground">How it appears on the POS screen</p>
+          }
         </div>
 
         {/* Toggles */}

@@ -137,16 +137,22 @@ interface MenuState {
   addCategory: (category: Category) => void;
   updateCategory: (id: number, updates: Partial<Category>) => void;
   deleteCategory: (id: number) => void;
+  /** Reorder a category among its siblings (same parentCategoryId, null for root). Renumbers siblings' sortOrder. */
+  reorderCategories: (parentId: number | null, fromIndex: number, toIndex: number, menuId?: number) => void;
   
   // Actions - Items
   addItem: (item: Item) => void;
   updateItem: (id: number, updates: Partial<Item>) => void;
   deleteItem: (id: number) => void;
-  
+  /** Deep-copy an item (row + ItemModifier + CategoryItem joins). Returns the new id. */
+  duplicateItem: (itemId: number) => number | undefined;
+
   // Actions - Modifiers
   addModifier: (modifier: Modifier) => void;
   updateModifier: (id: number, updates: Partial<Modifier>) => void;
   deleteModifier: (id: number) => void;
+  /** Copy a modifier (row + ModifierModifierOption joins); shares options & nested children. */
+  duplicateModifier: (modifierId: number) => void;
   
   // Actions - Modifier Options
   addModifierOption: (option: ModifierOption) => void;
@@ -166,6 +172,8 @@ interface MenuState {
   // Actions - Category Items (for assigning items to categories)
   addCategoryItem: (categoryItem: CategoryItem) => void;
   removeCategoryItem: (id: number) => void;
+  /** Reorder the CategoryItem rows of one category by renumbering their sortOrder. */
+  reorderCategoryItems: (categoryId: number, fromIndex: number, toIndex: number) => void;
 
   // Actions - Category Modifiers
   addCategoryModifier: (categoryId: number, modifierId: number) => void;
@@ -796,7 +804,9 @@ export const useMenuStore = create<MenuState>()(
         });
       },
 
-      startFresh: () => { if (get().isReadOnly) return; set({
+      startFresh: () => { if (get().isReadOnly) return;
+        const { defaultVisibility: dv } = require('@/lib/visibility') as typeof import('@/lib/visibility');
+        set({
         menus: [{
           id: 1,
           menuName: 'Main Menu',
@@ -804,6 +814,7 @@ export const useMenuStore = create<MenuState>()(
           posButtonColor: DEFAULT_MENU_COLOR,
           picture: '',
           sortOrder: 1,
+          ...dv(),
         }],
         categories: [],
         items: [],
@@ -903,7 +914,41 @@ export const useMenuStore = create<MenuState>()(
         categories: state.categories.filter((c) => c.id !== id),
         categoryItems: state.categoryItems.filter((ci) => ci.categoryId !== id),
       })),
-      
+      reorderCategories: (parentId, fromIndex, toIndex, menuId) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          // Siblings share the same parentCategoryId. Treat null/0/undefined as
+          // "root" so the matcher lines up with how root categories are stored.
+          // Root columns are also scoped to the current menu so indices match the
+          // menu-filtered list the UI renders (a category belongs to a menu via menuIds).
+          const isRoot = !parentId;
+          const belongsToMenu = (c: Category) => {
+            if (menuId == null) return true;
+            const ids = c.menuIds?.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) || [];
+            return ids.includes(menuId);
+          };
+          const sameScope = (c: Category) =>
+            (isRoot ? !c.parentCategoryId : c.parentCategoryId === parentId) && belongsToMenu(c);
+
+          const siblings = state.categories
+            .filter(sameScope)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+          const rest = state.categories.filter((c) => !sameScope(c));
+
+          if (
+            fromIndex < 0 || toIndex < 0 ||
+            fromIndex >= siblings.length || toIndex >= siblings.length ||
+            fromIndex === toIndex
+          ) return {};
+
+          const reordered = [...siblings];
+          const [moved] = reordered.splice(fromIndex, 1);
+          reordered.splice(toIndex, 0, moved);
+          const updated = reordered.map((c, idx) => ({ ...c, sortOrder: idx }));
+
+          return { categories: [...rest, ...updated] };
+        }),
+
       // Item Actions
       addItem: (item) => set((state) => ({ 
         items: [...state.items, item],
@@ -916,7 +961,51 @@ export const useMenuStore = create<MenuState>()(
         itemModifiers: state.itemModifiers.filter((im) => im.itemId !== id),
         categoryItems: state.categoryItems.filter((ci) => ci.itemId !== id),
       })),
-      
+      duplicateItem: (itemId) => {
+        const state = get();
+        if (state.isReadOnly) return undefined;
+        const source = state.items.find((i) => i.id === itemId);
+        if (!source) return undefined;
+
+        const newItemId = getMaxId(state.items) + 1;
+        const copyName = `${source.itemName} (Copy)`;
+        const newItem: Item = {
+          ...source,
+          id: newItemId,
+          itemName: copyName,
+          // Mirror the name into display fields only when they tracked the original name.
+          posDisplayName:
+            source.posDisplayName === source.itemName ? copyName : source.posDisplayName,
+          kdsName: source.kdsName === source.itemName ? copyName : source.kdsName,
+        };
+
+        // Clone ItemModifier joins (keep modifierId + sortOrder, new itemId).
+        const newItemModifiers: ItemModifier[] = state.itemModifiers
+          .filter((im) => im.itemId === itemId)
+          .map((im) => ({ ...im, itemId: newItemId }));
+
+        // Clone CategoryItem joins (fresh id, same categories, new itemId).
+        // Append the copy to the end of each category with a fresh sortOrder so it
+        // doesn't collide with the source's sortOrder (must stay unique per group).
+        let nextCatItemId = getMaxId(state.categoryItems) + 1;
+        const newCategoryItems: CategoryItem[] = state.categoryItems
+          .filter((ci) => ci.itemId === itemId)
+          .map((ci) => {
+            const maxSort = state.categoryItems
+              .filter((x) => x.categoryId === ci.categoryId)
+              .reduce((m, x) => Math.max(m, x.sortOrder), -1);
+            return { ...ci, id: nextCatItemId++, itemId: newItemId, sortOrder: maxSort + 1 };
+          });
+
+        set((s) => ({
+          items: [...s.items, newItem],
+          itemModifiers: [...s.itemModifiers, ...newItemModifiers],
+          categoryItems: [...s.categoryItems, ...newCategoryItems],
+        }));
+        return newItemId;
+      },
+
+
       // Modifier Actions
       addModifier: (modifier) => set((state) => ({ 
         modifiers: [...state.modifiers, modifier],
@@ -955,7 +1044,38 @@ export const useMenuStore = create<MenuState>()(
               state.selectedModifierId === id ? null : state.selectedModifierId,
           };
         }),
-      
+      duplicateModifier: (modifierId) => {
+        const state = get();
+        if (state.isReadOnly) return;
+        const source = state.modifiers.find((m) => m.id === modifierId);
+        if (!source) return;
+
+        const newModifierId = getMaxId(state.modifiers) + 1;
+        const copyName = `${source.modifierName} (Copy)`;
+        const newModifier: Modifier = {
+          ...source,
+          id: newModifierId,
+          modifierName: copyName,
+          posDisplayName:
+            source.posDisplayName === source.modifierName ? copyName : source.posDisplayName,
+          // The copy is its own top-level modifier, never a child of the source's parent.
+          parentModifierId: 0,
+          isNested: false,
+          // modifierIds / addNested copied as-is: the copy SHARES nested children.
+        };
+
+        // Clone ModifierModifierOption joins (share the same ModifierOption rows).
+        const newJoins: ModifierModifierOption[] = state.modifierModifierOptions
+          .filter((mmo) => mmo.modifierId === modifierId)
+          .map((mmo) => ({ ...mmo, modifierId: newModifierId }));
+
+        set((s) => ({
+          modifiers: [...s.modifiers, newModifier],
+          modifierModifierOptions: [...s.modifierModifierOptions, ...newJoins],
+        }));
+      },
+
+
       // Modifier Option Actions
       addModifierOption: (option) => set((state) => ({ modifierOptions: [...state.modifierOptions, option] })),
       updateModifierOption: (id, updates) => set((state) => ({
@@ -1059,6 +1179,27 @@ export const useMenuStore = create<MenuState>()(
       removeCategoryItem: (id) => set((state) => ({
         categoryItems: state.categoryItems.filter((ci) => ci.id !== id),
       })),
+      reorderCategoryItems: (categoryId, fromIndex, toIndex) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          const rest = state.categoryItems.filter((ci) => ci.categoryId !== categoryId);
+          const ordered = state.categoryItems
+            .filter((ci) => ci.categoryId === categoryId)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+
+          if (
+            fromIndex < 0 || toIndex < 0 ||
+            fromIndex >= ordered.length || toIndex >= ordered.length ||
+            fromIndex === toIndex
+          ) return {};
+
+          const reordered = [...ordered];
+          const [moved] = reordered.splice(fromIndex, 1);
+          reordered.splice(toIndex, 0, moved);
+          const updated = reordered.map((ci, idx) => ({ ...ci, sortOrder: idx }));
+
+          return { categoryItems: [...rest, ...updated] };
+        }),
 
       // Category Modifier Actions
       addCategoryModifier: (categoryId, modifierId) => set((state) => {

@@ -56,6 +56,38 @@ function serializeIds(ids: Set<number> | number[]): string {
   return [...ids].join(',');
 }
 
+function getCategoryNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'Category name cannot contain spaces only';
+  if (trimmed.length === 0) return 'Category name required';
+  if (/^\d$/.test(trimmed)) return null;
+  if (trimmed.length < 2 || trimmed.length > 40) return 'Category name must be between 2-40 characters';
+  return null;
+}
+
+function getPosNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'POS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'POS name required';
+  if (trimmed.length < 2 || trimmed.length > 60) return 'POS name must be between 2-60 characters';
+  return null;
+}
+
+// KDS tracks the category name until the user customizes it. It's still
+// "linked" while KDS is empty (imported/legacy categories with no KDS column)
+// or equal to the name; a KDS that differs from the name is user-customized.
+function isKdsLinked(kds: string, name: string): boolean {
+  return !kds || kds === name;
+}
+
+function getKdsNameError(value: string): string | null {
+  const trimmed = value.trim();
+  if (value.length > 0 && trimmed.length === 0) return 'KDS name cannot contain spaces only';
+  if (trimmed.length === 0) return 'KDS name required';
+  if (trimmed.length < 2 || trimmed.length > 40) return 'KDS name must be between 2-40 characters';
+  return null;
+}
+
 function buildAvailabilitySummary(draft: Draft): string {
   const channels = VISIBILITY_CHANNELS
     .filter(({ key }) => draft[key as VisibilityChannelKey])
@@ -116,6 +148,8 @@ export function CategoryDetailPanel({ category }: Props) {
 
   const [tagIds, setTagIds] = useState<Set<number>>(() => new Set(parseIds(category.tagIds)));
   const [menuIds, setMenuIds] = useState<Set<number>>(() => new Set(parseIds(category.menuIds)));
+
+  const [touched, setTouched] = useState({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
 
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
@@ -191,6 +225,7 @@ export function CategoryDetailPanel({ category }: Props) {
     setApplyFeedback(null);
     setImageModalTarget(null);
     setConfirmDeleteImages(false);
+    setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
   }, [category.id]);
 
   const isDirty =
@@ -210,6 +245,11 @@ export function CategoryDetailPanel({ category }: Props) {
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (category.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
     serializeIds(tagIds) !== serializeIds(new Set(parseIds(category.tagIds))) ||
     serializeIds(menuIds) !== serializeIds(new Set(parseIds(category.menuIds)));
+
+  const categoryNameError = getCategoryNameError(draft.categoryName);
+  const posNameError = getPosNameError(draft.posDisplayName);
+  const kdsNameError = getKdsNameError(draft.kdsDisplayName);
+  const isFormValid = !categoryNameError && !posNameError && !kdsNameError;
 
   const handleSave = () => {
     updateCategory(category.id, {
@@ -243,6 +283,7 @@ export function CategoryDetailPanel({ category }: Props) {
     setExpandedDay(null);
     setBulkStart('');
     setBulkEnd('');
+    setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
   };
 
   const handleCreateTag = () => {
@@ -313,32 +354,66 @@ export function CategoryDetailPanel({ category }: Props) {
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Names</p>
             <div className="space-y-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">Name</span>
-                <input
-                  className="input-field h-8 text-sm font-semibold flex-1 min-w-0 py-1"
-                  value={draft.categoryName}
-                  onChange={(e) => setDraft((d) => ({ ...d, categoryName: e.target.value, posDisplayName: e.target.value }))}
-                  placeholder="Category name"
-                />
+              <div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">Name</span>
+                  <input
+                    className="input-field h-8 text-sm font-semibold flex-1 min-w-0 py-1"
+                    value={draft.categoryName}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      categoryName: e.target.value,
+                      posDisplayName: e.target.value,
+                      // Auto-populate KDS while it still tracks the name (or is empty);
+                      // a KDS the user has customized to differ is left untouched.
+                      kdsDisplayName: isKdsLinked(d.kdsDisplayName, d.categoryName) ? e.target.value : d.kdsDisplayName,
+                    }))}
+                    onBlur={() => {
+                      setDraft((d) => ({ ...d, categoryName: d.categoryName.trim(), posDisplayName: d.posDisplayName.trim() }));
+                      setTouched((t) => ({ ...t, categoryName: true }));
+                    }}
+                    placeholder="Category name"
+                  />
+                </div>
+                {touched.categoryName && categoryNameError && (
+                  <p className="text-[10px] text-destructive mt-0.5 ml-[4rem]">{categoryNameError}</p>
+                )}
               </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">POS</span>
-                <input
-                  className="input-field h-7 text-xs flex-1 min-w-0 py-1"
-                  value={draft.posDisplayName}
-                  onChange={(e) => setDraft((d) => ({ ...d, posDisplayName: e.target.value }))}
-                  placeholder="POS display name"
-                />
+              <div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">POS</span>
+                  <input
+                    className="input-field h-7 text-xs flex-1 min-w-0 py-1"
+                    value={draft.posDisplayName}
+                    onChange={(e) => setDraft((d) => ({ ...d, posDisplayName: e.target.value }))}
+                    onBlur={() => {
+                      setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                      setTouched((t) => ({ ...t, posDisplayName: true }));
+                    }}
+                    placeholder="POS display name"
+                  />
+                </div>
+                {touched.posDisplayName && posNameError && (
+                  <p className="text-[10px] text-destructive mt-0.5 ml-[4rem]">{posNameError}</p>
+                )}
               </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">KDS</span>
-                <input
-                  className="input-field h-7 text-xs flex-1 min-w-0 py-1"
-                  value={draft.kdsDisplayName}
-                  onChange={(e) => setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }))}
-                  placeholder="KDS display name"
-                />
+              <div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">KDS</span>
+                  <input
+                    className="input-field h-7 text-xs flex-1 min-w-0 py-1"
+                    value={draft.kdsDisplayName}
+                    onChange={(e) => setDraft((d) => ({ ...d, kdsDisplayName: e.target.value }))}
+                    onBlur={() => {
+                      setDraft((d) => ({ ...d, kdsDisplayName: d.kdsDisplayName.trim() }));
+                      setTouched((t) => ({ ...t, kdsDisplayName: true }));
+                    }}
+                    placeholder="KDS display name"
+                  />
+                </div>
+                {touched.kdsDisplayName && kdsNameError && (
+                  <p className="text-[10px] text-destructive mt-0.5 ml-[4rem]">{kdsNameError}</p>
+                )}
               </div>
             </div>
           </section>
@@ -938,10 +1013,10 @@ export function CategoryDetailPanel({ category }: Props) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={!isDirty}
+          disabled={!isDirty || !isFormValid}
           className={cn(
             'flex-1 py-2 rounded-lg text-xs font-semibold transition-colors',
-            isDirty
+            isDirty && isFormValid
               ? 'bg-primary text-primary-foreground hover:opacity-90'
               : 'bg-muted text-muted-foreground cursor-not-allowed',
           )}
