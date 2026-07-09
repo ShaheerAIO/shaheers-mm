@@ -8,7 +8,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink, ImageIcon, Upload } from 'lucide-react';
+import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
@@ -61,6 +63,11 @@ interface DraftState {
   uberEatsPrice: number;
   grubHubPrice: number;
   itemDescription: string;
+  itemPicture: string;
+  kioskItemImage: string;
+  onlineImage: string;
+  thirdPartyImage: string;
+  landscapeImage: string;
   salesTax: boolean;
   customTaxId?: number;
   takeoutException: boolean;
@@ -84,6 +91,16 @@ interface DraftState {
   visibilityDoordash: boolean;
   daySchedulesByGroup: ChannelGroupSchedules;
 }
+
+type ItemImageField = 'itemPicture' | 'kioskItemImage' | 'onlineImage' | 'thirdPartyImage';
+type ItemUploadField = ItemImageField | 'landscapeImage';
+
+const ITEM_IMAGE_FIELDS: { field: ItemImageField; label: string }[] = [
+  { field: 'itemPicture', label: 'POS & mPOS' },
+  { field: 'onlineImage', label: 'Online & QR' },
+  { field: 'kioskItemImage', label: 'KIOSK' },
+  { field: 'thirdPartyImage', label: '3rd Party Delivery' },
+];
 
 function namesInitiallyLinked(item: Item): boolean {
   const kds = item.kdsName ?? item.itemName;
@@ -216,6 +233,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     uberEatsPrice: item.uberEatsPrice ?? 0,
     grubHubPrice: item.grubHubPrice ?? 0,
     itemDescription: item.itemDescription,
+    itemPicture: item.itemPicture || '',
+    kioskItemImage: item.kioskItemImage || '',
+    onlineImage: item.onlineImage || '',
+    thirdPartyImage: item.thirdPartyImage || '',
+    landscapeImage: item.landscapeImage || '',
     salesTax: item.salesTax ?? true,
     customTaxId: item.customTaxId,
     takeoutException: item.takeoutException ?? false,
@@ -287,6 +309,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [optionSortMenuModifierId, setOptionSortMenuModifierId] = useState<number | null>(null);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
+  const [imageModalTarget, setImageModalTarget] = useState<ItemUploadField | null>(null);
   const [touched, setTouched] = useState({ itemName: false, posDisplayName: false, kdsName: false });
 
   // Reset draft state when item changes
@@ -300,6 +323,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       uberEatsPrice: item.uberEatsPrice ?? 0,
       grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
+      itemPicture: item.itemPicture || '',
+      kioskItemImage: item.kioskItemImage || '',
+      onlineImage: item.onlineImage || '',
+      thirdPartyImage: item.thirdPartyImage || '',
+      landscapeImage: item.landscapeImage || '',
       salesTax: item.salesTax ?? true,
       customTaxId: item.customTaxId,
       takeoutException: item.takeoutException ?? false,
@@ -349,6 +377,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setAddonSearch('');
     setNewStationName('');
     setNamesExpanded(false);
+    setImageModalTarget(null);
     setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   }, [item.id]);
 
@@ -419,6 +448,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.uberEatsPrice !== (item.uberEatsPrice ?? 0) ||
       draft.grubHubPrice !== (item.grubHubPrice ?? 0) ||
       draft.itemDescription !== item.itemDescription ||
+      draft.itemPicture !== (item.itemPicture || '') ||
+      draft.kioskItemImage !== (item.kioskItemImage || '') ||
+      draft.onlineImage !== (item.onlineImage || '') ||
+      draft.thirdPartyImage !== (item.thirdPartyImage || '') ||
+      draft.landscapeImage !== (item.landscapeImage || '') ||
       draft.salesTax !== (item.salesTax ?? true) ||
       draft.customTaxId !== item.customTaxId ||
       draft.takeoutException !== (item.takeoutException ?? false) ||
@@ -484,6 +518,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       uberEatsPrice: draft.uberEatsPrice,
       grubHubPrice: draft.grubHubPrice,
       itemDescription: draft.itemDescription,
+      itemPicture: draft.itemPicture,
+      kioskItemImage: draft.kioskItemImage,
+      onlineImage: draft.onlineImage,
+      thirdPartyImage: draft.thirdPartyImage,
+      landscapeImage: draft.landscapeImage,
       salesTax: draft.salesTax,
       customTaxId: draft.customTaxId,
       takeoutException: draft.takeoutException,
@@ -550,6 +589,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       uberEatsPrice: item.uberEatsPrice ?? 0,
       grubHubPrice: item.grubHubPrice ?? 0,
       itemDescription: item.itemDescription,
+      itemPicture: item.itemPicture || '',
+      kioskItemImage: item.kioskItemImage || '',
+      onlineImage: item.onlineImage || '',
+      thirdPartyImage: item.thirdPartyImage || '',
+      landscapeImage: item.landscapeImage || '',
       salesTax: item.salesTax ?? true,
       customTaxId: item.customTaxId,
       takeoutException: item.takeoutException ?? false,
@@ -1046,6 +1090,108 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             className="input-field w-full min-h-[56px] resize-none"
             placeholder="Item description (optional)"
           />
+        </div>
+
+        {/* Channel-specific item images */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">
+            {ITEM_IMAGE_FIELDS.every(({ field }) => !draft[field]) ? 'Image 1:1' : 'Images 1:1'}
+          </Label>
+          {ITEM_IMAGE_FIELDS.every(({ field }) => !draft[field]) ? (
+            <button
+              type="button"
+              onClick={() => setImageModalTarget('itemPicture')}
+              className="flex h-44 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/40 bg-background text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/[0.02] hover:text-foreground"
+            >
+              <ImageIcon className="mb-4 h-11 w-11 stroke-[1.8]" />
+              <span className="text-base font-medium text-foreground">Add image</span>
+              <span className="mt-0.5 text-xs">Upload jpg, jpeg, or png</span>
+            </button>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {ITEM_IMAGE_FIELDS.map(({ field, label }) => {
+                  const url = draft[field];
+                  return (
+                    <div key={field} className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                      <div className="relative aspect-square bg-muted/40">
+                        {url ? (
+                          <LoadingImage src={url} alt={`${label} item`} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
+                            <ImageIcon className="h-6 w-6 opacity-60" />
+                            <span className="text-[10px]">No image</span>
+                          </div>
+                        )}
+                        <span className="absolute left-2 top-2 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-semibold shadow-sm backdrop-blur-sm">
+                          {label}
+                        </span>
+                        {url && (
+                          <button
+                            type="button"
+                            aria-label={`Remove ${label} image`}
+                            onClick={() => setDraft((current) => ({ ...current, [field]: '' }))}
+                            className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setImageModalTarget(field)}
+                        className="inline-flex w-full items-center justify-center gap-1 border-t border-border py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Upload className="h-3 w-3" /> {url ? 'Replace' : 'Upload'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                Replace each channel image independently.
+              </p>
+            </>
+          )}
+
+          <div className="pt-4">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Image 16:9</span>
+              {draft.landscapeImage && (
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, landscapeImage: '' }))}
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove
+                </button>
+              )}
+            </div>
+            {draft.landscapeImage ? (
+              <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                <div className="relative aspect-video bg-muted/40">
+                  <LoadingImage src={draft.landscapeImage} alt="Landscape item" className="h-full w-full object-cover" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImageModalTarget('landscapeImage')}
+                  className="inline-flex w-full items-center justify-center gap-1 border-t border-border py-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Upload className="h-3 w-3" /> Replace
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setImageModalTarget('landscapeImage')}
+                className="flex h-44 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/40 bg-background text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/[0.02] hover:text-foreground"
+              >
+                <ImageIcon className="mb-4 h-11 w-11 stroke-[1.8]" />
+                <span className="text-base font-medium text-foreground">Add image</span>
+                <span className="mt-0.5 text-xs">Upload jpg, jpeg, or png</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Price & tax info */}
@@ -2361,6 +2507,33 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           Save Changes
         </button>
       </div>
+
+      <CategoryImageLibraryModal
+        open={imageModalTarget != null}
+        title={imageModalTarget === 'landscapeImage'
+          ? 'Landscape image'
+          : `${ITEM_IMAGE_FIELDS.find(({ field }) => field === imageModalTarget)?.label ?? 'Item'} image`}
+        onOpenChange={(open) => { if (!open) setImageModalTarget(null); }}
+        onSelect={(url) => {
+          if (!imageModalTarget) return;
+          setDraft((current) => {
+            if (imageModalTarget === 'landscapeImage') {
+              return { ...current, landscapeImage: url };
+            }
+            const hasAnyImage = ITEM_IMAGE_FIELDS.some(({ field }) => current[field]);
+            if (!hasAnyImage) {
+              return {
+                ...current,
+                itemPicture: url,
+                kioskItemImage: url,
+                onlineImage: url,
+                thirdPartyImage: url,
+              };
+            }
+            return { ...current, [imageModalTarget]: url };
+          });
+        }}
+      />
 
       {/* Save Confirmation Notification */}
       {showSaveNotification && (
