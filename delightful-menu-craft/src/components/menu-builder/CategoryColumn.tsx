@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
-import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil, Copy } from 'lucide-react';
+import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil, Copy, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
@@ -25,16 +25,12 @@ interface CategoryColumnProps {
   items: Item[];
   isExpanded: boolean;
   onExpand: () => void;
-  /** Native DnD wiring for reordering this root column among its siblings. */
-  dragHandlers?: {
-    isDragOver: boolean;
-    onHandleMouseDown: () => void;
-    onHandleMouseUp: () => void;
-    onDragStart: (e: React.DragEvent) => void;
-    onDragOver: (e: React.DragEvent) => void;
-    onDrop: (e: React.DragEvent) => void;
-    onDragEnd: () => void;
-    draggable: boolean;
+  /** Position control for reordering this root column among its siblings. */
+  reorder?: {
+    /** 1-based position among visible sibling columns, and a setter to move there. */
+    position: number;
+    positionCount: number;
+    onSetPosition: (n: number) => void;
   };
 }
 
@@ -43,7 +39,7 @@ export function CategoryColumn({
   items,
   isExpanded,
   onExpand,
-  dragHandlers,
+  reorder,
 }: CategoryColumnProps) {
   const {
     selectedItemId,
@@ -67,6 +63,10 @@ export function CategoryColumn({
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(category.categoryName);
   const [searchQuery, setSearchQuery] = useState('');
+  // View-only sort for the item list. Purely cosmetic — never writes to the
+  // store, so the saved/exported item order is unaffected. Drag-reorder is
+  // disabled while this is anything but 'manual'.
+  const [sortMode, setSortMode] = useState<'manual' | 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc'>('manual');
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number } | null>(null);
@@ -76,11 +76,12 @@ export function CategoryColumn({
   // Native DnD state for reordering items in the focused category.
   const [itemDragIndex, setItemDragIndex] = useState<number | null>(null);
   const [itemDragOverIndex, setItemDragOverIndex] = useState<number | null>(null);
-  const [itemDragArmed, setItemDragArmed] = useState(false);
   // Native DnD state for reordering subcategory chips within a row.
   const [subcatDrag, setSubcatDrag] = useState<{ parentId: number; index: number } | null>(null);
   const [subcatDragOver, setSubcatDragOver] = useState<{ parentId: number; index: number } | null>(null);
   const [subcatDragArmed, setSubcatDragArmed] = useState(false);
+  // Editable draft for the numeric position control in the header.
+  const [positionDraft, setPositionDraft] = useState('');
 
   // Direct children of a given category id, sorted.
   const childrenOf = (parentId: number): Category[] =>
@@ -168,6 +169,21 @@ export function CategoryColumn({
     }
   }, [categories, editingSubcatId]);
 
+  // Keep the position input in sync with the column's actual position.
+  useEffect(() => {
+    if (reorder) setPositionDraft(String(reorder.position));
+  }, [reorder?.position]);
+
+  const commitPosition = () => {
+    if (!reorder) return;
+    const n = parseInt(positionDraft, 10);
+    if (isNaN(n)) {
+      setPositionDraft(String(reorder.position)); // revert invalid input
+      return;
+    }
+    reorder.onSetPosition(n);
+  };
+
   const handleNameSubmit = () => {
     if (tempName.trim() && tempName !== category.categoryName) {
       updateCategory(category.id, {
@@ -187,32 +203,54 @@ export function CategoryColumn({
     return categoryItems.filter(ci => ci.categoryId === targetCategoryId);
   }, [categoryItems, activeSubcat, category.id]);
 
-  // Filter items by active subcategory and search query
+  // Filter items by active subcategory and search query.
+  // Order comes from the categoryItems join sortOrder (not the incoming `items`
+  // array order), rolled up across the focused scope's descendant subtree and
+  // deduped — mirrors CategoryColumns.getItemsForCategory so reordering shows
+  // immediately.
   const displayItems = useMemo(() => {
-    let filtered = items;
-    if (activeSubcat) {
-      // Roll up items from the active subcategory and all of its descendants,
-      // deduped (an item under multiple descendants is shown once).
-      const subtreeIds = collectSubtreeIds(activeSubcat);
-      const itemIds = new Set(
-        categoryItems.filter((ci) => subtreeIds.has(ci.categoryId)).map((ci) => ci.itemId)
-      );
-      filtered = items.filter((item) => itemIds.has(item.id));
-    }
+    const scopeRootId = activeSubcat || category.id;
+    const subtreeIds = collectSubtreeIds(scopeRootId);
+    const itemById = new Map(items.map((it) => [it.id, it]));
+    const seen = new Set<number>();
+    const ordered: Item[] = [];
+    categoryItems
+      .filter((ci) => subtreeIds.has(ci.categoryId))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .forEach((ci) => {
+        if (seen.has(ci.itemId)) return;
+        seen.add(ci.itemId);
+        const it = itemById.get(ci.itemId);
+        if (it) ordered.push(it);
+      });
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(item => 
+      return ordered.filter(item =>
         item.itemName.toLowerCase().includes(query) ||
         item.posDisplayName.toLowerCase().includes(query)
       );
     }
-    
-    return filtered;
+
+    return ordered;
     // collectSubtreeIds reads `categories`, which is already a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, activeSubcat, categoryItems, categories, searchQuery]);
+  }, [items, activeSubcat, category.id, categoryItems, categories, searchQuery]);
+
+  // Cosmetic re-sort of the visible list. 'manual' preserves the store order
+  // (and is the only mode where drag-reorder is allowed).
+  const viewItems = useMemo(() => {
+    if (sortMode === 'manual') return displayItems;
+    const sorted = [...displayItems];
+    switch (sortMode) {
+      case 'name-asc': sorted.sort((a, b) => a.itemName.localeCompare(b.itemName)); break;
+      case 'name-desc': sorted.sort((a, b) => b.itemName.localeCompare(a.itemName)); break;
+      case 'price-asc': sorted.sort((a, b) => a.itemPrice - b.itemPrice); break;
+      case 'price-desc': sorted.sort((a, b) => b.itemPrice - a.itemPrice); break;
+    }
+    return sorted;
+  }, [displayItems, sortMode]);
 
   const handleItemClick = (itemId: number) => {
     setSelectedItem(itemId);
@@ -241,7 +279,7 @@ export function CategoryColumn({
       takeoutException: false,
       stockStatus: 'inStock',
       stockValue: 0,
-      orderQuantityLimit: false,
+      orderQuantityLimit: true,
       minLimit: 1,
       maxLimit: 1,
       noMaxLimit: true,
@@ -259,9 +297,10 @@ export function CategoryColumn({
       uberEatsPrice: 0,
       grubHubPrice: 0,
       ...defaultVisibility(),
+      inheritVisibilityFromCategory: true,
       daySchedules: serializeDaySchedules(defaultDaySchedules()),
     };
-    
+
     // Add the item
     addItem(newItem);
     
@@ -396,7 +435,7 @@ export function CategoryColumn({
   const directIndexOfItem = (itemId: number) => directItemIdOrder.indexOf(itemId);
 
   const handleItemDragStart = (e: React.DragEvent, directIndex: number) => {
-    if (isReadOnly || !itemDragArmed || directIndex < 0) {
+    if (isReadOnly || directIndex < 0) {
       e.preventDefault();
       return;
     }
@@ -418,7 +457,6 @@ export function CategoryColumn({
     const from = itemDragIndex;
     setItemDragIndex(null);
     setItemDragOverIndex(null);
-    setItemDragArmed(false);
     if (from === directIndex) return;
     reorderCategoryItems(focusedCategoryId, from, directIndex);
   };
@@ -426,7 +464,6 @@ export function CategoryColumn({
   const handleItemDragEnd = () => {
     setItemDragIndex(null);
     setItemDragOverIndex(null);
-    setItemDragArmed(false);
   };
 
   const handleSubcatDragStart = (e: React.DragEvent, parentId: number, index: number) => {
@@ -501,31 +538,57 @@ export function CategoryColumn({
   return (
     <>
       <div
-        className={cn(
-          'category-column expanded',
-          dragHandlers?.isDragOver && 'ring-2 ring-primary ring-inset'
-        )}
+        className="category-column expanded"
         style={{
           borderLeftColor: accentColor,
           borderRightColor: accentColor,
           boxShadow: `0 0 0 1px ${accentColor}33, 0 0 18px ${accentColor}40`,
         }}
-        draggable={dragHandlers?.draggable ?? false}
-        onDragStart={dragHandlers?.onDragStart}
-        onDragOver={dragHandlers?.onDragOver}
-        onDrop={dragHandlers?.onDrop}
-        onDragEnd={dragHandlers?.onDragEnd}
       >
         <div className="category-header flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <GripVertical
-              className={cn(
-                'w-4 h-4 text-muted-foreground flex-shrink-0',
-                !isReadOnly && dragHandlers && 'cursor-grab'
-              )}
-              onMouseDown={dragHandlers?.onHandleMouseDown}
-              onMouseUp={dragHandlers?.onHandleMouseUp}
-            />
+            {reorder && reorder.positionCount > 1 && (
+              <div className="flex items-center flex-shrink-0" title="Category order">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    disabled={isReadOnly || reorder.position <= 1}
+                    onClick={() => reorder.onSetPosition(reorder.position - 1)}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground leading-none"
+                    aria-label="Move category up"
+                  >
+                    <ChevronUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly || reorder.position >= reorder.positionCount}
+                    onClick={() => reorder.onSetPosition(reorder.position + 1)}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground leading-none"
+                    aria-label="Move category down"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={reorder.positionCount}
+                  value={positionDraft}
+                  disabled={isReadOnly}
+                  aria-label="Category order"
+                  className="w-8 h-6 ml-0.5 rounded border border-border bg-background px-1 text-center text-xs text-foreground disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(e) => setPositionDraft(e.target.value)}
+                  onBlur={commitPosition}
+                  onKeyDown={(e) => {
+                    // Blur triggers the single commit via onBlur — don't also
+                    // commit here, or a second stale-index move lands it at n-1.
+                    if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); }
+                    else if (e.key === 'Escape') { setPositionDraft(String(reorder.position)); (e.target as HTMLInputElement).blur(); }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
             <ColorPalettePicker
               palette={CATEGORY_COLOR_PALETTE}
               value={category.color?.trim() || DEFAULT_CATEGORY_COLOR}
@@ -582,6 +645,17 @@ export function CategoryColumn({
 
         {/* Subcategory Tabs (one row per drill level for nested subcategories) */}
         <div className="border-b border-panel-border">
+          {subcatRows.length === 0 && !isReadOnly && (
+            <div className="flex flex-wrap gap-1 px-3 py-2 items-center">
+              <button
+                onClick={handleAddSubcategory}
+                className="flex items-center px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
+                title="Add subcategory"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {subcatRows.map((row, depth) => (
             <div
               key={row.parentId}
@@ -601,6 +675,15 @@ export function CategoryColumn({
               >
                 All
               </button>
+              {!isReadOnly && depth === subcatRows.length - 1 && (
+                <button
+                  onClick={handleAddSubcategory}
+                  className="flex items-center px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  title={activeSubcat ? `Add subcategory under "${focusedCategory.categoryName}"` : 'Add subcategory'}
+                >
+                  <FolderPlus className="w-3.5 h-3.5" />
+                </button>
+              )}
               {row.children.map((subcat, subcatIndex) => {
                 const isActive = row.selectedId === subcat.id;
                 const chipColor = subcat.color?.trim() || '#f97316';
@@ -703,23 +786,11 @@ export function CategoryColumn({
               })}
             </div>
           ))}
-          {!isReadOnly && (
-            <div className="flex flex-wrap gap-1 px-3 py-2 items-center">
-              <button
-                onClick={handleAddSubcategory}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
-                title={activeSubcat ? `Add subcategory under "${focusedCategory.categoryName}"` : 'Add subcategory'}
-              >
-                <FolderPlus className="w-3.5 h-3.5" />
-                <span>{activeSubcat ? `Add under ${shortenName(focusedCategory.categoryName)}` : 'Add Subcategory'}</span>
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* Search */}
-        <div className="px-3 py-2 border-b border-panel-border">
-          <div className="relative">
+        {/* Search + view sort */}
+        <div className="px-3 py-2 border-b border-panel-border flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
@@ -737,19 +808,38 @@ export function CategoryColumn({
               </button>
             )}
           </div>
+          <div className="relative flex-shrink-0" title="Sort view only — doesn't change the saved order">
+            <ArrowUpDown className={cn('absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none', sortMode === 'manual' ? 'text-muted-foreground' : 'text-primary')} />
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+              aria-label="Sort items (view only)"
+              className={cn(
+                'h-[34px] pl-7 pr-6 text-xs rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer',
+                sortMode === 'manual' ? 'border-input text-muted-foreground' : 'border-primary/50 text-foreground',
+              )}
+            >
+              <option value="manual">Manual</option>
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="price-asc">Price ↑</option>
+              <option value="price-desc">Price ↓</option>
+            </select>
+            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          </div>
         </div>
 
         {/* Items List */}
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
-          {displayItems.length === 0 && searchQuery ? (
+          {viewItems.length === 0 && searchQuery ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
               No items match "{searchQuery}"
             </div>
           ) : null}
-          {displayItems.map((item) => {
+          {viewItems.map((item) => {
             const directIndex = directIndexOfItem(item.id);
             const isDirect = directIndex !== -1;
-            const canDragItem = !isReadOnly && isDirect && !searchQuery.trim();
+            const canDragItem = !isReadOnly && isDirect && !searchQuery.trim() && sortMode === 'manual';
             const isItemDragOver =
               isDirect &&
               itemDragOverIndex === directIndex &&
@@ -758,7 +848,7 @@ export function CategoryColumn({
             <div
               key={item.id}
               onClick={() => handleItemClick(item.id)}
-              draggable={canDragItem && itemDragArmed}
+              draggable={canDragItem}
               onDragStart={(e) => handleItemDragStart(e, directIndex)}
               onDragOver={(e) => handleItemDragOver(e, directIndex)}
               onDrop={(e) => handleItemDrop(e, directIndex)}
@@ -774,10 +864,8 @@ export function CategoryColumn({
                 <GripVertical
                   className={cn(
                     "w-3.5 h-3.5 text-muted-foreground flex-shrink-0",
-                    canDragItem ? "cursor-grab" : "opacity-40 cursor-default"
+                    canDragItem ? "cursor-grab active:cursor-grabbing" : "opacity-40 cursor-default"
                   )}
-                  onMouseDown={() => { if (canDragItem) setItemDragArmed(true); }}
-                  onMouseUp={() => setItemDragArmed(false)}
                 />
                 <span className="truncate">{shortenName(item.itemName)}</span>
               </div>

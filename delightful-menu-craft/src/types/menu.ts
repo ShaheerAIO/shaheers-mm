@@ -35,6 +35,7 @@ export interface Category {
   kioskImage: string;
   parentCategoryId: number | null;
   tagIds: string; // comma-separated IDs
+  allergenIds?: string; // comma-separated IDs — cascade to items that inherit
   menuIds: string; // comma-separated IDs
   sortOrder: number;
   // Channel visibility (same model as Item)
@@ -81,6 +82,7 @@ export interface Item {
   inheritTagsFromCategory: boolean;
   saleCategory: string;
   allergenIds: string; // comma-separated IDs
+  inheritAllergensFromCategory?: boolean; // when true, category-level allergens cascade to this item (default true)
   inheritModifiersFromCategory: boolean;
   addonIds: string; // comma-separated IDs
   isSpecialRequest: boolean;
@@ -96,6 +98,9 @@ export interface Item {
   visibilityWebsite: boolean;  // Web ordering
   visibilityMobileApp: boolean;// First-party mobile app
   visibilityDoordash: boolean; // DoorDash / 3rd-party delivery
+  // When true, channels + schedule are inherited from the item's category
+  // (resolved on export). Undefined/false = the item's own visibility applies.
+  inheritVisibilityFromCategory?: boolean;
   // Scheduling — JSON-encoded DayScheduleMap (see visibility.ts)
   // Each day key present = day enabled; start/end = "" means no time restriction.
   daySchedules: string;

@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { effectiveItemTaxRate } from '@/lib/tax';
 import { cn } from '@/lib/utils';
 
@@ -70,6 +71,7 @@ interface DraftState {
   maxLimit: number;
   noMaxLimit: boolean;
   inheritModifiersFromCategory: boolean;
+  inheritVisibilityFromCategory: boolean;
   preparationTime: number;
   calories: number;
   saleCategory: string;
@@ -140,6 +142,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     itemModifiers,
     categoryModifiers,
     categoryItems,
+    categories,
     addItemModifier,
     removeItemModifier,
     tags,
@@ -154,7 +157,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     navigateToModifier,
     stations,
     reorderModifierOptions,
-    reorderItemModifiers,
+    setModifierOptionOrder,
     setItemModifierOrder,
     taxRate,
     customTaxes,
@@ -218,7 +221,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     takeoutException: item.takeoutException ?? false,
     taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
     stockStatus: item.stockStatus,
-    orderQuantityLimit: item.orderQuantityLimit ?? false,
+    orderQuantityLimit: item.orderQuantityLimit ?? true,
     minLimit: item.minLimit || 1,
     maxLimit: item.maxLimit || 1,
     noMaxLimit: item.noMaxLimit ?? true,
@@ -272,11 +275,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [optionDragOverState, setOptionDragOverState] = useState<{ modifierId: number; index: number } | null>(null);
   const [modDragId, setModDragId] = useState<number | null>(null);
   const [modDragOverId, setModDragOverId] = useState<number | null>(null);
+  // Unified display order for attached modifiers (saved + pending), so a
+  // newly-attached modifier can be dragged/sorted in with the saved ones.
+  const [modifierOrder, setModifierOrder] = useState<number[]>([]);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerSearch, setGroupPickerSearch] = useState('');
   const groupPickerRef = useRef<HTMLDivElement>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+  // Which modifier's "sort options" dropdown is currently open (null = none)
+  const [optionSortMenuModifierId, setOptionSortMenuModifierId] = useState<number | null>(null);
+  const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
   const [touched, setTouched] = useState({ itemName: false, posDisplayName: false, kdsName: false });
 
@@ -296,11 +305,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       takeoutException: item.takeoutException ?? false,
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
-      orderQuantityLimit: item.orderQuantityLimit ?? false,
+      orderQuantityLimit: item.orderQuantityLimit ?? true,
       minLimit: item.minLimit || 1,
       maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
+      inheritVisibilityFromCategory: item.inheritVisibilityFromCategory === true,
       preparationTime: item.preparationTime,
       calories: item.calories,
       saleCategory: item.saleCategory ?? '',
@@ -323,6 +333,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setGrubHubInput(fmt3po(item.grubHubPrice));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
+    setModifierOrder(
+      itemModifiers
+        .filter((im) => im.itemId === item.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((im) => im.modifierId)
+    );
     setExpandedNestedChildIds([]);
     setStationDraft(
       item.stationIds
@@ -363,6 +379,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [sortMenuOpen]);
 
+  useEffect(() => {
+    if (optionSortMenuModifierId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (optionSortMenuRef.current && !optionSortMenuRef.current.contains(e.target as Node)) {
+        setOptionSortMenuModifierId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [optionSortMenuModifierId]);
+
   const originalStationIds = useMemo(
     () =>
       item.stationIds
@@ -402,6 +429,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.maxLimit !== (item.maxLimit ?? 0) ||
       draft.noMaxLimit !== (item.noMaxLimit ?? true) ||
       draft.inheritModifiersFromCategory !== item.inheritModifiersFromCategory ||
+      draft.inheritVisibilityFromCategory !== (item.inheritVisibilityFromCategory === true) ||
       draft.preparationTime !== item.preparationTime ||
       draft.calories !== item.calories ||
       draft.saleCategory !== (item.saleCategory ?? '') ||
@@ -466,6 +494,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       maxLimit: draft.maxLimit,
       noMaxLimit: draft.noMaxLimit,
       inheritModifiersFromCategory: draft.inheritModifiersFromCategory,
+      inheritVisibilityFromCategory: draft.inheritVisibilityFromCategory,
       preparationTime: draft.preparationTime,
       calories: draft.calories,
       saleCategory: draft.saleCategory.trim() || 'Food Sales',
@@ -495,6 +524,13 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       removeItemModifier(modifierId, item.id);
     });
 
+    // Normalize all sortOrders to the on-screen order so newly-added modifiers
+    // land exactly where the user placed them (excluding those being removed).
+    setItemModifierOrder(
+      item.id,
+      modifierOrder.filter((id) => !pendingRemovedModifierIds.includes(id))
+    );
+
     // Clear pending changes
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
@@ -519,11 +555,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       takeoutException: item.takeoutException ?? false,
       taxLinkedWithParentSetting: item.taxLinkedWithParentSetting ?? true,
       stockStatus: item.stockStatus,
-      orderQuantityLimit: item.orderQuantityLimit ?? false,
+      orderQuantityLimit: item.orderQuantityLimit ?? true,
       minLimit: item.minLimit || 1,
       maxLimit: item.maxLimit || 1,
       noMaxLimit: item.noMaxLimit ?? true,
       inheritModifiersFromCategory: item.inheritModifiersFromCategory,
+      inheritVisibilityFromCategory: item.inheritVisibilityFromCategory === true,
       preparationTime: item.preparationTime,
       calories: item.calories,
       saleCategory: item.saleCategory ?? '',
@@ -546,6 +583,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setGrubHubInput(fmt3po(item.grubHubPrice));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
+    setModifierOrder(
+      itemModifiers
+        .filter((im) => im.itemId === item.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((im) => im.modifierId)
+    );
     setStationDraft(originalStationIds);
     setAddonDraft(originalAddonIds);
     setNewStationName('');
@@ -583,10 +626,14 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       .filter(id => !pendingRemovedModifierIds.includes(id));
   }, [itemModifiers, item.id, pendingRemovedModifierIds]);
 
-  // Combine saved and pending modifiers
+  // Combine saved and pending modifiers, following the unified display order.
   const allAttachedModifierIds = useMemo(() => {
-    return [...attachedModifierIds, ...pendingModifierIds];
-  }, [attachedModifierIds, pendingModifierIds]);
+    const all = [...attachedModifierIds, ...pendingModifierIds];
+    const ordered = modifierOrder.filter((id) => all.includes(id));
+    // Defensive: append any attached id not yet tracked in modifierOrder.
+    const missing = all.filter((id) => !ordered.includes(id));
+    return [...ordered, ...missing];
+  }, [attachedModifierIds, pendingModifierIds, modifierOrder]);
 
   const attachedModifiers = useMemo(() => {
     return allAttachedModifierIds
@@ -632,6 +679,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     // Add to pending list instead of immediately saving
     if (!pendingModifierIds.includes(id) && !attachedModifierIds.includes(id)) {
       setPendingModifierIds([...pendingModifierIds, id]);
+      setModifierOrder((prev) => (prev.includes(id) ? prev : [...prev, id]));
     }
   };
 
@@ -643,6 +691,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       .map((s) => parseInt(s.trim(), 10))
       .filter((id) => !isNaN(id) && id > 0 && !allAttachedModifierIds.includes(id));
     setPendingModifierIds((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
+    setModifierOrder((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
     setGroupPickerOpen(false);
     setGroupPickerSearch('');
   };
@@ -651,6 +700,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     // If it's a pending addition, just remove from pending
     if (pendingModifierIds.includes(modifierId)) {
       setPendingModifierIds(pendingModifierIds.filter(id => id !== modifierId));
+      setModifierOrder((prev) => prev.filter((id) => id !== modifierId));
     } else {
       // If it's already saved, add to pending removals
       setPendingRemovedModifierIds([...pendingRemovedModifierIds, modifierId]);
@@ -663,9 +713,30 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     );
     if (dir === 'desc') sorted.reverse();
     const sortedIds = sorted.map((m) => m.id);
+    setModifierOrder(sortedIds);
+    // Persist the saved subset immediately; pending order rides in modifierOrder
+    // until the addition is committed on Save.
     setItemModifierOrder(item.id, sortedIds.filter((id) => attachedModifierIds.includes(id)));
-    setPendingModifierIds(sortedIds.filter((id) => pendingModifierIds.includes(id)));
     setSortMenuOpen(false);
+  };
+
+  /** (Re)sort one modifier's flat options by name or price and persist the new sortOrder. */
+  const handleSortModifierOptions = (
+    modifierId: number,
+    key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc',
+  ) => {
+    const opts = getModifierOptions(modifierId);
+    const sorted = [...opts].sort((a, b) => {
+      if (key === 'price-asc' || key === 'price-desc') return a.maxLimit - b.maxLimit;
+      return (a.option?.optionName || a.optionDisplayName).localeCompare(
+        b.option?.optionName || b.optionDisplayName,
+        undefined,
+        { sensitivity: 'base' },
+      );
+    });
+    if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
+    setModifierOptionOrder(modifierId, sorted.map((o) => o.modifierOptionId));
+    setOptionSortMenuModifierId(null);
   };
 
   const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
@@ -717,7 +788,16 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     const from = modDragId;
     setModDragId(null);
     setModDragOverId(null);
-    reorderItemModifiers(item.id, from, modifierId);
+
+    // Reorder the unified display list, then persist the saved subset live.
+    const next = allAttachedModifierIds.slice();
+    const fromIdx = next.indexOf(from);
+    const toIdx = next.indexOf(modifierId);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setModifierOrder(next);
+    setItemModifierOrder(item.id, next.filter((id) => attachedModifierIds.includes(id)));
   };
 
   const handleModifierDragEnd = () => {
@@ -736,6 +816,48 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   // Only show allergens that have a valid id and name
   const validAllergens = allergens.filter(a => a.id > 0 && a.name.trim().length > 0);
   const itemAllergens = validAllergens.filter(a => itemAllergenIds.includes(a.id));
+
+  // Cascade: allergens inherited from the categories this item belongs to (when
+  // the inherit flag is on, defaulting to true). Shown read-only, deduped
+  // against the item's own directly-assigned allergens.
+  const inheritAllergens = item.inheritAllergensFromCategory !== false;
+  const inheritedCategoryAllergens = useMemo(() => {
+    if (!inheritAllergens) return [];
+    const catIds = new Set(
+      categoryItems.filter((ci) => ci.itemId === item.id).map((ci) => ci.categoryId)
+    );
+    const inheritedIds = new Set<number>();
+    categories
+      .filter((c) => catIds.has(c.id))
+      .forEach((c) => {
+        (c.allergenIds?.split(',') || []).forEach((raw) => {
+          const id = parseInt(raw.trim(), 10);
+          if (!isNaN(id) && id > 0 && !itemAllergenIds.includes(id)) inheritedIds.add(id);
+        });
+      });
+    return validAllergens.filter((a) => inheritedIds.has(a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inheritAllergens, item.id, categoryItems, categories, allergens, item.allergenIds]);
+
+  // The item's primary category (first assignment). Its channels + schedule are
+  // inherited when the visibility inherit toggle is on. Export resolves the same.
+  const primaryCategory = useMemo(() => {
+    const catEntry = categoryItems.find((ci) => ci.itemId === item.id);
+    return catEntry ? categories.find((c) => c.id === catEntry.categoryId) ?? null : null;
+  }, [categoryItems, categories, item.id]);
+
+  const inheritedVisibilitySummary = useMemo(() => {
+    if (!primaryCategory) return 'No category — nothing to inherit';
+    const channels = VISIBILITY_CHANNELS.filter(({ key }) => primaryCategory[key]).map(({ label }) => label);
+    const chanPart =
+      channels.length === VISIBILITY_CHANNELS.length ? 'All channels'
+        : channels.length === 0 ? 'Hidden'
+        : channels.join(', ');
+    const sched = buildGroupSchedulesSummary(
+      parseGroupSchedules(primaryCategory.daySchedulesByGroup, primaryCategory.daySchedules),
+    );
+    return `${chanPart}  ·  ${sched}`;
+  }, [primaryCategory]);
 
   const toggleItemTag = (tagId: number) => {
     const current = new Set(itemTagIds);
@@ -934,15 +1056,14 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           <div className="flex items-start gap-3">
             <div className="space-y-1 flex-1">
               <Label className="text-xs text-muted-foreground">Base price*</Label>
-              <div className="flex items-center gap-2 input-field px-3 py-2">
-                <span className="text-muted-foreground">$</span>
-                <input
-                  type="text"
-                  value={priceInput}
-                  onChange={(e) => handlePriceChange(e.target.value)}
-                  className="bg-transparent outline-none w-full"
-                />
-              </div>
+              <NumberStepperInput
+                inputMode="decimal"
+                value={priceInput}
+                onChange={(e) => handlePriceChange(e.target.value)}
+                onStep={(delta) => handlePriceChange(Math.max(0, (parseFloat(priceInput) || 0) + delta).toFixed(2))}
+                prefix={<span className="text-muted-foreground">$</span>}
+                wrapperClassName="w-full"
+              />
             </div>
             {effectiveTaxRate > 0 && (
               <div className="space-y-1 flex-1">
@@ -1057,13 +1178,39 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               <div className="flex-1 min-w-0 text-left">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Availability</div>
                 <div className="text-[10px] font-normal normal-case text-muted-foreground truncate mt-0.5 pr-2">
-                  {buildAvailabilitySummary(draft)}
+                  {draft.inheritVisibilityFromCategory
+                    ? `Inherited · ${inheritedVisibilitySummary}`
+                    : buildAvailabilitySummary(draft)}
                 </div>
               </div>
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-4">
-                {/* Channel dropdowns — per-group schedule editor inside each */}
+                {/* Inherit visibility from category — overrides the editor below when on */}
+                <label
+                  htmlFor="inheritVisibility"
+                  title="Inherit channels & schedule from category"
+                  className="flex items-center justify-between gap-1.5 text-xs font-medium cursor-pointer"
+                >
+                  Inherit from category
+                  <Switch
+                    id="inheritVisibility"
+                    checked={draft.inheritVisibilityFromCategory}
+                    onCheckedChange={(checked) =>
+                      setDraft((d) => ({ ...d, inheritVisibilityFromCategory: checked }))
+                    }
+                  />
+                </label>
+
+                {draft.inheritVisibilityFromCategory ? (
+                  <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5 space-y-1">
+                    <p className="text-[11px] font-medium text-foreground">{inheritedVisibilitySummary}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Channels &amp; schedule follow this item’s category. Turn off to set an override.
+                    </p>
+                  </div>
+                ) : (
+                /* Channel dropdowns — per-group schedule editor inside each */
                 <div className="space-y-1.5">
                   {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
                     const isOpen = openChannelGroup === group;
@@ -1235,6 +1382,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     );
                   })}
                 </div>
+                )}
               </div>{/* end AccordionContent space-y-4 */}
             </AccordionContent>
           </AccordionItem>
@@ -1389,7 +1537,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 const options = getModifierOptions(modifier.id);
                 const isPending = pendingModifierIds.includes(modifier.id);
                 const isPendingRemoval = pendingRemovedModifierIds.includes(modifier.id);
-                const isDraggable = !isPending && !isPendingRemoval;
+                const isDraggable = !isPendingRemoval;
                 return (
                   <div
                     key={modifier.id}
@@ -1453,18 +1601,66 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3">
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2 flex-wrap">
-                          <span>
-                            {modifier.isOptional?.trim()
-                              ? `${modifier.isOptional} • `
-                              : ''}
-                            Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
-                          </span>
-                          {modifier.pizzaSelection && (
-                            <span className="bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded font-medium">Pizza</span>
-                          )}
-                          {modifier.isSizeModifier && (
-                            <span className="bg-purple-500/10 text-purple-600 px-1.5 py-0.5 rounded font-medium">Size</span>
+                        <div className="text-xs text-muted-foreground mb-2 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>
+                              {modifier.isOptional?.trim()
+                                ? `${modifier.isOptional} • `
+                                : ''}
+                              Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                            </span>
+                            {modifier.pizzaSelection && (
+                              <span className="bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded font-medium">Pizza</span>
+                            )}
+                            {modifier.isSizeModifier && (
+                              <span className="bg-purple-500/10 text-purple-600 px-1.5 py-0.5 rounded font-medium">Size</span>
+                            )}
+                          </div>
+                          {options.length > 1 && (
+                            <div className="relative" ref={optionSortMenuModifierId === modifier.id ? optionSortMenuRef : undefined}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOptionSortMenuModifierId((id) => (id === modifier.id ? null : modifier.id))
+                                }
+                                className="flex items-center justify-center w-6 h-6 rounded-md border border-border hover:bg-muted/50 transition-colors shrink-0"
+                                title="Sort options"
+                              >
+                                <ArrowDownUp className="w-3 h-3" />
+                              </button>
+                              {optionSortMenuModifierId === modifier.id && (
+                                <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortModifierOptions(modifier.id, 'name-asc')}
+                                  >
+                                    Name (A → Z)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortModifierOptions(modifier.id, 'name-desc')}
+                                  >
+                                    Name (Z → A)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortModifierOptions(modifier.id, 'price-asc')}
+                                  >
+                                    Price (Low → High)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortModifierOptions(modifier.id, 'price-desc')}
+                                  >
+                                    Price (High → Low)
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                         {options.map((opt, optIdx) => (
@@ -1826,6 +2022,34 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2">
+                <label
+                  htmlFor="inheritAllergens"
+                  title="Inherit allergens from category"
+                  className="flex items-center gap-1.5 text-xs font-medium cursor-pointer"
+                >
+                  Inherit from category
+                  <Switch
+                    id="inheritAllergens"
+                    checked={inheritAllergens}
+                    onCheckedChange={(checked) =>
+                      updateItem(item.id, { inheritAllergensFromCategory: checked })
+                    }
+                  />
+                </label>
+                {inheritedCategoryAllergens.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {inheritedCategoryAllergens.map((allergen) => (
+                      <span
+                        key={`inherited-${allergen.id}`}
+                        title="Inherited from category"
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-dashed bg-destructive/5 border-destructive/30 text-destructive/80"
+                      >
+                        <span>{allergen.name}</span>
+                        <span className="text-[9px] uppercase tracking-wide opacity-70">cat</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {validAllergens.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No allergens exist yet. Create one below.</p>
                 ) : (
@@ -1987,17 +2211,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   ]).map(({ label, value, setInput, field }) => (
                     <div key={field} className="space-y-1">
                       <Label className="text-xs text-muted-foreground">{label}</Label>
-                      <div className="flex items-center gap-2 input-field px-3 py-2">
-                        <span className="text-muted-foreground">$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={value}
-                          onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
-                          className="bg-transparent outline-none w-full"
-                        />
-                      </div>
+                      <NumberStepperInput
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={value}
+                        onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
+                        onStep={(delta) =>
+                          handle3poPriceChange(Math.max(0, (parseFloat(value) || 0) + delta).toFixed(2), setInput, field)
+                        }
+                        prefix={<span className="text-muted-foreground">$</span>}
+                        wrapperClassName="w-full"
+                      />
                     </div>
                   ))}
                 </div>
@@ -2027,8 +2251,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Minimum</Label>
-                        <input
-                          type="text"
+                        <NumberStepperInput
                           inputMode="numeric"
                           value={draft.minLimit}
                           onFocus={(e) => e.target.select()}
@@ -2038,13 +2261,15 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               minLimit: Math.max(0, parseInt(e.target.value, 10) || 0),
                             }))
                           }
-                          className="input-field w-full"
+                          onStep={(delta) =>
+                            setDraft(d => ({ ...d, minLimit: Math.max(0, d.minLimit + delta) }))
+                          }
+                          wrapperClassName="w-full"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Maximum</Label>
-                        <input
-                          type="text"
+                        <NumberStepperInput
                           inputMode="numeric"
                           value={draft.maxLimit}
                           disabled={draft.noMaxLimit}
@@ -2055,7 +2280,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               maxLimit: Math.max(1, parseInt(e.target.value, 10) || 1),
                             }))
                           }
-                          className="input-field w-full disabled:opacity-50"
+                          onStep={(delta) =>
+                            setDraft(d => ({ ...d, maxLimit: Math.max(1, d.maxLimit + delta) }))
+                          }
+                          wrapperClassName="w-full"
                         />
                       </div>
                     </div>
@@ -2084,22 +2312,24 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Prep time (min)</span>
-                  <input
-                    type="number"
-                    min={0}
+                  <NumberStepperInput
+                    inputMode="numeric"
                     value={draft.preparationTime}
-                    onChange={(e) => setDraft(d => ({ ...d, preparationTime: parseInt(e.target.value) || 0 }))}
-                    className="input-field w-20 text-right"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDraft(d => ({ ...d, preparationTime: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    onStep={(delta) => setDraft(d => ({ ...d, preparationTime: Math.max(0, d.preparationTime + delta) }))}
+                    wrapperClassName="w-20"
                   />
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Calories (kcal)</span>
-                  <input
-                    type="number"
-                    min={0}
+                  <NumberStepperInput
+                    inputMode="numeric"
                     value={draft.calories}
-                    onChange={(e) => setDraft(d => ({ ...d, calories: parseInt(e.target.value) || 0 }))}
-                    className="input-field w-20 text-right"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setDraft(d => ({ ...d, calories: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    onStep={(delta) => setDraft(d => ({ ...d, calories: Math.max(0, d.calories + delta) }))}
+                    wrapperClassName="w-20"
                     aria-label="Calories in kilocalories"
                   />
                 </div>

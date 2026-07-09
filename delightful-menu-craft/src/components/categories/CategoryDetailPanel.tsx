@@ -105,6 +105,9 @@ export function CategoryDetailPanel({ category }: Props) {
     addTag,
     updateTag,
     deleteTag,
+    allergens,
+    addAllergen,
+    deleteAllergen,
     getNextId,
     addCategoryModifier,
     removeCategoryModifier,
@@ -115,6 +118,7 @@ export function CategoryDetailPanel({ category }: Props) {
   } = useMenuStore();
 
   const validTags = tags.filter((t) => t.id > 0 && t.name.trim().length > 0);
+  const validAllergens = allergens.filter((a) => a.id > 0 && a.name.trim().length > 0);
 
   const [draft, setDraft] = useState<Draft>(() => ({
     categoryName: category.categoryName,
@@ -132,6 +136,7 @@ export function CategoryDetailPanel({ category }: Props) {
   }));
 
   const [tagIds, setTagIds] = useState<Set<number>>(() => new Set(parseIds(category.tagIds)));
+  const [allergenIds, setAllergenIds] = useState<Set<number>>(() => new Set(parseIds(category.allergenIds)));
   const [menuIds, setMenuIds] = useState<Set<number>>(() => new Set(parseIds(category.menuIds)));
 
   const [touched, setTouched] = useState({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
@@ -139,6 +144,10 @@ export function CategoryDetailPanel({ category }: Props) {
   const [newTagName, setNewTagName] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
   const [pendingDeleteTagId, setPendingDeleteTagId] = useState<number | null>(null);
+
+  const [newAllergenName, setNewAllergenName] = useState('');
+  const [showAllergenInput, setShowAllergenInput] = useState(false);
+  const [pendingDeleteAllergenId, setPendingDeleteAllergenId] = useState<number | null>(null);
 
   const [openGroup, setOpenGroup] = useState<'onPrem' | 'offPrem' | null>(null);
   const [expandedDay, setExpandedDay] = useState<DayKey | null>(null);
@@ -191,10 +200,14 @@ export function CategoryDetailPanel({ category }: Props) {
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));
+    setAllergenIds(new Set(parseIds(category.allergenIds)));
     setMenuIds(new Set(parseIds(category.menuIds)));
     setShowTagInput(false);
     setNewTagName('');
     setPendingDeleteTagId(null);
+    setShowAllergenInput(false);
+    setNewAllergenName('');
+    setPendingDeleteAllergenId(null);
     setOpenGroup(null);
     setExpandedDay(null);
     setBulkStart('');
@@ -221,6 +234,7 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.visibilityDoordash !== (category.visibilityDoordash ?? true) ||
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (category.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
     serializeIds(tagIds) !== serializeIds(new Set(parseIds(category.tagIds))) ||
+    serializeIds(allergenIds) !== serializeIds(new Set(parseIds(category.allergenIds))) ||
     serializeIds(menuIds) !== serializeIds(new Set(parseIds(category.menuIds)));
 
   const categoryNameError = getCategoryNameError(draft.categoryName);
@@ -233,6 +247,7 @@ export function CategoryDetailPanel({ category }: Props) {
       ...draft,
       daySchedulesByGroup: serializeGroupSchedules(draft.daySchedulesByGroup),
       tagIds: serializeIds(tagIds),
+      allergenIds: serializeIds(allergenIds),
       menuIds: serializeIds(menuIds),
     });
   };
@@ -253,6 +268,7 @@ export function CategoryDetailPanel({ category }: Props) {
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));
+    setAllergenIds(new Set(parseIds(category.allergenIds)));
     setMenuIds(new Set(parseIds(category.menuIds)));
     setOpenGroup(null);
     setExpandedDay(null);
@@ -269,6 +285,16 @@ export function CategoryDetailPanel({ category }: Props) {
     setTagIds((prev) => new Set([...prev, id]));
     setNewTagName('');
     setShowTagInput(false);
+  };
+
+  const handleCreateAllergen = () => {
+    const name = newAllergenName.trim();
+    if (!name) return;
+    const id = getNextId('allergens');
+    addAllergen({ id, name });
+    setAllergenIds((prev) => new Set([...prev, id]));
+    setNewAllergenName('');
+    setShowAllergenInput(false);
   };
 
   const assignedCatMods = categoryModifiers
@@ -643,6 +669,64 @@ export function CategoryDetailPanel({ category }: Props) {
               ) : (
                 <button type="button" onClick={() => setShowTagInput(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                   <Plus className="w-3 h-3" /> New tag
+                </button>
+              )}
+            </div>
+          </section>
+
+          {/* Allergens — cascade to items that inherit from category */}
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Allergens ({[...allergenIds].filter((id) => validAllergens.some((a) => a.id === id)).length}/{validAllergens.length})
+            </p>
+            <p className="text-[10px] text-muted-foreground/80 mb-1.5">
+              Applied to items in this category that inherit allergens.
+            </p>
+            <div className="space-y-1.5">
+              {validAllergens.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No allergens exist yet. Create one below.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {validAllergens.map((allergen) => {
+                    const isAssigned = allergenIds.has(allergen.id);
+                    const isPendingDelete = pendingDeleteAllergenId === allergen.id;
+                    if (isPendingDelete) {
+                      return (
+                        <span key={allergen.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-destructive/10 border-destructive/40 text-destructive">
+                          <span>Delete "{allergen.name}"?</span>
+                          <button type="button" onClick={() => { deleteAllergen(allergen.id); setAllergenIds((s) => { const n = new Set(s); n.delete(allergen.id); return n; }); setPendingDeleteAllergenId(null); }} className="font-bold hover:opacity-70"><Check className="w-3 h-3" /></button>
+                          <button type="button" onClick={() => setPendingDeleteAllergenId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        key={allergen.id}
+                        onClick={() => setAllergenIds((s) => { const n = new Set(s); isAssigned ? n.delete(allergen.id) : n.add(allergen.id); return n; })}
+                        className={cn(
+                          'group inline-flex items-center gap-1 text-xs px-2 py-1 rounded border cursor-pointer select-none transition-colors',
+                          isAssigned ? 'bg-destructive/15 border-destructive/40 text-destructive' : 'bg-muted/40 border-border text-muted-foreground hover:border-destructive/30 hover:text-foreground',
+                        )}
+                      >
+                        {isAssigned && <Check className="w-2.5 h-2.5 shrink-0" />}
+                        <span>{allergen.name}</span>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setPendingDeleteAllergenId(allergen.id); }} className="ml-0.5 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground hover:text-destructive transition-opacity" title="Delete allergen globally">
+                          <Trash2 className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {showAllergenInput ? (
+                <div className="flex items-center gap-2">
+                  <input type="text" value={newAllergenName} onChange={(e) => setNewAllergenName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateAllergen(); if (e.key === 'Escape') { setShowAllergenInput(false); setNewAllergenName(''); } }} placeholder="Allergen name..." className="input-field h-7 flex-1 text-xs" autoFocus />
+                  <button type="button" onClick={handleCreateAllergen} className="text-xs px-2 py-1 rounded border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors whitespace-nowrap">Add</button>
+                  <button type="button" onClick={() => { setShowAllergenInput(false); setNewAllergenName(''); }} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setShowAllergenInput(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <Plus className="w-3 h-3" /> New allergen
                 </button>
               )}
             </div>
