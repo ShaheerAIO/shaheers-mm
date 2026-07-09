@@ -26,6 +26,9 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
+import { useClearableIntInput } from '@/hooks/useClearableIntInput';
+import { NumberStepperInput } from '@/components/ui/number-stepper-input';
+import { PriceStepperInput } from '@/components/ui/price-stepper-input';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -688,10 +691,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     updateModifierModifierOption,
     removeModifierModifierOption,
     reorderModifierOptions,
+    setModifierOptionOrder,
     getNextId,
   } = useMenuStore();
   
   const [optionSearch, setOptionSearch] = useState('');
+  const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
+  const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [showCreateOption, setShowCreateOption] = useState(false);
   const [bulkCreateText, setBulkCreateText] = useState('');
   const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
@@ -775,23 +781,18 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     }
   }, [bulkFromLibraryOpen]);
 
-  // Auto-set minSelector to 1 when "Required" is selected (don't clobber a user-set min > 1)
-  useEffect(() => {
-    if (draft.isOptional === 'Required' && draft.minSelector === 0) {
-      setDraft(d => ({ ...d, minSelector: 1 }));
-    }
-  }, [draft.isOptional, draft.minSelector]);
-
   useEffect(() => {
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
   }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
 
-  // Sync minSelector with selection type
+  // Sync minSelector with selection type: Required/Select one force a minimum
+  // of 1; every other type (including reverting back to optional/unset)
+  // resets to 0.
   useEffect(() => {
     if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
       if (draft.minSelector === 0) setDraft(d => ({ ...d, minSelector: 1 }));
-    } else if (draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional') {
-      if (draft.minSelector !== 0) setDraft(d => ({ ...d, minSelector: 0 }));
+    } else if (draft.minSelector !== 0) {
+      setDraft(d => ({ ...d, minSelector: 0 }));
     }
   }, [draft.isOptional]);
 
@@ -954,6 +955,16 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       }),
     [draft.multiSelect, draft.canGuestSelectMoreModifiers, modifierOptionAssignments],
   );
+
+  // No-charge modifiers can't carry per-option prices — zero any that were
+  // entered before switching pricing type.
+  const isNoCharge = draft.modifierOptionPriceType === 'NoCharge';
+  useEffect(() => {
+    if (!isNoCharge) return;
+    modifierOptionAssignments.forEach((a) => {
+      if (a.maxLimit !== 0) updateModifierModifierOption(modifier.id, a.modifierOptionId, { maxLimit: 0 });
+    });
+  }, [isNoCharge, modifierOptionAssignments, modifier.id, updateModifierModifierOption]);
 
   // Filter options by search
   const filteredOptionAssignments = useMemo(() => {
@@ -1180,6 +1191,34 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setDragOverIndex(null);
   };
 
+  useEffect(() => {
+    if (!optionSortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (optionSortMenuRef.current && !optionSortMenuRef.current.contains(e.target as Node)) {
+        setOptionSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [optionSortMenuOpen]);
+
+  /** (Re)sort this modifier's options by name or price and persist the new sortOrder. */
+  const handleSortOptions = (key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc') => {
+    const sorted = [...modifierOptionAssignments].sort((a, b) => {
+      if (key === 'price-asc' || key === 'price-desc') {
+        return a.maxLimit - b.maxLimit;
+      }
+      return (a.option?.optionName || a.optionDisplayName).localeCompare(
+        b.option?.optionName || b.optionDisplayName,
+        undefined,
+        { sensitivity: 'base' },
+      );
+    });
+    if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
+    setModifierOptionOrder(modifier.id, sorted.map((o) => o.modifierOptionId));
+    setOptionSortMenuOpen(false);
+  };
+
   /** Options for any modifier id (join table first, then parentModifierId fallback) */
   const getOptionAssignmentsForModifier = (modId: number) => {
     const joinEntries = modifierModifierOptions
@@ -1263,6 +1302,32 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   }, [modifier.id, detectedMode]);
 
   const effectiveMode = detectedMode ?? chosenMode;
+
+  // Total number of choices a guest could pick from (flat options or nested
+  // sub-modifiers). The Max SELECTION field must never exceed this, regardless
+  // of the (separately displayed) combination limit.
+  const availableOptionCount =
+    effectiveMode === 'nested' ? childModifiers.length : modifierOptionAssignments.length;
+  const maxSelectorCeiling =
+    Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, availableOptionCount || Infinity);
+
+  // Keep Max SELECTION from silently exceeding the option/sub-modifier count
+  // as options or nested modifiers are added or removed.
+  useEffect(() => {
+    if (draft.noMaxSelection || availableOptionCount === 0) return;
+    setDraft((d) => (d.maxSelector > availableOptionCount ? { ...d, maxSelector: availableOptionCount } : d));
+  }, [availableOptionCount, draft.noMaxSelection]);
+
+  const minSelectorField = useClearableIntInput(draft.minSelector, (parsed) => {
+    setDraft((d) => {
+      const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
+      const floor = isRequired ? 1 : 0;
+      return { ...d, minSelector: Math.max(floor, Math.min(parsed, d.noMaxSelection ? Infinity : d.maxSelector)) };
+    });
+  });
+  const maxSelectorField = useClearableIntInput(draft.maxSelector, (parsed) => {
+    setDraft((d) => ({ ...d, maxSelector: Math.min(maxSelectorCeiling, Math.max(parsed, d.minSelector)) }));
+  });
 
   // A size modifier is inherently a flat list of sizes. Reveal the Sizes editor
   // even for a persisted size modifier opened with no options yet — toggling
@@ -1356,174 +1421,171 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         )}
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Names — match ItemDetailPanel: section header + inline label rows; name can drive POS until POS/Prefix is edited */}
-          <div className="space-y-1">
-            <Label className="section-header">Names</Label>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
-                  Name
-                </span>
-                <input
-                  type="text"
-                  value={draft.modifierName}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setDraft((d) =>
-                      modifierNameDrivesPos
-                        ? { ...d, modifierName: v, posDisplayName: v }
-                        : { ...d, modifierName: v },
-                    );
-                  }}
-                  onBlur={() => {
-                    const trimmed = draft.modifierName.trim();
-                    setDraft((d) =>
-                      modifierNameDrivesPos
-                        ? { ...d, modifierName: trimmed, posDisplayName: trimmed }
-                        : { ...d, modifierName: trimmed },
-                    );
-                    setTouched((t) => ({ ...t, modifierName: true }));
-                  }}
-                  className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
-                  placeholder="Modifier name"
-                />
+          {/* Names (left) + Modifier Type (right) — same row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {/* Names — compact rows, label to the left of each field */}
+            <div className="space-y-1.5 p-4 bg-muted/30 rounded-lg">
+              <Label className="section-header">Names</Label>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0 w-[4.5rem]">Name</span>
+                  <input
+                    type="text"
+                    value={draft.modifierName}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDraft((d) =>
+                        modifierNameDrivesPos
+                          ? { ...d, modifierName: v, posDisplayName: v }
+                          : { ...d, modifierName: v },
+                      );
+                    }}
+                    onBlur={() => {
+                      const trimmed = draft.modifierName.trim();
+                      setDraft((d) =>
+                        modifierNameDrivesPos
+                          ? { ...d, modifierName: trimmed, posDisplayName: trimmed }
+                          : { ...d, modifierName: trimmed },
+                      );
+                      setTouched((t) => ({ ...t, modifierName: true }));
+                    }}
+                    className="input-field h-8 text-sm font-semibold flex-1 min-w-0 leading-tight py-1"
+                    placeholder="Modifier name"
+                  />
+                </div>
+                {touched.modifierName && modifierNameError && (
+                  <p className="text-[10px] text-destructive ml-[5rem]">{modifierNameError}</p>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0 w-[4.5rem]">POS name</span>
+                  <input
+                    type="text"
+                    value={draft.posDisplayName}
+                    onChange={(e) => {
+                      setModifierNameDrivesPos(false);
+                      setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
+                    }}
+                    onBlur={() => {
+                      setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
+                      setTouched((t) => ({ ...t, posDisplayName: true }));
+                    }}
+                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                    placeholder="POS display name"
+                  />
+                </div>
+                {touched.posDisplayName && posNameError && (
+                  <p className="text-[10px] text-destructive ml-[5rem]">{posNameError}</p>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0 w-[4.5rem]">Prefix</span>
+                  <input
+                    id="lib-mod-prefix"
+                    type="text"
+                    value={draft.prefix}
+                    onChange={(e) => {
+                      setModifierNameDrivesPos(false);
+                      setDraft((d) => ({ ...d, prefix: e.target.value }));
+                    }}
+                    className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
+                    placeholder="e.g., TOP, SIDE"
+                  />
+                </div>
               </div>
-              {touched.modifierName && modifierNameError && (
-                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{modifierNameError}</p>
-              )}
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
-                  POS
+              {/* Selection limits summary */}
+              <div className="text-xs text-muted-foreground pt-0.5 flex items-center gap-2 flex-wrap">
+                {draft.isOptional?.trim() ? `${draft.isOptional} • ` : ''}
+                <span className="font-medium text-foreground">
+                  Min: {draft.minSelector} / Max: {draft.noMaxSelection ? '∞' : draft.maxSelector}
                 </span>
-                <input
-                  type="text"
-                  value={draft.posDisplayName}
-                  onChange={(e) => {
-                    setModifierNameDrivesPos(false);
-                    setDraft((d) => ({ ...d, posDisplayName: e.target.value }));
-                  }}
-                  onBlur={() => {
-                    setDraft((d) => ({ ...d, posDisplayName: d.posDisplayName.trim() }));
-                    setTouched((t) => ({ ...t, posDisplayName: true }));
-                  }}
-                  className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                  placeholder="POS display name"
-                />
-              </div>
-              {touched.posDisplayName && posNameError && (
-                <p className="text-[10px] text-destructive mt-0.5 ml-[4.75rem]">{posNameError}</p>
-              )}
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[10px] leading-tight text-muted-foreground shrink-0 w-[4.25rem]">
-                  Prefix
-                </span>
-                <input
-                  id="lib-mod-prefix"
-                  type="text"
-                  value={draft.prefix}
-                  onChange={(e) => {
-                    setModifierNameDrivesPos(false);
-                    setDraft((d) => ({ ...d, prefix: e.target.value }));
-                  }}
-                  className="input-field h-7 flex-1 min-w-0 text-xs py-1 leading-tight"
-                  placeholder="e.g., TOP, SIDE"
-                />
               </div>
             </div>
-            {/* Selection limits summary */}
-            <div className="text-xs text-muted-foreground pt-1 flex items-center gap-2 flex-wrap">
-              {draft.isOptional?.trim() ? `${draft.isOptional} • ` : ''}
-              <span className="font-medium text-foreground">
-                Min: {draft.minSelector} / Max: {draft.noMaxSelection ? '∞' : draft.maxSelector}
-              </span>
-            </div>
-          </div>
 
-          {/* Used by items — read-only modifier→item linkage */}
-          <div className="flex items-start gap-2 px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs">
-            <span className="text-muted-foreground font-medium shrink-0 pt-0.5">Used by items:</span>
-            {usedByItems.length === 0 ? (
-              <span className="text-muted-foreground">Not attached to any items.</span>
-            ) : (
-              <span className="flex flex-wrap gap-1">
-                {usedByItems.map((name, i) => (
-                  <span
-                    key={i}
-                    className="text-foreground font-medium bg-background border border-border px-1.5 py-0.5 rounded"
-                  >
-                    {name}
-                  </span>
-                ))}
-              </span>
-            )}
-          </div>
-
-          {/* Nested status badge — shown when this modifier is a child */}
-          {modifier.isNested && modifier.parentModifierId > 0 && (() => {
-            const parent = modifiers.find(m => m.id === modifier.parentModifierId);
-            return parent ? (
-              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-xs">
-                <span className="text-primary font-medium">Nested under:</span>
-                <span className="text-foreground font-semibold">{parent.modifierName}</span>
-              </div>
-            ) : null;
-          })()}
-
-          {/* Modifier Type — always show both buttons; active mode highlighted, inactive greyed & disabled */}
-          <div className="space-y-2">
-            <Label className="section-header">Modifier Type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {/* Flat Options button */}
-              {(() => {
-                const isActive = effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat');
-                const willClear = effectiveMode === 'nested';
-                return (
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchMode('flat')}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
-                      isActive
-                        ? 'bg-primary/10 border-primary text-primary'
-                        : 'border-border text-muted-foreground hover:bg-muted/50',
-                    )}
-                  >
-                    <List className="w-4 h-4 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Flat Options</div>
-                      <div className="text-[10px] font-normal opacity-70 leading-tight">
-                        {willClear ? 'Switch — will clear nested' : 'Guest picks from a list'}
+            {/* Modifier Type — buttons + used-by/nested info underneath, to fill the column */}
+            <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
+              <Label className="section-header">Modifier Type</Label>
+              <div className="flex flex-col gap-2">
+                {/* Flat Options button */}
+                {(() => {
+                  const isActive = effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat');
+                  const willClear = effectiveMode === 'nested';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchMode('flat')}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
+                        isActive
+                          ? 'bg-primary/10 border-primary text-primary'
+                          : 'border-border text-muted-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      <List className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-xs">Flat Options</div>
+                        <div className="text-[10px] font-normal opacity-70 leading-tight">
+                          {willClear ? 'Switch — will clear nested' : 'Guest picks from a list'}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })()}
-              {/* Nested Modifiers button */}
-              {(() => {
-                const isActive = effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested');
-                const willClear = effectiveMode === 'flat';
-                return (
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchMode('nested')}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
-                      isActive
-                        ? 'bg-primary/10 border-primary text-primary'
-                        : 'border-border text-muted-foreground hover:bg-muted/50',
-                    )}
-                  >
-                    <GitBranch className="w-4 h-4 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Nested Modifiers</div>
-                      <div className="text-[10px] font-normal opacity-70 leading-tight">
-                        {willClear ? 'Switch — will clear options' : 'Container for sub-modifiers'}
+                    </button>
+                  );
+                })()}
+                {/* Nested Modifiers button */}
+                {(() => {
+                  const isActive = effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested');
+                  const willClear = effectiveMode === 'flat';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchMode('nested')}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
+                        isActive
+                          ? 'bg-primary/10 border-primary text-primary'
+                          : 'border-border text-muted-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      <GitBranch className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-semibold text-xs">Nested Modifiers</div>
+                        <div className="text-[10px] font-normal opacity-70 leading-tight">
+                          {willClear ? 'Switch — will clear options' : 'Container for sub-modifiers'}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })()}
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
+
+            {/* Used by items — same column as Names, boxed label */}
+            <div className="flex items-start gap-2 px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs">
+              <span className="text-muted-foreground font-medium shrink-0 pt-0.5">Used by:</span>
+              {usedByItems.length === 0 ? (
+                <span className="text-muted-foreground">Not attached to any items.</span>
+              ) : (
+                <span className="flex flex-wrap gap-1">
+                  {usedByItems.map((name, i) => (
+                    <span
+                      key={i}
+                      className="text-foreground font-medium bg-background border border-border px-1.5 py-0.5 rounded"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </div>
+
+            {/* Nested under — same column as Modifier Type, boxed label */}
+            {modifier.isNested && modifier.parentModifierId > 0 && (() => {
+              const parent = modifiers.find(m => m.id === modifier.parentModifierId);
+              return parent ? (
+                <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg text-xs">
+                  <span className="text-primary font-medium">Nested under:</span>
+                  <span className="text-foreground font-semibold">{parent.modifierName}</span>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           {/* Nested Modifiers — nested mode only */}
@@ -1660,202 +1722,254 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               </div>
             </div>
 
-            <div className="rounded-md border border-border bg-muted/20 p-2.5 space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Bulk create (one name per line, or comma / semicolon separated)</Label>
-              <textarea
-                value={bulkCreateText}
-                onChange={(e) => setBulkCreateText(e.target.value)}
-                rows={3}
-                placeholder={'e.g.\nSmall\nMedium\nLarge'}
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-y min-h-[4.5rem] focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={!parseBulkOptionNames(bulkCreateText).length}
-                onClick={handleBulkCreateFromLines}
-              >
-                Add as options
-              </Button>
-            </div>
-
-            {/* Search Options */}
-            {modifierOptionAssignments.length > 3 && (
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search options..."
-                  value={optionSearch}
-                  onChange={(e) => setOptionSearch(e.target.value)}
-                  className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                {optionSearch && (
-                  <button
-                    onClick={() => setOptionSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {filteredOptionAssignments.length === 0 && optionSearch ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No options match "{optionSearch}"
-                </p>
-              ) : null}
-              {filteredOptionAssignments.map((assignment, index) => (
-                <div
-                  key={assignment.modifierOptionId}
-                  draggable={!isDragDisabled}
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                  className={cn(
-                    "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
-                    dragIndex === index && "opacity-40",
-                    dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
-                  )}
-                >
-                  <GripVertical
-                    className={cn(
-                      "w-4 h-4 text-muted-foreground",
-                      isDragDisabled
-                        ? "opacity-30 cursor-not-allowed"
-                        : "cursor-grab active:cursor-grabbing",
-                    )}
-                  />
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div>
-                      {draft.isSizeModifier ? (
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-4 items-start">
+              {/* Options list — single column so drag-to-reorder stays readable */}
+              <div className="space-y-2 min-w-0">
+                {/* Search + sort options */}
+                {(modifierOptionAssignments.length > 3 || modifierOptionAssignments.length > 1) && (
+                  <div className="flex items-center gap-2">
+                    {modifierOptionAssignments.length > 3 && (
+                      <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                           type="text"
-                          value={assignment.option?.optionName ?? ''}
-                          onChange={(e) => handleSizeNameChange(
-                            assignment.modifierOptionId,
-                            e.target.value,
-                          )}
-                          placeholder='Size name (e.g. Small, 10")'
-                          className="input-field text-sm h-8 w-full max-w-[220px] font-medium"
-                          aria-label="Size name"
-                          autoFocus={!assignment.option?.optionName}
+                          placeholder="Search options..."
+                          value={optionSearch}
+                          onChange={(e) => setOptionSearch(e.target.value)}
+                          className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                         />
-                      ) : (
-                        <>
-                          <span className="text-sm font-medium">
-                            {assignment.option?.optionName || assignment.optionDisplayName}
-                          </span>
+                        {optionSearch && (
+                          <button
+                            onClick={() => setOptionSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {modifierOptionAssignments.length > 1 && (
+                      <div className="relative shrink-0 ml-auto" ref={optionSortMenuRef}>
+                        <button
+                          type="button"
+                          onClick={() => setOptionSortMenuOpen((o) => !o)}
+                          className="flex items-center justify-center w-9 h-9 rounded-md border border-input hover:bg-muted/50 transition-colors"
+                          title="Sort options"
+                        >
+                          <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        {optionSortMenuOpen && (
+                          <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                              onClick={() => handleSortOptions('name-asc')}
+                            >
+                              Name (A → Z)
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                              onClick={() => handleSortOptions('name-desc')}
+                            >
+                              Name (Z → A)
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                              onClick={() => handleSortOptions('price-asc')}
+                            >
+                              Price (Low → High)
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                              onClick={() => handleSortOptions('price-desc')}
+                            >
+                              Price (High → Low)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {filteredOptionAssignments.length === 0 && optionSearch ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No options match "{optionSearch}"
+                  </p>
+                ) : null}
+                {filteredOptionAssignments.map((assignment, index) => (
+                  <div
+                    key={assignment.modifierOptionId}
+                    draggable={!isDragDisabled}
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={cn(
+                      "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                      dragIndex === index && "opacity-40",
+                      dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
+                    )}
+                  >
+                    <GripVertical
+                      className={cn(
+                        "w-4 h-4 text-muted-foreground shrink-0",
+                        isDragDisabled
+                          ? "opacity-30 cursor-not-allowed"
+                          : "cursor-grab active:cursor-grabbing",
+                      )}
+                    />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div>
+                        {draft.isSizeModifier ? (
                           <input
                             type="text"
-                            value={assignment.optionDisplayName}
-                            onChange={(e) => handleOptionDisplayNameChange(
+                            value={assignment.option?.optionName ?? ''}
+                            onChange={(e) => handleSizeNameChange(
                               assignment.modifierOptionId,
                               e.target.value,
                             )}
-                            placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
-                            className="input-field text-xs h-7 w-full max-w-[220px] mt-0.5"
-                            aria-label="Option display name"
+                            placeholder='Size name (e.g. Small, 10")'
+                            className="input-field text-sm h-8 w-full font-medium"
+                            aria-label="Size name"
+                            autoFocus={!assignment.option?.optionName}
                           />
-                        </>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {assignment.isDefaultSelected && (
-                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                          Default
-                        </span>
-                      )}
-                      {assignment.option && !assignment.option.isStockAvailable && (
-                        <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
-                          Out of Stock
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground text-xs">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={assignment.maxLimit}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => handleOptionPriceChange(
-                          assignment.modifierOptionId,
-                          Math.max(0, parseFloat(e.target.value) || 0)
+                        ) : (
+                          <>
+                            <span className="text-sm font-medium">
+                              {assignment.option?.optionName || assignment.optionDisplayName}
+                            </span>
+                            <input
+                              type="text"
+                              value={assignment.optionDisplayName}
+                              onChange={(e) => handleOptionDisplayNameChange(
+                                assignment.modifierOptionId,
+                                e.target.value,
+                              )}
+                              placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
+                              className="input-field text-xs h-7 w-full mt-0.5"
+                              aria-label="Option display name"
+                            />
+                          </>
                         )}
-                        className="input-field w-20"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
-                      <span className="text-muted-foreground text-xs">Qty</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={assignment.maxQtyPerOption ?? 1}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => handleOptionQtyChange(
-                          assignment.modifierOptionId,
-                          Math.max(0, parseInt(e.target.value, 10) || 0)
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {assignment.isDefaultSelected && (
+                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                            Default
+                          </span>
                         )}
-                        className="input-field w-14 text-center"
-                      />
-                      {(assignment.maxQtyPerOption ?? 1) === 0 && (
-                        <span className="text-[10px] text-primary font-semibold">∞</span>
-                      )}
+                        {assignment.option && !assignment.option.isStockAvailable && (
+                          <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
+                            Out of Stock
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted shrink-0"
-                        aria-label="Option actions"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuItem
-                        onClick={() => handleRemoveOption(assignment.modifierOptionId)}
-                      >
-                        Remove from this modifier
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() =>
-                          handleDeleteOptionGlobally(
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {isNoCharge ? (
+                        <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : (
+                        <PriceStepperInput
+                          value={assignment.maxLimit}
+                          onFocus={(e) => e.target.select()}
+                          onCommit={(v) => handleOptionPriceChange(assignment.modifierOptionId, v)}
+                          prefix={<span className="text-muted-foreground text-xs">$</span>}
+                          wrapperClassName="w-20"
+                        />
+                      )}
+                      <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
+                        <span className="text-muted-foreground text-xs">Qty</span>
+                        <NumberStepperInput
+                          inputMode="numeric"
+                          value={assignment.maxQtyPerOption ?? 1}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => handleOptionQtyChange(
                             assignment.modifierOptionId,
-                            assignment.option?.optionName || assignment.optionDisplayName,
-                          )
-                        }
-                      >
-                        Delete from library everywhere…
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ))}
+                            Math.max(0, parseInt(e.target.value, 10) || 0)
+                          )}
+                          onStep={(delta) => handleOptionQtyChange(
+                            assignment.modifierOptionId,
+                            Math.max(0, (assignment.maxQtyPerOption ?? 1) + delta)
+                          )}
+                          wrapperClassName="w-14"
+                        />
+                        {(assignment.maxQtyPerOption ?? 1) === 0 && (
+                          <span className="text-[10px] text-primary font-semibold">∞</span>
+                        )}
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-md text-muted-foreground hover:bg-muted shrink-0"
+                          aria-label="Option actions"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem
+                          onClick={() => handleRemoveOption(assignment.modifierOptionId)}
+                        >
+                          Remove from this modifier
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() =>
+                            handleDeleteOptionGlobally(
+                              assignment.modifierOptionId,
+                              assignment.option?.optionName || assignment.optionDisplayName,
+                            )
+                          }
+                        >
+                          Delete from library everywhere…
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ))}
 
-              {modifierOptionAssignments.length === 0 && !optionSearch && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {draft.isSizeModifier
-                    ? 'No sizes added yet. Click "New Size" (or use bulk create) to add sizes and their prices.'
-                    : 'No options added yet. Click "New Option" to create one.'}
-                </p>
-              )}
+                {modifierOptionAssignments.length === 0 && !optionSearch && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {draft.isSizeModifier
+                      ? 'No sizes added yet. Click "New Size" (or use bulk create) to add sizes and their prices.'
+                      : 'No options added yet. Click "New Option" to create one.'}
+                  </p>
+                )}
+              </div>
+
+              {/* Bulk create — to the right of the options list */}
+              <div className="rounded-md border border-border bg-muted/20 p-2.5 space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">Bulk create (one name per line, or comma / semicolon separated)</Label>
+                <textarea
+                  value={bulkCreateText}
+                  onChange={(e) => setBulkCreateText(e.target.value)}
+                  rows={3}
+                  placeholder={'e.g.\nSmall\nMedium\nLarge'}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-y min-h-[4.5rem] focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={!parseBulkOptionNames(bulkCreateText).length}
+                  onClick={handleBulkCreateFromLines}
+                >
+                  Add as options
+                </Button>
+              </div>
             </div>
           </div>}
 
-          {/* Channel Visibility */}
+          {/* Channel Visibility — On-Prem / Off-Prem split into two columns */}
           <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
             <Label className="section-header">Channel Visibility</Label>
-            <div className="space-y-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
                 const isOpen = openChannelGroup === group;
                 const active = channels.filter(c => draft[c.key as VisibilityChannelKey]);
@@ -1905,150 +2019,142 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </div>
           </div>
 
-          {/* Pizza & Size Settings */}
-          <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-            <Label className="section-header">Pizza & Size Settings</Label>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="pizzaSelection" className="text-sm">Pizza Selection</Label>
-                <p className="text-xs text-muted-foreground">Enable left/right/whole pizza topping selection</p>
-              </div>
-              <Switch
-                id="pizzaSelection"
-                checked={draft.pizzaSelection}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, pizzaSelection: checked }))}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="isSizeModifier" className="text-sm">Size Modifier</Label>
-                <p className="text-xs text-muted-foreground">This modifier controls item size (e.g., 10", 14", 20")</p>
-              </div>
-              <Switch
-                id="isSizeModifier"
-                checked={draft.isSizeModifier}
-                onCheckedChange={(checked) => {
-                  setDraft(d => ({ ...d, isSizeModifier: checked }));
-                  // Sizes are flat options — switch to flat mode so the options editor
-                  // (where sizes + their prices are entered) is revealed.
-                  if (checked && childModifiers.length === 0) setChosenMode('flat');
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Selection Rules */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Min/Max Selection + Selection Behavior — 4 columns in one row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-lg">
             <div className="space-y-2">
               <Label className="section-header">Min Selection</Label>
-              <input
-                type="text"
+              <NumberStepperInput
                 inputMode="numeric"
-                value={draft.minSelector}
+                value={minSelectorField.value}
                 // optional types lock min at 0; required types allow editing from 1 up to max
                 disabled={draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional'}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraft(d => {
-                  const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
-                  const floor = isRequired ? 1 : 0;
-                  return { ...d, minSelector: Math.max(floor, Math.min(parseInt(e.target.value, 10) || floor, d.noMaxSelection ? Infinity : d.maxSelector)) };
-                })}
-                className="input-field w-full disabled:opacity-50"
+                onChange={(e) => minSelectorField.onChange(e.target.value)}
+                onBlur={minSelectorField.onBlur}
+                onStep={minSelectorField.step}
+                wrapperClassName="w-full"
               />
             </div>
             <div className="space-y-2">
               <Label className="section-header">Max Selection</Label>
-              <input
-                type="text"
+              <NumberStepperInput
                 inputMode="numeric"
-                value={draft.maxSelector}
+                value={maxSelectorField.value}
                 onFocus={(e) => e.target.select()}
-                onChange={(e) => setDraft(d => ({ ...d, maxSelector: Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, d.minSelector)) }))}
+                onChange={(e) => maxSelectorField.onChange(e.target.value)}
+                onBlur={maxSelectorField.onBlur}
+                onStep={maxSelectorField.step}
                 disabled={draft.noMaxSelection}
-                className="input-field w-full"
+                wrapperClassName="w-full"
               />
               <p className="text-[10px] text-muted-foreground">Combination limit</p>
               {isFinite(selectionCeiling) && (
                 <p className="text-[10px] text-muted-foreground">Max {selectionCeiling} selections</p>
               )}
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <Label className="text-[10px] text-muted-foreground">No maximum</Label>
+                <Switch
+                  checked={draft.noMaxSelection}
+                  onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxSelection: checked }))}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label className="section-header">No maximum</Label>
-              <Switch
-                checked={draft.noMaxSelection}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, noMaxSelection: checked }))}
-              />
-            </div>
-          </div>
-
-          {/* Multi-select */}
-          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-            <div>
-              <Label htmlFor="multiSelect" className="text-sm">Allow multiple selections</Label>
+            <div className="flex flex-col gap-1.5 p-3 rounded-md border border-border/60 bg-background/40">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="multiSelect" className="text-sm">Allow multiple selections</Label>
+                <Switch
+                  id="multiSelect"
+                  checked={draft.multiSelect}
+                  onCheckedChange={(checked) => setDraft(d => ({ ...d, multiSelect: checked }))}
+                />
+              </div>
               <p className="text-xs text-muted-foreground">Guest can pick more than one option from this modifier</p>
             </div>
-            <Switch
-              id="multiSelect"
-              checked={draft.multiSelect}
-              onCheckedChange={(checked) => setDraft(d => ({ ...d, multiSelect: checked }))}
-            />
-          </div>
-
-          {/* Allow repeat — same option more than once */}
-          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-            <div>
-              <Label htmlFor="canGuestSelectMoreModifiers" className="text-sm">Allow same option more than once</Label>
+            <div className="flex flex-col gap-1.5 p-3 rounded-md border border-border/60 bg-background/40">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="canGuestSelectMoreModifiers" className="text-sm">Allow same option more than once</Label>
+                <Switch
+                  id="canGuestSelectMoreModifiers"
+                  checked={draft.canGuestSelectMoreModifiers}
+                  onCheckedChange={(checked) => setDraft(d => ({ ...d, canGuestSelectMoreModifiers: checked }))}
+                />
+              </div>
               <p className="text-xs text-muted-foreground">Guest can pick the same option multiple times</p>
             </div>
-            <Switch
-              id="canGuestSelectMoreModifiers"
-              checked={draft.canGuestSelectMoreModifiers}
-              onCheckedChange={(checked) => setDraft(d => ({ ...d, canGuestSelectMoreModifiers: checked }))}
-            />
           </div>
 
-          {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
-          <div className="space-y-2">
-            <Label className="section-header">Selection Type</Label>
-            <Select
-              value={draft.isOptional === '' ? '__empty__' : draft.isOptional}
-              onValueChange={(value) =>
-                setDraft((d) => ({ ...d, isOptional: value === '__empty__' ? '' : value }))
-              }
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder=" " />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__empty__" className="text-muted-foreground/70">
-                  &nbsp;
-                </SelectItem>
-                <SelectItem value="Select any">Optional (Select any)</SelectItem>
-                <SelectItem value="Required">Required</SelectItem>
-                <SelectItem value="Select one">Select One</SelectItem>
-                <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Pizza & Size Settings + Selection Type + Pricing — one row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-lg">
+            <div className="flex flex-col gap-1.5 p-3 rounded-md border border-border/60 bg-background/40">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="pizzaSelection" className="text-sm">Pizza Selection</Label>
+                <Switch
+                  id="pizzaSelection"
+                  checked={draft.pizzaSelection}
+                  onCheckedChange={(checked) => setDraft(d => ({ ...d, pizzaSelection: checked }))}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Enable left/right/whole pizza topping selection</p>
+            </div>
+            <div className="flex flex-col gap-1.5 p-3 rounded-md border border-border/60 bg-background/40">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="isSizeModifier" className="text-sm">Size Modifier</Label>
+                <Switch
+                  id="isSizeModifier"
+                  checked={draft.isSizeModifier}
+                  onCheckedChange={(checked) => {
+                    setDraft(d => ({ ...d, isSizeModifier: checked }));
+                    // Sizes are flat options — switch to flat mode so the options editor
+                    // (where sizes + their prices are entered) is revealed.
+                    if (checked && childModifiers.length === 0) setChosenMode('flat');
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">This modifier controls item size (e.g., 10", 14", 20")</p>
+            </div>
 
-          {/* Pricing — how option prices are charged */}
-          <div className="space-y-2">
-            <Label className="section-header">Pricing</Label>
-            <Select
-              value={draft.modifierOptionPriceType || 'NoCharge'}
-              onValueChange={(value) =>
-                setDraft((d) => ({ ...d, modifierOptionPriceType: value }))
-              }
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="No charge" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NoCharge">No charge</SelectItem>
-                <SelectItem value="Individual">Individual pricing</SelectItem>
-                <SelectItem value="Group">Group pricing</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
+            <div className="space-y-2">
+              <Label className="section-header">Selection Type</Label>
+              <Select
+                value={draft.isOptional === '' ? '__empty__' : draft.isOptional}
+                onValueChange={(value) =>
+                  setDraft((d) => ({ ...d, isOptional: value === '__empty__' ? '' : value }))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder=" " />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__empty__" className="text-muted-foreground/70">
+                    &nbsp;
+                  </SelectItem>
+                  <SelectItem value="Select any">Optional (Select any)</SelectItem>
+                  <SelectItem value="Required">Required</SelectItem>
+                  <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Pricing — how option prices are charged */}
+            <div className="space-y-2">
+              <Label className="section-header">Pricing</Label>
+              <Select
+                value={draft.modifierOptionPriceType || 'NoCharge'}
+                onValueChange={(value) =>
+                  setDraft((d) => ({ ...d, modifierOptionPriceType: value }))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="No charge" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NoCharge">No charge</SelectItem>
+                  <SelectItem value="Individual">Individual pricing</SelectItem>
+                  <SelectItem value="Group">Group pricing</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
         </div>
@@ -2181,6 +2287,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         isOpen={showCreateOption}
         onClose={() => setShowCreateOption(false)}
         onSave={handleCreateOption}
+        noCharge={isNoCharge}
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />

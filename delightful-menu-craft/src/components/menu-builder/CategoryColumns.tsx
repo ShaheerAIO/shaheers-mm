@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
 import { CategoryColumn } from './CategoryColumn';
@@ -26,11 +26,6 @@ export function CategoryColumns() {
     reorderCategories,
   } = useMenuStore();
   const isReadOnly = useIsReadOnly();
-
-  // Native DnD state for reordering root category columns.
-  const [colDragIndex, setColDragIndex] = useState<number | null>(null);
-  const [colDragOverIndex, setColDragOverIndex] = useState<number | null>(null);
-  const [colDragArmed, setColDragArmed] = useState(false);
 
   const panelWidth =
     (selectedItemId ? RIGHT_PANEL_WIDTH_PX : 0) +
@@ -167,37 +162,14 @@ export function CategoryColumns() {
           items={getItemsForCategory(category.id)}
           isExpanded={selectedCategoryId === category.id}
           onExpand={() => handleCategoryClick(category.id)}
-          dragHandlers={{
-            draggable: !isReadOnly && colDragArmed,
-            isDragOver: colDragOverIndex === index && colDragIndex !== index,
-            onHandleMouseDown: () => { if (!isReadOnly) setColDragArmed(true); },
-            onHandleMouseUp: () => setColDragArmed(false),
-            onDragStart: (e) => {
-              if (isReadOnly || !colDragArmed) { e.preventDefault(); return; }
-              setColDragIndex(index);
-              e.dataTransfer.effectAllowed = 'move';
-              e.dataTransfer.setData('text/plain', String(index));
-            },
-            onDragOver: (e) => {
-              if (colDragIndex === null) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              if (index !== colDragOverIndex) setColDragOverIndex(index);
-            },
-            onDrop: (e) => {
-              e.preventDefault();
-              if (colDragIndex === null) return;
-              const from = colDragIndex;
-              setColDragIndex(null);
-              setColDragOverIndex(null);
-              setColDragArmed(false);
-              if (from === index) return;
-              reorderCategories(null, from, index, selectedMenuId ?? undefined);
-            },
-            onDragEnd: () => {
-              setColDragIndex(null);
-              setColDragOverIndex(null);
-              setColDragArmed(false);
+          reorder={{
+            position: index + 1,
+            positionCount: menuCategories.length,
+            onSetPosition: (n) => {
+              if (isReadOnly) return;
+              const clamped = Math.max(1, Math.min(menuCategories.length, Math.round(n)));
+              if (clamped - 1 === index) return;
+              reorderCategories(null, index, clamped - 1, selectedMenuId ?? undefined);
             },
           }}
         />

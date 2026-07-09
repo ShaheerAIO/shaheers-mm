@@ -357,6 +357,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
   // ---- Item drafts ----
   const [applyVisibility, setApplyVisibility] = useState(false);
+  const [inheritVisAction, setInheritVisAction] = useState<'none' | 'on' | 'off'>('none');
   const [vis, setVis] = useState<VisDraft>(defaultVisDraft());
   const [applyPriceSection, setApplyPriceFlag] = useState(false);
   const [priceMode, setPriceMode] = useState<PriceMode>('set');
@@ -420,6 +421,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
   const resetDrafts = () => {
     setApplyVisibility(false); setVis(defaultVisDraft());
+    setInheritVisAction('none');
     setApplyPriceFlag(false); setPriceMode('set'); setPriceValue('');
     setStockAction('none');
     setTpoMode('none'); setTpoValue('');
@@ -444,6 +446,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   if (activeLevel === 'item') {
     const t = (label: string) => ops.push({ scope: `${itemIds.length} item${itemIds.length !== 1 ? 's' : ''}`, label, color: LEVEL_COLORS.item });
     if (applyVisibility) t('visibility channels');
+    if (inheritVisAction !== 'none') t(`visibility → ${inheritVisAction === 'on' ? 'inherit from category' : 'override'}`);
     if (applyPriceSection && priceValue) t(`price ${priceModeLabel(priceMode)}${priceValue}`);
     if (stockAction !== 'none') t(`stock → ${stockAction === 'inStock' ? 'In Stock' : '86’ed'}`);
     if (tpoMode === 'markup' && tpoValue) t(`3PO prices → base +${tpoValue}%`);
@@ -508,7 +511,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       const numericPrice = parseFloat(priceValue);
       const tpoPct = parseFloat(tpoValue);
       const hasItemFieldEdits =
-        applyVisibility || (applyPriceSection && priceValue) || stockAction !== 'none' ||
+        applyVisibility || inheritVisAction !== 'none' || (applyPriceSection && priceValue) || stockAction !== 'none' ||
         tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
         (applyQtyLimit && qtyLimitValue) || taxAction !== 'none' ||
         tagAddIds.size || tagRemoveIds.size || allergenAddIds.size || allergenRemoveIds.size ||
@@ -518,6 +521,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
         bulkUpdateItems(itemIds, (item: Item): Partial<Item> => {
           const updates: Partial<Item> = {};
           if (applyVisibility) Object.assign(updates, vis);
+          if (inheritVisAction !== 'none') updates.inheritVisibilityFromCategory = inheritVisAction === 'on';
           if (applyPriceSection && priceValue && !isNaN(numericPrice)) {
             updates.itemPrice = applyPriceCalc(item.itemPrice, priceMode, numericPrice);
           }
@@ -747,6 +751,17 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
               </section>
 
               <VisibilitySection apply={applyVisibility} setApply={setApplyVisibility} vis={vis} setVis={setVis} />
+
+              <Segmented<'none' | 'on' | 'off'>
+                title="Visibility source"
+                value={inheritVisAction}
+                onChange={setInheritVisAction}
+                options={[
+                  { value: 'none', label: 'No change' },
+                  { value: 'on', label: 'Inherit from category' },
+                  { value: 'off', label: 'Override' },
+                ]}
+              />
 
               <ChipPicker
                 title="Tags"

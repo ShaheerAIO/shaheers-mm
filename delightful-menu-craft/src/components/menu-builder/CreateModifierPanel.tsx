@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical, ArrowUpDown } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -22,6 +22,9 @@ import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
+import { useClearableIntInput } from '@/hooks/useClearableIntInput';
+import { NumberStepperInput } from '@/components/ui/number-stepper-input';
+import { PriceStepperInput } from '@/components/ui/price-stepper-input';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -118,6 +121,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   // Options being added to this modifier
   const [options, setOptions] = useState<OptionDraft[]>([]);
+  const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
+  const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [bulkCreateText, setBulkCreateText] = useState('');
@@ -160,12 +165,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     }
   }, [bulkFromLibraryOpen]);
 
-  // Sync minSelector with selection type
+  // Sync minSelector with selection type: Required/Select one force a minimum
+  // of 1; every other type (including reverting back to optional) resets to 0.
   useEffect(() => {
     if (isOptional === 'Required' || isOptional === 'Select one') {
       if (minSelector === 0) setMinSelector(1);
-    } else if (isOptional === 'Select any' || isOptional === 'Push Optional') {
-      if (minSelector !== 0) setMinSelector(0);
+    } else if (minSelector !== 0) {
+      setMinSelector(0);
     }
   }, [isOptional]);
 
@@ -174,6 +180,25 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       setPosDisplayName(modifierName);
     }
   }, [modifierName, posDisplayMode]);
+
+  // No-charge modifiers can't carry per-option prices — zero any that were
+  // entered before switching pricing type.
+  const isNoCharge = modifierOptionPriceType === 'NoCharge';
+  useEffect(() => {
+    if (!isNoCharge) return;
+    setOptions((opts) => (opts.some((o) => o.price !== 0) ? opts.map((o) => ({ ...o, price: 0 })) : opts));
+  }, [isNoCharge]);
+
+  useEffect(() => {
+    if (!optionSortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (optionSortMenuRef.current && !optionSortMenuRef.current.contains(e.target as Node)) {
+        setOptionSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [optionSortMenuOpen]);
 
   // Watch for pending option from CreateOptionPanel
   useEffect(() => {
@@ -342,6 +367,19 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         opt.id === optionId ? { ...opt, price } : opt
       )
     );
+  };
+
+  /** Sort the draft options by name or price. */
+  const handleSortOptions = (key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc') => {
+    setOptions((opts) => {
+      const sorted = [...opts].sort((a, b) => {
+        if (key === 'price-asc' || key === 'price-desc') return a.price - b.price;
+        return a.optionName.localeCompare(b.optionName, undefined, { sensitivity: 'base' });
+      });
+      if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
+      return sorted;
+    });
+    setOptionSortMenuOpen(false);
   };
 
   const handleOptionDefaultChange = (optionId: string, isDefault: boolean) => {
@@ -584,6 +622,29 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     limitPerOption: options.some(o => o.maxQtyPerOption !== 1),
     optionCount: options.length,
     perOptionLimits: options.map(o => o.maxQtyPerOption),
+  });
+
+  // Total number of choices a guest could pick from (flat options or nested
+  // sub-modifiers). The Max SELECTION field must never exceed this, regardless
+  // of the (separately displayed) combination limit.
+  const availableOptionCount = modifierMode === 'flat' ? options.length : nestedModifierIds.length;
+  const maxSelectorCeiling =
+    Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, availableOptionCount || Infinity);
+
+  // Keep Max SELECTION from silently exceeding the option/sub-modifier count
+  // as options are added or removed.
+  useEffect(() => {
+    if (noMaxSelection || availableOptionCount === 0) return;
+    setMaxSelector((v) => Math.min(v, availableOptionCount));
+  }, [availableOptionCount, noMaxSelection]);
+
+  const minSelectorField = useClearableIntInput(minSelector, (parsed) => {
+    const isRequired = isOptional === 'Required' || isOptional === 'Select one';
+    const floor = isRequired ? 1 : 0;
+    setMinSelector(Math.max(floor, Math.min(parsed, noMaxSelection ? Infinity : maxSelector)));
+  });
+  const maxSelectorField = useClearableIntInput(maxSelector, (parsed) => {
+    setMaxSelector(Math.min(maxSelectorCeiling, Math.max(parsed, minSelector)));
   });
 
   return (
@@ -831,32 +892,32 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-end gap-2 flex-wrap">
-                    <div className="space-y-1 w-14 shrink-0">
+                    <div className="space-y-1 w-16 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
-                      <input
-                        type="text"
+                      <NumberStepperInput
                         inputMode="numeric"
-                        value={minSelector}
+                        value={minSelectorField.value}
                         disabled={isOptionalType}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => {
-                          const isRequired = isOptional === 'Required' || isOptional === 'Select one';
-                          const floor = isRequired ? 1 : 0;
-                          setMinSelector(Math.max(floor, Math.min(parseInt(e.target.value, 10) || floor, noMaxSelection ? Infinity : maxSelector)));
-                        }}
-                        className="input-field w-full text-sm h-8 disabled:opacity-50"
+                        onChange={(e) => minSelectorField.onChange(e.target.value)}
+                        onBlur={minSelectorField.onBlur}
+                        onStep={minSelectorField.step}
+                        wrapperClassName="w-full h-8"
+                        className="text-sm"
                       />
                     </div>
-                    <div className="space-y-1 w-14 shrink-0">
+                    <div className="space-y-1 w-16 shrink-0">
                       <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
-                      <input
-                        type="text"
+                      <NumberStepperInput
                         inputMode="numeric"
-                        value={maxSelector}
+                        value={maxSelectorField.value}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => setMaxSelector(Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, Math.max(parseInt(e.target.value, 10) || 1, minSelector)))}
+                        onChange={(e) => maxSelectorField.onChange(e.target.value)}
+                        onBlur={maxSelectorField.onBlur}
+                        onStep={maxSelectorField.step}
                         disabled={noMaxSelection}
-                        className="input-field w-full text-sm h-8 disabled:opacity-50"
+                        wrapperClassName="w-full h-8"
+                        className="text-sm"
                       />
                     </div>
                     <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
@@ -935,6 +996,50 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           <div className="flex items-center justify-between gap-2">
             <Label className="section-header">Options ({options.length}) *</Label>
             <div className="flex items-center gap-1.5">
+              {options.length > 1 && (
+                <div className="relative" ref={optionSortMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setOptionSortMenuOpen((o) => !o)}
+                    className="flex items-center justify-center w-7 h-7 rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors"
+                    title="Sort options"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                  </button>
+                  {optionSortMenuOpen && (
+                    <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortOptions('name-asc')}
+                      >
+                        Name (A → Z)
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortOptions('name-desc')}
+                      >
+                        Name (Z → A)
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortOptions('price-asc')}
+                      >
+                        Price (Low → High)
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortOptions('price-desc')}
+                      >
+                        Price (High → Low)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {availableOptions.length > 0 && (
                 <button
                   type="button"
@@ -1021,22 +1126,22 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                       />
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-muted-foreground">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={option.price}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) =>
-                          handleOptionPriceChange(option.id, Math.max(0, parseFloat(e.target.value) || 0))
-                        }
-                        className="input-field w-20 text-sm"
-                        placeholder="0.00"
-                      />
+                      {isNoCharge ? (
+                        <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : (
+                        <PriceStepperInput
+                          value={option.price}
+                          onFocus={(e) => e.target.select()}
+                          onCommit={(v) => handleOptionPriceChange(option.id, v)}
+                          prefix={<span className="text-xs text-muted-foreground">$</span>}
+                          wrapperClassName="w-20 h-7"
+                          className="text-sm"
+                          placeholder="0.00"
+                        />
+                      )}
                       <span className="text-xs text-muted-foreground" title="Max times a guest can select this option (0 = unlimited)">Qty</span>
                       <div className="flex items-center gap-1">
-                        <input
-                          type="text"
+                        <NumberStepperInput
                           inputMode="numeric"
                           value={option.maxQtyPerOption}
                           onFocus={(e) => e.target.select()}
@@ -1047,7 +1152,15 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                                 : o
                             ))
                           }
-                          className="input-field w-14 text-sm text-center"
+                          onStep={(delta) =>
+                            setOptions(opts => opts.map(o =>
+                              o.id === option.id
+                                ? { ...o, maxQtyPerOption: Math.max(0, o.maxQtyPerOption + delta) }
+                                : o
+                            ))
+                          }
+                          wrapperClassName="w-14 h-7"
+                          className="text-sm"
                         />
                         {option.maxQtyPerOption === 0 && (
                           <span className="text-[10px] text-primary font-semibold">∞</span>
@@ -1155,17 +1268,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         placeholder="Option name"
                         className="input-field flex-1 text-sm"
                       />
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={opt.price === 0 ? '' : opt.price}
-                        onFocus={e => e.target.select()}
-                        onChange={e => setChildOptions(prev =>
-                          prev.map((o, j) => j === i ? { ...o, price: Math.max(0, parseFloat(e.target.value) || 0) } : o)
-                        )}
-                        placeholder="$0.00"
-                        className="input-field w-16 text-sm text-right"
-                      />
+                      {/* Inline-created child modifiers are always No Charge — no per-option pricing. */}
                       <button
                         type="button"
                         onClick={() => setChildOptions(prev => prev.filter((_, j) => j !== i))}

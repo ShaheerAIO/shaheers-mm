@@ -168,6 +168,8 @@ interface MenuState {
   updateModifierModifierOption: (modifierId: number, optionId: number, updates: Partial<ModifierModifierOption>) => void;
   removeModifierModifierOption: (modifierId: number, optionId: number) => void;
   reorderModifierOptions: (modifierId: number, fromIndex: number, toIndex: number) => void;
+  /** Renumber sortOrder for one modifier's options to match the given option-id order (e.g. after an alphabetical sort). */
+  setModifierOptionOrder: (modifierId: number, orderedOptionIds: number[]) => void;
   
   // Actions - Category Items (for assigning items to categories)
   addCategoryItem: (categoryItem: CategoryItem) => void;
@@ -257,7 +259,7 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 16;
+export const STORE_VERSION = 18;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
@@ -590,7 +592,71 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     if (!Array.isArray(state.customTaxes)) state.customTaxes = [];
   }
 
+  if (fromVersion < 17) {
+    // Category-level allergens (cascade to items). Backfill an empty allergen
+    // list on categories and default item inheritance on, matching the
+    // inheritTagsFromCategory / inheritModifiersFromCategory pattern.
+    if (Array.isArray(state.categories)) {
+      state.categories = (state.categories as Record<string, unknown>[]).map((c) => ({
+        ...c,
+        allergenIds: typeof c.allergenIds === 'string' ? c.allergenIds : '',
+      }));
+    }
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((i) => ({
+        ...i,
+        inheritAllergensFromCategory:
+          typeof i.inheritAllergensFromCategory === 'boolean' ? i.inheritAllergensFromCategory : true,
+      }));
+    }
+  }
+
+  if (fromVersion < 18) {
+    // Per-item visibility override. Existing items keep their own visibility
+    // (inherit = false) so nothing changes; new items default to inherit=true.
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((i) => ({
+        ...i,
+        inheritVisibilityFromCategory:
+          typeof i.inheritVisibilityFromCategory === 'boolean' ? i.inheritVisibilityFromCategory : false,
+      }));
+    }
+  }
+
   return persisted as MenuState;
+}
+
+/** Visibility channel + schedule fields copied when an item inherits from its category. */
+const VISIBILITY_FIELDS = [
+  'visibilityPos', 'visibilityKiosk', 'visibilityMenuBoard', 'visibilityQr',
+  'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash',
+  'daySchedules', 'daySchedulesByGroup',
+] as const;
+
+/**
+ * Resolve per-item visibility inheritance for export: an item with
+ * inheritVisibilityFromCategory copies its (primary) category's channels +
+ * schedule so the exported row carries concrete values. Keeps excelExporter
+ * untouched — it just reads the item's own fields as always.
+ */
+function resolveItemVisibilityForExport(
+  items: Item[],
+  categories: Category[],
+  categoryItems: CategoryItem[],
+): Item[] {
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  return items.map((item) => {
+    if (item.inheritVisibilityFromCategory !== true) return item;
+    const catEntry = categoryItems.find((ci) => ci.itemId === item.id);
+    const category = catEntry ? categoryById.get(catEntry.categoryId) : undefined;
+    if (!category) return item;
+    const resolved = { ...item };
+    for (const key of VISIBILITY_FIELDS) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (resolved as any)[key] = (category as any)[key];
+    }
+    return resolved;
+  });
 }
 
 export const useMenuStore = create<MenuState>()(
@@ -728,7 +794,8 @@ export const useMenuStore = create<MenuState>()(
         return {
           menus: state.menus,
           categories: state.categories,
-          items: state.items,
+          // Bake inherited visibility into item rows (see resolveItemVisibilityForExport).
+          items: resolveItemVisibilityForExport(state.items, state.categories, state.categoryItems),
           itemModifiers: state.itemModifiers,
           categoryModifierGroups: state.categoryModifierGroups,
           categoryModifiers: state.categoryModifiers,
@@ -1171,6 +1238,22 @@ export const useMenuStore = create<MenuState>()(
 
           return { modifierModifierOptions: [...rest, ...updated] };
         }),
+      setModifierOptionOrder: (modifierId, orderedOptionIds) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          const rest = state.modifierModifierOptions.filter((mmo) => mmo.modifierId !== modifierId);
+          const mine = state.modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId);
+          const rank = new Map(orderedOptionIds.map((id, idx) => [id, idx]));
+          const updated = mine
+            .slice()
+            .sort(
+              (a, b) =>
+                (rank.get(a.modifierOptionId) ?? Number.MAX_SAFE_INTEGER) -
+                (rank.get(b.modifierOptionId) ?? Number.MAX_SAFE_INTEGER)
+            )
+            .map((mmo, idx) => ({ ...mmo, sortOrder: idx }));
+          return { modifierModifierOptions: [...rest, ...updated] };
+        }),
       
       // Category Items Actions
       addCategoryItem: (categoryItem) => set((state) => ({ 
@@ -1328,13 +1411,17 @@ export const useMenuStore = create<MenuState>()(
       })),
       deleteAllergen: (id) => set((state) => {
         const idStr = String(id);
+        const stripId = (csv: string | undefined) =>
+          csv ? csv.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',') : csv;
         return {
           allergens: state.allergens.filter((a) => a.id !== id),
           items: state.items.map((item) => ({
             ...item,
-            allergenIds: item.allergenIds
-              ? item.allergenIds.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',')
-              : item.allergenIds,
+            allergenIds: stripId(item.allergenIds),
+          })),
+          categories: state.categories.map((c) => ({
+            ...c,
+            allergenIds: stripId(c.allergenIds),
           })),
         };
       }),

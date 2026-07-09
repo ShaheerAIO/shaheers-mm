@@ -88,6 +88,7 @@ export function MenuDetailPanel({ menu }: Props) {
   const [bulkStart, setBulkStart] = useState('');
   const [bulkEnd, setBulkEnd] = useState('');
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageOpen, setImageOpen] = useState(false);
 
   useEffect(() => {
     setDraft({
@@ -108,6 +109,7 @@ export function MenuDetailPanel({ menu }: Props) {
     setBulkStart('');
     setBulkEnd('');
     setImageModalOpen(false);
+    setImageOpen(false);
   }, [menu.id]);
 
   const isDirty =
@@ -209,18 +211,29 @@ export function MenuDetailPanel({ menu }: Props) {
 
           {/* Menu image */}
           <section>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Image</p>
-              {draft.picture && (
-                <button
-                  type="button"
-                  onClick={() => setDraft((current) => ({ ...current, picture: '' }))}
-                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
-                >
-                  <Trash2 className="h-3 w-3" /> Remove
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setImageOpen((o) => !o)}
+              className="mb-1.5 flex w-full items-center justify-between gap-2"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Image{draft.picture ? ' (1)' : ''}
+              </span>
+              <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', imageOpen && 'rotate-180')} />
+            </button>
+            {imageOpen && (
+              <>
+                {draft.picture && (
+                  <div className="mb-1.5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setDraft((current) => ({ ...current, picture: '' }))}
+                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" /> Remove
+                    </button>
+                  </div>
+                )}
 
             {draft.picture ? (
               <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
@@ -245,6 +258,8 @@ export function MenuDetailPanel({ menu }: Props) {
                 <span className="text-xs font-medium">Upload menu image</span>
                 <span className="text-[10px]">JPG or PNG</span>
               </button>
+            )}
+              </>
             )}
           </section>
 
