@@ -176,6 +176,7 @@ export function CategoryDetailPanel({ category }: Props) {
   const [applyFeedback, setApplyFeedback] = useState<string | null>(null);
   const [imageModalTarget, setImageModalTarget] = useState<'image' | 'kioskImage' | null>(null);
   const [confirmDeleteImages, setConfirmDeleteImages] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
   const applyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modifierDropdownRef = useRef<HTMLDivElement>(null);
   const groupDropdownRef = useRef<HTMLDivElement>(null);
@@ -239,6 +240,7 @@ export function CategoryDetailPanel({ category }: Props) {
     setApplyFeedback(null);
     setImageModalTarget(null);
     setConfirmDeleteImages(false);
+    setImagesOpen(false);
     setTouched({ categoryName: false, posDisplayName: false, kdsDisplayName: false });
   }, [category.id]);
 
@@ -467,18 +469,29 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Channel-specific category images */}
           <section>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Images</p>
-              {(draft.image || draft.kioskImage) && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteImages(true)}
-                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
-                >
-                  <Trash2 className="h-3 w-3" /> Remove both
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setImagesOpen((o) => !o)}
+              className="mb-1.5 flex w-full items-center justify-between gap-2"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Images{(draft.image || draft.kioskImage) ? ` (${[draft.image, draft.kioskImage].filter(Boolean).length})` : ''}
+              </span>
+              <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', imagesOpen && 'rotate-180')} />
+            </button>
+            {imagesOpen && (
+              <>
+                {(draft.image || draft.kioskImage) && (
+                  <div className="mb-1.5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteImages(true)}
+                      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" /> Remove both
+                    </button>
+                  </div>
+                )}
             {!draft.image && !draft.kioskImage ? (
               <button
                 type="button"
@@ -528,6 +541,8 @@ export function CategoryDetailPanel({ category }: Props) {
                 <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
                   Upload or replace each channel image independently.
                 </p>
+              </>
+            )}
               </>
             )}
           </section>

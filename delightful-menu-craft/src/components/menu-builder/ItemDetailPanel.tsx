@@ -310,6 +310,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
   const [imageModalTarget, setImageModalTarget] = useState<ItemUploadField | null>(null);
+  const [imagesOpen, setImagesOpen] = useState(false);
   const [touched, setTouched] = useState({ itemName: false, posDisplayName: false, kdsName: false });
 
   // Reset draft state when item changes
@@ -378,6 +379,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setNewStationName('');
     setNamesExpanded(false);
     setImageModalTarget(null);
+    setImagesOpen(false);
     setTouched({ itemName: false, posDisplayName: false, kdsName: false });
   }, [item.id]);
 
@@ -1094,6 +1096,21 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
         {/* Channel-specific item images */}
         <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setImagesOpen((o) => !o)}
+            className="flex w-full items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              Images
+              {(ITEM_IMAGE_FIELDS.some(({ field }) => draft[field]) || Boolean(draft.landscapeImage)) && (
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
+            </span>
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', imagesOpen && 'rotate-180')} />
+          </button>
+          {imagesOpen && (
+            <>
           <Label className="text-sm font-medium">
             {ITEM_IMAGE_FIELDS.every(({ field }) => !draft[field]) ? 'Image 1:1' : 'Images 1:1'}
           </Label>
@@ -1192,6 +1209,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               </button>
             )}
           </div>
+            </>
+          )}
         </div>
 
         {/* Price & tax info */}
