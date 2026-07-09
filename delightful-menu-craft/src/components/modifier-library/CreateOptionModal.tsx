@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { cn } from '@/lib/utils';
 
 interface CreateOptionModalProps {
@@ -37,9 +38,11 @@ interface CreateOptionModalProps {
     isStockAvailable: boolean;
     isSizeModifier: boolean;
   }) => void;
+  /** When true, the modifier is priced as No Charge — hide pricing and always save at $0.00. */
+  noCharge?: boolean;
 }
 
-export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModalProps) {
+export function CreateOptionModal({ isOpen, onClose, onSave, noCharge = false }: CreateOptionModalProps) {
   const [optionName, setOptionName] = useState('');
   const [posDisplayName, setPosDisplayName] = useState('');
   const [posDisplayNameTouched, setPosDisplayNameTouched] = useState(false);
@@ -58,7 +61,7 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
     onSave({
       optionName: optionName.trim(),
       posDisplayName: posDisplayName.trim() || optionName.trim(),
-      price: parseFloat(price) || 0,
+      price: noCharge ? 0 : parseFloat(price) || 0,
       isStockAvailable,
       isSizeModifier,
     });
@@ -148,23 +151,24 @@ export function CreateOptionModal({ isOpen, onClose, onSave }: CreateOptionModal
             }
           </div>
 
-          {/* Price */}
-          <div className="space-y-2">
-            <Label htmlFor="price">Additional Price</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">$</span>
-              <input
+          {/* Price — hidden for No Charge modifiers */}
+          {!noCharge && (
+            <div className="space-y-2">
+              <Label htmlFor="price">Additional Price</Label>
+              <NumberStepperInput
                 id="price"
-                type="text"
+                inputMode="decimal"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className="w-24 px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                onStep={(delta) => setPrice(Math.max(0, (parseFloat(price) || 0) + delta).toFixed(2))}
+                prefix={<span className="text-muted-foreground">$</span>}
+                wrapperClassName="w-24"
               />
+              <p className="text-xs text-muted-foreground">
+                Extra charge when this option is selected
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Extra charge when this option is selected
-            </p>
-          </div>
+          )}
 
           {/* Toggles */}
           <div className="space-y-3 pt-2">
