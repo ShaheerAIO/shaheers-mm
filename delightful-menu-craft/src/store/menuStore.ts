@@ -171,7 +171,7 @@ interface MenuState {
   
   // Actions - Category Items (for assigning items to categories)
   addCategoryItem: (categoryItem: CategoryItem) => void;
-  removeCategoryItem: (id: number) => void;
+  removeCategoryItem: (categoryId: number, itemId: number) => void;
   /** Reorder the CategoryItem rows of one category by renumbering their sortOrder. */
   reorderCategoryItems: (categoryId: number, fromIndex: number, toIndex: number) => void;
 
@@ -1176,8 +1176,10 @@ export const useMenuStore = create<MenuState>()(
       addCategoryItem: (categoryItem) => set((state) => ({ 
         categoryItems: [...state.categoryItems, categoryItem] 
       })),
-      removeCategoryItem: (id) => set((state) => ({
-        categoryItems: state.categoryItems.filter((ci) => ci.id !== id),
+      removeCategoryItem: (categoryId, itemId) => set((state) => ({
+        categoryItems: state.categoryItems.filter((ci) =>
+          !(ci.categoryId === categoryId && ci.itemId === itemId)
+        ),
       })),
       reorderCategoryItems: (categoryId, fromIndex, toIndex) =>
         set((state) => {

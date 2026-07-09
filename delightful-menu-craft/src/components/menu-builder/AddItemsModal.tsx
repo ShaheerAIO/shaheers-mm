@@ -19,9 +19,14 @@ interface AddItemsModalProps {
 }
 
 export function AddItemsModal({ isOpen, onClose, categoryId, categoryName }: AddItemsModalProps) {
-  const { items, categoryItems, addCategoryItem, getNextId } = useMenuStore();
+  const { items, categories, categoryItems, addCategoryItem, getNextId } = useMenuStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+
+  // Check if this category has any subcategories (children)
+  const hasSubcategories = useMemo(() => {
+    return categories.some(c => c.parentCategoryId === categoryId);
+  }, [categories, categoryId]);
 
   // Get item IDs already in this category
   const existingItemIds = useMemo(() => {
@@ -92,15 +97,24 @@ export function AddItemsModal({ isOpen, onClose, categoryId, categoryName }: Add
           </DialogDescription>
         </DialogHeader>
 
+        {/* Validation Error */}
+        {hasSubcategories && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-700">
+            <p className="font-medium">Cannot add items to this category</p>
+            <p className="text-xs mt-1">This category has subcategories. Items can only be added to leaf categories (categories without subcategories).</p>
+          </div>
+        )}
+
         {/* Search */}
-        <div className="relative">
+        <div className="relative opacity-50 pointer-events-none" style={hasSubcategories ? {} : { opacity: 1, pointerEvents: 'auto' }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={hasSubcategories}
+            className="w-full pl-9 pr-8 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
             autoFocus
           />
           {searchTerm && (
@@ -114,7 +128,7 @@ export function AddItemsModal({ isOpen, onClose, categoryId, categoryName }: Add
         </div>
 
         {/* Items List */}
-        <ScrollArea className="h-[300px] border rounded-md">
+        <ScrollArea className="h-[300px] border rounded-md" style={hasSubcategories ? { opacity: 0.5, pointerEvents: 'none' } : {}}>
           {availableItems.length === 0 ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground p-4">
               {searchTerm
@@ -174,10 +188,10 @@ export function AddItemsModal({ isOpen, onClose, categoryId, categoryName }: Add
             </button>
             <button
               onClick={handleAddSelected}
-              disabled={selectedItemIds.length === 0}
+              disabled={selectedItemIds.length === 0 || hasSubcategories}
               className={cn(
                 "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                selectedItemIds.length > 0
+                selectedItemIds.length > 0 && !hasSubcategories
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
               )}
