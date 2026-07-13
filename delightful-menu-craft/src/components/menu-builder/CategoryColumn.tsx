@@ -69,10 +69,12 @@ export function CategoryColumn({
   const [sortMode, setSortMode] = useState<'manual' | 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc'>('manual');
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number } | null>(null);
+  const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number; categoryId: number } | null>(null);
   const [subcatToDelete, setSubcatToDelete] = useState<Category | null>(null);
   const [editingSubcatId, setEditingSubcatId] = useState<number | null>(null);
   const [subcatDraftName, setSubcatDraftName] = useState('');
+  const [cannotAddSubcatReason, setCannotAddSubcatReason] = useState<{ categoryName: string; itemCount: number } | null>(null);
+  const [cannotAddItemReason, setCannotAddItemReason] = useState<string | null>(null);
   // Native DnD state for reordering items in the focused category.
   const [itemDragIndex, setItemDragIndex] = useState<number | null>(null);
   const [itemDragOverIndex, setItemDragOverIndex] = useState<number | null>(null);
@@ -258,7 +260,25 @@ export function CategoryColumn({
 
   const handleAddItem = () => {
     const targetCategoryId = activeSubcat || category.id;
-    
+
+    // Prevent adding items when "All" is selected in subcategories
+    // (items belong to specific categories, not to a rolled-up view)
+    if (activeSubcat === null && subcatRows.length > 0) {
+      setCannotAddItemReason('Please select a specific category or subcategory to add an item.');
+      return;
+    }
+
+    // Enforce rule: items and subcategories cannot coexist in the same category
+    // A category is either a leaf (has items) or a parent (has subcategories), never both
+    const hasSubcategories = categories.some(c => c.parentCategoryId === targetCategoryId);
+    if (hasSubcategories) {
+      const targetCategory = categories.find(c => c.id === targetCategoryId);
+      setCannotAddItemReason(
+        `Cannot add items to "${targetCategory?.categoryName}". This category has subcategories. Items can only be added to leaf categories (categories without subcategories).`
+      );
+      return;
+    }
+
     // Create new item
     const newItemId = getNextId('items');
     const newItem: Item = {
@@ -303,7 +323,7 @@ export function CategoryColumn({
 
     // Add the item
     addItem(newItem);
-    
+
     // Add to category via join table
     const currentCategoryItems = categoryItems.filter(ci => ci.categoryId === targetCategoryId);
     addCategoryItem({
@@ -312,7 +332,7 @@ export function CategoryColumn({
       itemId: newItemId,
       sortOrder: currentCategoryItems.length,
     });
-    
+
     // Select the new item
     setSelectedItem(newItemId);
   };
@@ -324,13 +344,17 @@ export function CategoryColumn({
       ci => ci.categoryId === targetCategoryId && ci.itemId === itemId
     );
     if (categoryItem) {
-      setItemToRemove({ itemId, categoryItemId: categoryItem.id });
+      setItemToRemove({
+        itemId,
+        categoryItemId: categoryItem.id,
+        categoryId: categoryItem.categoryId
+      });
     }
   };
 
   const confirmRemoveItem = () => {
     if (itemToRemove) {
-      removeCategoryItem(itemToRemove.categoryItemId);
+      removeCategoryItem(itemToRemove.categoryId, itemToRemove.itemId);
       setItemToRemove(null);
     }
   };
@@ -341,9 +365,21 @@ export function CategoryColumn({
   };
 
   const handleAddSubcategory = () => {
-    // Nest under the currently-focused subcategory (or the root when none is
-    // drilled), so depth >= 2 is creatable.
+    // Nest under the currently-focused subcategory (or the root when none is drilled)
     const parentId = activeSubcat ?? category.id;
+
+    // Enforce rule: a category cannot have both items AND subcategories
+    // Check applies to root category AND nested categories
+    const parentCategoryItems = categoryItems.filter(ci => ci.categoryId === parentId);
+    if (parentCategoryItems.length > 0) {
+      const parentCategory = categories.find(c => c.id === parentId);
+      setCannotAddSubcatReason({
+        categoryName: parentCategory?.categoryName || 'This category',
+        itemCount: parentCategoryItems.length,
+      });
+      return;
+    }
+
     const siblings = childrenOf(parentId);
     const siblingColors = siblings.map((s) => s.color).filter(Boolean) as string[];
     const newSubcat: Category = {
@@ -873,7 +909,9 @@ export function CategoryColumn({
                 <span className="text-xs text-muted-foreground">
                   ${item.itemPrice.toFixed(2)}
                 </span>
-                {!isReadOnly && (
+                {/* Show copy/duplicate button except when "All" is selected in subcategories
+                    (items shown are from multiple categories, so modifying one is ambiguous) */}
+                {!isReadOnly && !(activeSubcat === null && subcatRows.length > 0) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -886,7 +924,9 @@ export function CategoryColumn({
                     <Copy className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {!isReadOnly && (
+                {/* Show remove button except when "All" is selected in subcategories
+                    (prevents removing items from ambiguous multi-category context) */}
+                {!isReadOnly && !(activeSubcat === null && subcatRows.length > 0) && (
                   <button
                     onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
@@ -983,6 +1023,40 @@ export function CategoryColumn({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cannot add subcategory - category has items */}
+      <AlertDialog open={cannotAddSubcatReason !== null} onOpenChange={(open) => { if (!open) setCannotAddSubcatReason(null); }}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cannot Add Subcategory</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{cannotAddSubcatReason?.categoryName}" has {cannotAddSubcatReason?.itemCount} item{cannotAddSubcatReason?.itemCount !== 1 ? 's' : ''}. Remove all items from this category before creating a subcategory, as items can only exist in parent categories (leaf categories cannot have both items and subcategories).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setCannotAddSubcatReason(null)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cannot add item - validation errors */}
+      <AlertDialog open={cannotAddItemReason !== null} onOpenChange={(open) => { if (!open) setCannotAddItemReason(null); }}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cannot Add Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cannotAddItemReason}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setCannotAddItemReason(null)}>
+              OK
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
