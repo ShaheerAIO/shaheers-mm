@@ -204,6 +204,14 @@ const buildModifierNesting = (mods: Modifier[]): ModifierNesting => {
   return { childToParent, nestedIds };
 };
 
+//Move nested modifiers below their parent modifiers, since the excel imports items in order. This ensures each parent modifier is inserted before its children, preventing foreign key constraint errors.
+const sortModifiersParentFirst = (mods: Modifier[], nesting: ModifierNesting): Modifier[] => {
+  const hasParent = (modifier: Modifier) =>
+    Boolean(modifier.parentModifierId || nesting.childToParent.has(modifier.id));
+
+  return [...mods].sort((a, b) => Number(hasParent(a)) - Number(hasParent(b)));
+};
+
 // Default prefix for modifiers that have none — the app never sets one, but the
 // POS requires it non-empty. "Select any" matches real POS exports.
 const resolvePrefix = (s: string): string => ((s || '').trim() ? s : 'Select any');
@@ -356,7 +364,11 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   append(categoryItems, HEADERS.CATEGORY_ITEMS, SHEET_NAMES.CATEGORY_ITEMS);
   append(data.itemModifierGroups, HEADERS.ITEM_MODIFIER_GROUP, SHEET_NAMES.ITEM_MODIFIER_GROUP);
   append(data.modifierGroups, HEADERS.MODIFIER_GROUP, SHEET_NAMES.MODIFIER_GROUP);
-  append(buildModifierRows(data.modifiers, nesting), HEADERS.MODIFIER, SHEET_NAMES.MODIFIER);
+  append(
+    buildModifierRows(sortModifiersParentFirst(data.modifiers, nesting), nesting),
+    HEADERS.MODIFIER,
+    SHEET_NAMES.MODIFIER,
+  );
   append(buildModifierOptionRows(data.modifierOptions, optionPriceMap), HEADERS.MODIFIER_OPTION, SHEET_NAMES.MODIFIER_OPTION);
   append(
     renumberSortOrder(buildModifierModifierOptionRows(data.modifierModifierOptions), (r) => r.modifierId),
