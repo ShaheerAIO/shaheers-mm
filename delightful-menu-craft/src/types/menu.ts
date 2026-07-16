@@ -199,6 +199,10 @@ export interface ModifierOption {
   /** Option surcharge — POS keeps this on the option row (`price`); the app's UI
    *  edits it via the join's `maxLimit`. Bridged on import/export. */
   price?: number;
+  // Tax — mirrors the item model. Edited globally in the Options Library, so a
+  // change applies everywhere the option is used. Not yet exported to Excel.
+  salesTax?: boolean;   // undefined/true = taxed; false = no sales tax on the surcharge
+  customTaxId?: number; // overrides the standard rate; undefined = standard rate (when salesTax)
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
@@ -209,12 +213,19 @@ export interface ModifierOption {
   visibilityDoordash: boolean;
 }
 
+/** Pizza-selection side for an option pick: left half, right half, or whole pizza. */
+export type PizzaSide = 'left' | 'right' | 'whole';
+
 // Sheet 12: Modifier ModifierOptions (join table - links modifiers to their options)
 export interface ModifierModifierOption {
   modifierId: number;
   modifierOptionId: number;
   isDefaultSelected: boolean;
   maxLimit: number; // option price/surcharge field
+  /** Pizza-selection pricing: manual override for the Whole price. Unset = auto
+   *  (Left + Right, i.e. 2× maxLimit). Only meaningful when the parent modifier
+   *  has pizzaSelection. Not yet exported to Excel. */
+  wholePrice?: number;
   optionDisplayName: string;
   sortOrder: number;
   /** How many times a guest can select this option. 1 = once (default), 0 = unlimited, N = up to N. */

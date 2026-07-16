@@ -1,8 +1,23 @@
-import type { Modifier, ModifierModifierOption } from '@/types/menu';
+import type { Modifier, ModifierModifierOption, PizzaSide } from '@/types/menu';
+
+/**
+ * Per-occurrence surcharge honoring pizza half/whole pricing: left/right use
+ * the option's price (join maxLimit) as-is; whole uses the manual wholePrice
+ * when set, else Left + Right (2× maxLimit). No side → plain option price.
+ */
+export function pizzaOptionPrice(
+  mmo: Pick<ModifierModifierOption, 'maxLimit' | 'wholePrice'>,
+  side: PizzaSide | undefined,
+): number {
+  const half = typeof mmo.maxLimit === 'number' && mmo.maxLimit > 0 ? mmo.maxLimit : 0;
+  if (side === 'whole') return mmo.wholePrice ?? half * 2;
+  return half;
+}
 
 /**
  * Sum join-table `maxLimit` (the per-option surcharge) for each selected option
  * occurrence. Duplicate option ids in the array represent multi-quantity picks.
+ * `pizzaSides` (optionId → side) applies half/whole pricing to pizza picks.
  *
  * Shared by the POS preview and the kiosk preview so per-line money math is
  * identical across both surfaces.
@@ -10,6 +25,7 @@ import type { Modifier, ModifierModifierOption } from '@/types/menu';
 export function modifierSurchargePerUnit(
   selectedOptions: Record<number, number[]>,
   modifierModifierOptions: ModifierModifierOption[],
+  pizzaSides?: Record<number, PizzaSide>,
 ): number {
   let sum = 0;
   for (const [modIdStr, ids] of Object.entries(selectedOptions)) {
@@ -20,7 +36,7 @@ export function modifierSurchargePerUnit(
       const mmo = modifierModifierOptions.find(
         (m) => m.modifierId === modId && m.modifierOptionId === optionId,
       );
-      sum += mmo?.maxLimit ?? 0;
+      sum += mmo ? pizzaOptionPrice(mmo, pizzaSides?.[optionId]) : 0;
     }
   }
   return sum;
@@ -38,6 +54,7 @@ export function effectiveUnitPrice(
   selectedOptions: Record<number, number[]>,
   modifiers: Pick<Modifier, 'id' | 'isSizeModifier'>[],
   modifierModifierOptions: ModifierModifierOption[],
+  pizzaSides?: Record<number, PizzaSide>,
 ): number {
   const sizeModIds = new Set(modifiers.filter((m) => m.isSizeModifier).map((m) => m.id));
   let sizeAbsolute: number | null = null;
@@ -50,7 +67,7 @@ export function effectiveUnitPrice(
       const mmo = modifierModifierOptions.find(
         (m) => m.modifierId === modId && m.modifierOptionId === optionId,
       );
-      const price = mmo?.maxLimit ?? 0;
+      const price = mmo ? pizzaOptionPrice(mmo, pizzaSides?.[optionId]) : 0;
       if (isSize) sizeAbsolute = price; // single-select size: last wins
       else surcharge += price;
     }

@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
+import { toggleVisibilityChannel } from '@/lib/visibility';
 import type { Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
 import { LEVEL_COLORS, type BulkLevel, type useBulkSelection } from './useBulkSelection';
@@ -157,7 +158,7 @@ function VisibilitySection({
                 type="button"
                 role="switch"
                 aria-checked={vis[ch.key]}
-                onClick={() => setVis((v) => ({ ...v, [ch.key]: !v[ch.key] }))}
+                onClick={() => setVis((v) => toggleVisibilityChannel(v, ch.key))}
                 className={cn(
                   'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors',
                   vis[ch.key] ? 'bg-primary' : 'bg-muted',

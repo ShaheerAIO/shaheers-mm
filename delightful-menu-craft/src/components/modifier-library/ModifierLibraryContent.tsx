@@ -33,6 +33,7 @@ import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
   getChannelsByGroup,
+  toggleVisibilityChannel,
   type VisibilityChannelKey,
 } from '@/lib/visibility';
 import { Label } from '@/components/ui/label';
@@ -47,6 +48,8 @@ import {
 } from '@/components/ui/select';
 import { CreateOptionModal } from './CreateOptionModal';
 import { OptionsLibraryModal } from './OptionsLibraryModal';
+import { OptionTaxChangeDialog, taxLabel } from './OptionTaxControls';
+import { getItemsUsingOption } from '@/lib/optionUsage';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -693,9 +696,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     reorderModifierOptions,
     setModifierOptionOrder,
     getNextId,
+    customTaxes,
+    taxRate,
   } = useMenuStore();
-  
+
   const [optionSearch, setOptionSearch] = useState('');
+  /** Option whose tax is being edited (global change dialog); null = closed. */
+  const [taxDialogOptionId, setTaxDialogOptionId] = useState<number | null>(null);
   const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [showCreateOption, setShowCreateOption] = useState(false);
@@ -962,7 +969,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   useEffect(() => {
     if (!isNoCharge) return;
     modifierOptionAssignments.forEach((a) => {
-      if (a.maxLimit !== 0) updateModifierModifierOption(modifier.id, a.modifierOptionId, { maxLimit: 0 });
+      if (a.maxLimit !== 0 || a.wholePrice !== undefined) {
+        updateModifierModifierOption(modifier.id, a.modifierOptionId, { maxLimit: 0, wholePrice: undefined });
+      }
     });
   }, [isNoCharge, modifierOptionAssignments, modifier.id, updateModifierModifierOption]);
 
@@ -1113,6 +1122,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
   const handleOptionPriceChange = (optionId: number, maxLimit: number) => {
     updateModifierModifierOption(modifier.id, optionId, { maxLimit });
+  };
+
+  // Pizza pricing: Whole defaults to Left + Right (2× the half price). Storing
+  // the override only when it differs keeps the default live — changing the
+  // half price keeps auto-updating Whole until the user types their own value.
+  const handleOptionWholePriceChange = (optionId: number, whole: number) => {
+    const assignment = modifierOptionAssignments.find((a) => a.modifierOptionId === optionId);
+    const auto = (assignment?.maxLimit ?? 0) * 2;
+    updateModifierModifierOption(modifier.id, optionId, {
+      wholePrice: whole === auto ? undefined : whole,
+    });
   };
 
   const handleOptionDisplayNameChange = (optionId: number, optionDisplayName: string) => {
@@ -1872,6 +1892,29 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     <div className="flex items-center gap-2.5 shrink-0">
                       {isNoCharge ? (
                         <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : draft.pizzaSelection ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col gap-0.5" title="Price per half (Left or Right)">
+                            <span className="text-[10px] text-muted-foreground leading-none">Half (L/R)</span>
+                            <PriceStepperInput
+                              value={assignment.maxLimit}
+                              onFocus={(e) => e.target.select()}
+                              onCommit={(v) => handleOptionPriceChange(assignment.modifierOptionId, v)}
+                              prefix={<span className="text-muted-foreground text-xs">$</span>}
+                              wrapperClassName="w-20"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5" title="Whole price — defaults to Left + Right, edit to override">
+                            <span className="text-[10px] text-muted-foreground leading-none">Whole</span>
+                            <PriceStepperInput
+                              value={assignment.wholePrice ?? assignment.maxLimit * 2}
+                              onFocus={(e) => e.target.select()}
+                              onCommit={(v) => handleOptionWholePriceChange(assignment.modifierOptionId, v)}
+                              prefix={<span className="text-muted-foreground text-xs">$</span>}
+                              wrapperClassName="w-20"
+                            />
+                          </div>
+                        </div>
                       ) : (
                         <PriceStepperInput
                           value={assignment.maxLimit}
@@ -1880,6 +1923,16 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                           prefix={<span className="text-muted-foreground text-xs">$</span>}
                           wrapperClassName="w-20"
                         />
+                      )}
+                      {assignment.option && (
+                        <button
+                          type="button"
+                          onClick={() => setTaxDialogOptionId(assignment.modifierOptionId)}
+                          className="text-xs bg-muted text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded transition-colors whitespace-nowrap"
+                          title="Edit tax (applies everywhere this option is used)"
+                        >
+                          Tax: {taxLabel(assignment.option, customTaxes, taxRate)}
+                        </button>
                       )}
                       <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
                         <span className="text-muted-foreground text-xs">Qty</span>
@@ -2005,7 +2058,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                onChange={() => setDraft(d => ({ ...d, [key]: !d[key as VisibilityChannelKey] }))}
+                                onChange={() => setDraft(d => toggleVisibilityChannel(d, key as VisibilityChannelKey))}
                                 className="accent-primary cursor-pointer"
                               />
                             </label>
@@ -2291,6 +2344,28 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
+
+      {(() => {
+        const opt = taxDialogOptionId != null
+          ? modifierOptions.find((o) => o.id === taxDialogOptionId)
+          : undefined;
+        return (
+          <OptionTaxChangeDialog
+            open={opt != null}
+            optionName={opt?.optionName ?? ''}
+            initialTax={{ salesTax: opt?.salesTax ?? true, customTaxId: opt?.customTaxId }}
+            affectedItems={opt
+              ? getItemsUsingOption(opt.id, { modifierModifierOptions, modifiers, itemModifiers, items })
+              : []}
+            customTaxes={customTaxes}
+            standardRate={taxRate}
+            onApply={(next) => {
+              if (opt) updateModifierOption(opt.id, { salesTax: next.salesTax, customTaxId: next.customTaxId });
+            }}
+            onClose={() => setTaxDialogOptionId(null)}
+          />
+        );
+      })()}
     </>
   );
 }

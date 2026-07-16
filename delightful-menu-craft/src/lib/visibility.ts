@@ -139,6 +139,25 @@ export function isAvailableOnChannelAt(
 }
 
 /**
+ * Toggle a single visibility channel, applying one UX default: turning on
+ * POS or Kiosk also turns on Menu Board (unless it's already on), since
+ * digital menu boards are part of the same on-premise experience and are
+ * easy to forget as a separate checkbox. Turning channels off is left as-is
+ * — this only nudges Menu Board on, it never forces it off.
+ */
+export function toggleVisibilityChannel<T extends Record<VisibilityChannelKey, boolean>>(
+  current: T,
+  key: VisibilityChannelKey,
+): T {
+  const turningOn = !current[key];
+  const next: T = { ...current, [key]: turningOn };
+  if (turningOn && (key === 'visibilityPos' || key === 'visibilityKiosk') && !current.visibilityMenuBoard) {
+    next.visibilityMenuBoard = true;
+  }
+  return next;
+}
+
+/**
  * Default visibility for a newly-created entity — all channels enabled.
  */
 export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {

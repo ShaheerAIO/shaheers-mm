@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ImageIcon, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, ImageIcon, Trash2, Upload, AlertTriangle } from 'lucide-react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
@@ -11,6 +11,7 @@ import {
   serializeGroupSchedules,
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
+  toggleVisibilityChannel,
   type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
@@ -216,7 +217,19 @@ export function MenuDetailPanel({ menu }: Props) {
               onClick={() => setImageOpen((o) => !o)}
               className="mb-1.5 flex w-full items-center justify-between gap-2"
             >
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {draft.picture ? (
+                  <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded border border-border">
+                    <LoadingImage src={draft.picture} alt="Menu preview" className="h-full w-full object-cover" />
+                  </span>
+                ) : (
+                  <span
+                    title="No image set"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-600"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                  </span>
+                )}
                 Image{draft.picture ? ' (1)' : ''}
               </span>
               <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', imageOpen && 'rotate-180')} />
@@ -312,7 +325,7 @@ export function MenuDetailPanel({ menu }: Props) {
                             return (
                               <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
                                 <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                                <input type="checkbox" checked={checked} onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))} className="accent-primary cursor-pointer" />
+                                <input type="checkbox" checked={checked} onChange={() => setDraft((d) => toggleVisibilityChannel(d, key))} className="accent-primary cursor-pointer" />
                               </label>
                             );
                           })}
@@ -477,7 +490,12 @@ export function MenuDetailPanel({ menu }: Props) {
         open={imageModalOpen}
         title="Menu image"
         onOpenChange={setImageModalOpen}
-        onSelect={(url) => setDraft((current) => ({ ...current, picture: url }))}
+        onSelect={(url) => {
+          setDraft((current) => ({ ...current, picture: url }));
+          // Images upload to permanent storage immediately, so persist right
+          // away instead of waiting for the user to click Save.
+          updateMenu(menu.id, { picture: url });
+        }}
       />
     </div>
   );

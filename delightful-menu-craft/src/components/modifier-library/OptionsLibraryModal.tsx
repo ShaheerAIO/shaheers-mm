@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { ModifierOption } from '@/types/menu';
+import { TaxSelect, taxLabel, type TaxDraft } from './OptionTaxControls';
 
 function getOptionNameError(value: string): string | null {
   const trimmed = value.trim();
@@ -44,6 +45,8 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
     updateModifierOption,
     deleteModifierOption,
     getNextId,
+    customTaxes,
+    taxRate,
   } = useMenuStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,6 +58,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   const [newPosDisplayName, setNewPosDisplayName] = useState('');
   const [newIsStockAvailable, setNewIsStockAvailable] = useState(true);
   const [newIsSizeModifier, setNewIsSizeModifier] = useState(false);
+  const [newTax, setNewTax] = useState<TaxDraft>({ salesTax: true, customTaxId: undefined });
   const [newTouched, setNewTouched] = useState({ optionName: false, posDisplayName: false });
 
   // Edit form state
@@ -62,6 +66,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
   const [editPosDisplayName, setEditPosDisplayName] = useState('');
   const [editIsStockAvailable, setEditIsStockAvailable] = useState(true);
   const [editIsSizeModifier, setEditIsSizeModifier] = useState(false);
+  const [editTax, setEditTax] = useState<TaxDraft>({ salesTax: true, customTaxId: undefined });
   const [editTouched, setEditTouched] = useState({ optionName: false, posDisplayName: false });
 
   // Filter options by search
@@ -102,6 +107,8 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
       parentModifierId: 0,
       isStockAvailable: newIsStockAvailable,
       isSizeModifier: newIsSizeModifier,
+      salesTax: newTax.salesTax,
+      customTaxId: newTax.customTaxId,
     };
 
     addModifierOption(newOption);
@@ -111,6 +118,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
     setNewPosDisplayName('');
     setNewIsStockAvailable(true);
     setNewIsSizeModifier(false);
+    setNewTax({ salesTax: true, customTaxId: undefined });
     setNewTouched({ optionName: false, posDisplayName: false });
     setShowCreateForm(false);
   };
@@ -121,6 +129,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
     setEditPosDisplayName(option.posDisplayName);
     setEditIsStockAvailable(option.isStockAvailable);
     setEditIsSizeModifier(option.isSizeModifier);
+    setEditTax({ salesTax: option.salesTax ?? true, customTaxId: option.customTaxId });
     setEditTouched({ optionName: false, posDisplayName: false });
   };
 
@@ -139,6 +148,8 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
       posDisplayName: editPosDisplayName.trim() || editOptionName.trim(),
       isStockAvailable: editIsStockAvailable,
       isSizeModifier: editIsSizeModifier,
+      salesTax: editTax.salesTax,
+      customTaxId: editTax.customTaxId,
     });
 
     setEditingOptionId(null);
@@ -261,6 +272,16 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                   />
                   <Label htmlFor="newSizeModifier" className="text-xs">Size Modifier</Label>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">Tax</Label>
+                  <TaxSelect
+                    value={newTax}
+                    onChange={setNewTax}
+                    customTaxes={customTaxes}
+                    standardRate={taxRate}
+                    triggerClassName="w-40"
+                  />
+                </div>
                 <div className="flex-1" />
                 <button
                   onClick={() => setShowCreateForm(false)}
@@ -289,8 +310,9 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
             <div className="min-w-full">
               {/* Header */}
               <div className="sticky top-0 bg-muted/80 backdrop-blur-sm border-b px-4 py-2 grid grid-cols-12 gap-2 text-xs font-semibold text-muted-foreground">
-                <div className="col-span-4">Option Name</div>
-                <div className="col-span-3">POS Display</div>
+                <div className="col-span-3">Option Name</div>
+                <div className="col-span-2">POS Display</div>
+                <div className="col-span-2">Tax</div>
                 <div className="col-span-2 text-center">Status</div>
                 <div className="col-span-2 text-center">Used By</div>
                 <div className="col-span-1"></div>
@@ -316,7 +338,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                     >
                       {isEditing ? (
                         <>
-                          <div className="col-span-4">
+                          <div className="col-span-3">
                             <input
                               type="text"
                               value={editOptionName}
@@ -334,7 +356,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                               autoFocus
                             />
                           </div>
-                          <div className="col-span-3">
+                          <div className="col-span-2">
                             <input
                               type="text"
                               value={editPosDisplayName}
@@ -349,6 +371,15 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                                   ? "border-destructive focus:ring-destructive"
                                   : "border-input focus:ring-ring"
                               )}
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <TaxSelect
+                              value={editTax}
+                              onChange={setEditTax}
+                              customTaxes={customTaxes}
+                              standardRate={taxRate}
+                              triggerClassName="w-full"
                             />
                           </div>
                           <div className="col-span-2 flex justify-center gap-2">
@@ -377,11 +408,14 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                         </>
                       ) : (
                         <>
-                          <div className="col-span-4 text-sm font-medium truncate">
+                          <div className="col-span-3 text-sm font-medium truncate">
                             {option.optionName}
                           </div>
-                          <div className="col-span-3 text-sm text-muted-foreground truncate">
+                          <div className="col-span-2 text-sm text-muted-foreground truncate">
                             {option.posDisplayName}
+                          </div>
+                          <div className="col-span-2 text-xs text-muted-foreground truncate" title={taxLabel(option, customTaxes, taxRate)}>
+                            {taxLabel(option, customTaxes, taxRate)}
                           </div>
                           <div className="col-span-2 flex justify-center">
                             {option.isStockAvailable ? (

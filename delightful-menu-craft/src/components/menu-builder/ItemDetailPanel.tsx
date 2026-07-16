@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink, ImageIcon, Upload } from 'lucide-react';
+import { Plus, Trash2, Save, RotateCcw, Check, ChevronDown, ChevronRight, X, GripVertical, Layers, Pencil, ArrowDownUp, Link, Unlink, ImageIcon, Upload, AlertTriangle } from 'lucide-react';
 import { CategoryImageLibraryModal } from '@/components/categories/CategoryImageLibraryModal';
 import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
@@ -24,6 +24,7 @@ import {
   serializeGroupSchedules,
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
+  toggleVisibilityChannel,
   DAYS as SCHEDULE_DAYS,
   type ChannelGroupSchedules,
   type DayKey,
@@ -965,6 +966,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       )
     : addonCandidates;
 
+  // First available image across channels — used for the small inline preview
+  // next to the Images dropdown trigger (falls back to the 16:9 landscape image).
+  const itemPreviewImageUrl =
+    ITEM_IMAGE_FIELDS.map(({ field }) => draft[field]).find(Boolean) || draft.landscapeImage || '';
+
   return (
     <div className="flex flex-col h-full">
       {/* Unsaved changes indicator */}
@@ -1101,7 +1107,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             onClick={() => setImagesOpen((o) => !o)}
             className="flex w-full items-center justify-between gap-2"
           >
-            <span className="flex items-center gap-1.5 text-sm font-medium">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              {itemPreviewImageUrl ? (
+                <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-md border border-border">
+                  <LoadingImage src={itemPreviewImageUrl} alt="Item preview" className="h-full w-full object-cover" />
+                </span>
+              ) : (
+                <span
+                  title="No image set"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-600"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </span>
+              )}
               Images
               {(ITEM_IMAGE_FIELDS.some(({ field }) => draft[field]) || Boolean(draft.landscapeImage)) && (
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -1213,9 +1231,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           )}
         </div>
 
-        {/* Price & tax info */}
+        {/* Base price — most frequently edited field, kept always visible */}
         <div className="space-y-2.5">
-          <Label className="section-header">Price &amp; tax info</Label>
+          <Label className="section-header">Base Price</Label>
 
           {/* Base price + Total price row */}
           <div className="flex items-start gap-3">
@@ -1243,80 +1261,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             )}
           </div>
 
-          {/* Tax + Sale category row */}
-          <div className="flex items-start gap-3">
-            <div className="space-y-1 flex-1 min-w-0">
-              <div className="flex items-center gap-1">
-                <Label htmlFor="tax" className="text-xs text-muted-foreground">Tax</Label>
-                <button
-                  type="button"
-                  title={draft.taxLinkedWithParentSetting ? 'Tax linked to category (click to unlink)' : 'Tax unlinked from category (click to link)'}
-                  onClick={() => setDraft(d => ({ ...d, taxLinkedWithParentSetting: !d.taxLinkedWithParentSetting }))}
-                  className={`rounded p-0.5 transition-colors ${draft.taxLinkedWithParentSetting ? 'text-primary hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-                >
-                  {draft.taxLinkedWithParentSetting ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
-                </button>
-              </div>
-              <Select value={taxSelectValue} onValueChange={handleTaxChange}>
-                <SelectTrigger id="tax" className="input-field">
-                  <SelectValue>
-                    {taxSelectValue === 'none'
-                      ? 'No tax'
-                      : taxSelectValue === 'standard'
-                        ? `Standard · ${taxRate}%`
-                        : (() => {
-                            const t = customTaxes.find((c) => c.id === draft.customTaxId);
-                            return t ? `${t.name} · ${t.rate}%` : `Standard · ${taxRate}%`;
-                          })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectOption value="none">No sales tax</SelectOption>
-                  <SelectOption value="standard">{`Standard rate (${taxRate}%)`}</SelectOption>
-                  {customTaxes.map((t) => (
-                    <SelectOption key={t.id} value={String(t.id)}>
-                      {`${t.name} · ${t.rate}%`}
-                    </SelectOption>
-                  ))}
-                  <div className="border-t mt-1 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('settings')}
-                      className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm transition-colors"
-                    >
-                      Manage custom taxes
-                    </button>
-                  </div>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Sale category (required) */}
-            <div className="space-y-1 flex-1 min-w-0">
-              <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
-              <SaleCategorySelect
-                id="saleCategory"
-                value={draft.saleCategory}
-                onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
-                triggerClassName="input-field"
-              />
-              {!saleCategoryValid && (
-                <p className="text-xs text-destructive">Required.</p>
-              )}
-            </div>
+          {/* Sale category (required) */}
+          <div className="space-y-1">
+            <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
+            <SaleCategorySelect
+              id="saleCategory"
+              value={draft.saleCategory}
+              onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
+              triggerClassName="input-field"
+            />
+            {!saleCategoryValid && (
+              <p className="text-xs text-destructive">Required.</p>
+            )}
           </div>
-
-          {/* Takeout exception */}
-          {effectiveTaxRate > 0 && (
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="takeoutException" className="text-sm font-normal cursor-pointer">Takeout exception</Label>
-              <Switch
-                id="takeoutException"
-                checked={draft.takeoutException}
-                onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
-              />
-            </div>
-          )}
         </div>
 
         {/* Stock */}
@@ -1338,217 +1295,97 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           defaultValue={[]}
           className="rounded-lg border border-border bg-muted/10 overflow-hidden"
         >
-          <AccordionItem value="availability" className="border-b border-border px-3">
-            <AccordionTrigger className="px-0 py-3 hover:no-underline items-start gap-2 [&>svg]:mt-1">
-              <div className="flex-1 min-w-0 text-left">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Availability</div>
-                <div className="text-[10px] font-normal normal-case text-muted-foreground truncate mt-0.5 pr-2">
-                  {draft.inheritVisibilityFromCategory
-                    ? `Inherited · ${inheritedVisibilitySummary}`
-                    : buildAvailabilitySummary(draft)}
-                </div>
-              </div>
+          <AccordionItem value="third-party" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Third-party delivery prices
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-4">
-                {/* Inherit visibility from category — overrides the editor below when on */}
-                <label
-                  htmlFor="inheritVisibility"
-                  title="Inherit channels & schedule from category"
-                  className="flex items-center justify-between gap-1.5 text-xs font-medium cursor-pointer"
-                >
-                  Inherit from category
-                  <Switch
-                    id="inheritVisibility"
-                    checked={draft.inheritVisibilityFromCategory}
-                    onCheckedChange={(checked) =>
-                      setDraft((d) => ({ ...d, inheritVisibilityFromCategory: checked }))
-                    }
-                  />
-                </label>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Optional per-platform prices. Leave blank to use the base price.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
+                    { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
+                    { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
+                  ]).map(({ label, value, setInput, field }) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{label}</Label>
+                      <NumberStepperInput
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={value}
+                        onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
+                        onStep={(delta) =>
+                          handle3poPriceChange(Math.max(0, (parseFloat(value) || 0) + delta).toFixed(2), setInput, field)
+                        }
+                        prefix={<span className="text-muted-foreground">$</span>}
+                        wrapperClassName="w-full"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-                {draft.inheritVisibilityFromCategory ? (
-                  <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5 space-y-1">
-                    <p className="text-[11px] font-medium text-foreground">{inheritedVisibilitySummary}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Channels &amp; schedule follow this item’s category. Turn off to set an override.
-                    </p>
-                  </div>
-                ) : (
-                /* Channel dropdowns — per-group schedule editor inside each */
-                <div className="space-y-1.5">
-                  {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
-                    const isOpen = openChannelGroup === group;
-                    const active = channels.filter(c => draft[c.key]);
-                    const triggerLabel =
-                      active.length === 0 ? 'None' :
-                      active.length === channels.length ? 'All' :
-                      active.map(c => c.label).join(', ');
-                    const groupKey = group as VisibilityGroup;
-                    const groupSched = draft.daySchedulesByGroup[groupKey];
+          <AccordionItem value="stations" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2">
+                Stations
+                {stationDraft.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
+                    ({stationDraft.length})
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Assign this item to one or more kitchen stations.
+                </p>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {stationDraft.length === 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      No stations assigned
+                    </span>
+                  )}
+                  {stationDraft.map((id) => {
+                    const st = stations.find((s) => s.id === id);
                     return (
-                      <div key={group}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenChannelGroup(isOpen ? null : group);
-                            setExpandedDay(null);
-                            setBulkStart('');
-                            setBulkEnd('');
-                          }}
-                          className={cn(
-                            'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
-                            isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
-                          )}
-                        >
-                          <span className="font-medium text-foreground">{group}</span>
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <span className={cn(active.length > 0 && active.length < channels.length && 'text-primary')}>{triggerLabel}</span>
-                            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
-                          </span>
-                        </button>
-                        {isOpen && (
-                          <div className="mt-0.5 rounded-md border border-border overflow-hidden">
-                            {/* Channel checkboxes */}
-                            <div className="divide-y divide-border">
-                              {channels.map(({ key, label }) => {
-                                const checked = draft[key];
-                                return (
-                                  <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
-                                    <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                                    <input type="checkbox" checked={checked} onChange={() => setDraft(d => ({ ...d, [key]: !d[key] }))} className="accent-primary cursor-pointer" />
-                                  </label>
-                                );
-                              })}
-                            </div>
-
-                            {/* Schedule for this group */}
-                            <div className="border-t border-border px-3 py-2 space-y-2 bg-muted/20">
-                              {/* Bulk hours */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
-                                  {(bulkStart || bulkEnd) && (
-                                    <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="flex items-center gap-1.5 flex-1">
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
-                                    <input type="time" value={bulkStart} onChange={e => setBulkStart(e.target.value)} className="input-field flex-1 text-sm" />
-                                  </div>
-                                  <div className="flex items-center gap-1.5 flex-1">
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
-                                    <input type="time" value={bulkEnd} onChange={e => setBulkEnd(e.target.value)} className="input-field flex-1 text-sm" />
-                                  </div>
-                                  <button type="button" disabled={!bulkStart && !bulkEnd}
-                                    onClick={() => {
-                                      setDraft(prev => {
-                                        const next = { ...prev.daySchedulesByGroup[groupKey] };
-                                        for (const d of SCHEDULE_DAYS) {
-                                          if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
-                                        }
-                                        return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
-                                      });
-                                    }}
-                                    className="text-xs px-2.5 py-1.5 rounded-md border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap">
-                                    Apply to all
-                                  </button>
-                                </div>
-                                {!bulkStart && !bulkEnd && <p className="text-[10px] text-muted-foreground">Set times above then click Apply.</p>}
-                              </div>
-
-                              {/* Per-day toggles */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
-                                  <button type="button" className="text-xs text-primary hover:underline"
-                                    onClick={() => {
-                                      const allEnabled = SCHEDULE_DAYS.every(d => groupSched[d].enabled);
-                                      setDraft(prev => {
-                                        const next = { ...prev.daySchedulesByGroup[groupKey] };
-                                        for (const d of SCHEDULE_DAYS) next[d] = { ...next[d], enabled: !allEnabled };
-                                        return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
-                                      });
-                                    }}>
-                                    {SCHEDULE_DAYS.every(d => groupSched[d].enabled) ? 'All days' : 'Select all'}
-                                  </button>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                  {SCHEDULE_DAYS.map(day => {
-                                    const sched = groupSched[day];
-                                    const isExpanded = expandedDay === day;
-                                    const hasTime = sched.start || sched.end;
-                                    return (
-                                      <button key={day} type="button"
-                                        onClick={() => {
-                                          if (!sched.enabled) {
-                                            setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [day]: { ...sched, enabled: true } } } }));
-                                            setExpandedDay(day);
-                                          } else if (isExpanded) {
-                                            setExpandedDay(null);
-                                          } else {
-                                            setExpandedDay(day);
-                                          }
-                                        }}
-                                        className={cn("px-2 py-1.5 rounded text-xs font-medium transition-colors border min-w-[36px]",
-                                          sched.enabled ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-muted-foreground border-border")}>
-                                        {day.slice(0, 1)}{sched.enabled && hasTime ? ' ·' : ''}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Expanded day time editor */}
-                                {expandedDay && groupSched[expandedDay].enabled && (
-                                  <div className="mt-2 p-3 rounded-md border border-border bg-muted/30 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <p className="text-xs font-medium">{expandedDay} hours</p>
-                                      <div className="flex gap-2">
-                                        {(groupSched[expandedDay].start || groupSched[expandedDay].end) && (
-                                          <button type="button" className="text-xs text-muted-foreground hover:underline"
-                                            onClick={() => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: '', end: '' } } } }))}>
-                                            Clear
-                                          </button>
-                                        )}
-                                        <button type="button" className="text-xs text-destructive hover:underline"
-                                          onClick={() => {
-                                            setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { enabled: false, start: '', end: '' } } } }));
-                                            setExpandedDay(null);
-                                          }}>
-                                          Disable day
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex items-center gap-1.5 flex-1">
-                                        <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
-                                        <input type="time" value={groupSched[expandedDay].start}
-                                          onChange={e => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: e.target.value } } } }))}
-                                          className="input-field flex-1 text-sm" />
-                                      </div>
-                                      <div className="flex items-center gap-1.5 flex-1">
-                                        <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
-                                        <input type="time" value={groupSched[expandedDay].end}
-                                          onChange={e => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], end: e.target.value } } } }))}
-                                          className="input-field flex-1 text-sm" />
-                                      </div>
-                                    </div>
-                                    {!groupSched[expandedDay].start && !groupSched[expandedDay].end && (
-                                      <p className="text-xs text-muted-foreground">All hours (no restriction)</p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => handleToggleStation(id)}
+                        className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
+                      >
+                        <span>Station {id}{st?.label ? ` — ${st.label}` : ''}</span>
+                        <span className="text-[10px] leading-none">✕</span>
+                      </button>
                     );
                   })}
                 </div>
+                {stations.length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                    {stations.map((station) => (
+                      <label
+                        key={station.id}
+                        className="flex items-center gap-2 text-xs cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={stationDraft.includes(station.id)}
+                          onCheckedChange={() => handleToggleStation(station.id)}
+                        />
+                        <span className="text-muted-foreground">
+                          Station {station.id}{station.label ? ` — ${station.label}` : ''}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 )}
-              </div>{/* end AccordionContent space-y-4 */}
+              </div>
             </AccordionContent>
           </AccordionItem>
 
@@ -1955,6 +1792,287 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
+          <AccordionItem value="availability" className="border-b border-border px-3">
+            <AccordionTrigger className="px-0 py-3 hover:no-underline items-start gap-2 [&>svg]:mt-1">
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Availability</div>
+                <div className="text-[10px] font-normal normal-case text-muted-foreground truncate mt-0.5 pr-2">
+                  {draft.inheritVisibilityFromCategory
+                    ? `Inherited · ${inheritedVisibilitySummary}`
+                    : buildAvailabilitySummary(draft)}
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4">
+                {/* Inherit visibility from category — overrides the editor below when on */}
+                <label
+                  htmlFor="inheritVisibility"
+                  title="Inherit channels & schedule from category"
+                  className="flex items-center justify-between gap-1.5 text-xs font-medium cursor-pointer"
+                >
+                  Inherit from category
+                  <Switch
+                    id="inheritVisibility"
+                    checked={draft.inheritVisibilityFromCategory}
+                    onCheckedChange={(checked) =>
+                      setDraft((d) => ({ ...d, inheritVisibilityFromCategory: checked }))
+                    }
+                  />
+                </label>
+
+                {draft.inheritVisibilityFromCategory ? (
+                  <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5 space-y-1">
+                    <p className="text-[11px] font-medium text-foreground">{inheritedVisibilitySummary}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Channels &amp; schedule follow this item’s category. Turn off to set an override.
+                    </p>
+                  </div>
+                ) : (
+                /* Channel dropdowns — per-group schedule editor inside each */
+                <div className="space-y-1.5">
+                  {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
+                    const isOpen = openChannelGroup === group;
+                    const active = channels.filter(c => draft[c.key]);
+                    const triggerLabel =
+                      active.length === 0 ? 'None' :
+                      active.length === channels.length ? 'All' :
+                      active.map(c => c.label).join(', ');
+                    const groupKey = group as VisibilityGroup;
+                    const groupSched = draft.daySchedulesByGroup[groupKey];
+                    return (
+                      <div key={group}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenChannelGroup(isOpen ? null : group);
+                            setExpandedDay(null);
+                            setBulkStart('');
+                            setBulkEnd('');
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                            isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
+                          )}
+                        >
+                          <span className="font-medium text-foreground">{group}</span>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <span className={cn(active.length > 0 && active.length < channels.length && 'text-primary')}>{triggerLabel}</span>
+                            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="mt-0.5 rounded-md border border-border overflow-hidden">
+                            {/* Channel checkboxes */}
+                            <div className="divide-y divide-border">
+                              {channels.map(({ key, label }) => {
+                                const checked = draft[key];
+                                return (
+                                  <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                                    <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                                    <input type="checkbox" checked={checked} onChange={() => setDraft(d => toggleVisibilityChannel(d, key))} className="accent-primary cursor-pointer" />
+                                  </label>
+                                );
+                              })}
+                            </div>
+
+                            {/* Schedule for this group */}
+                            <div className="border-t border-border px-3 py-2 space-y-2 bg-muted/20">
+                              {/* Bulk hours */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                                  {(bulkStart || bulkEnd) && (
+                                    <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1.5 flex-1">
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+                                    <input type="time" value={bulkStart} onChange={e => setBulkStart(e.target.value)} className="input-field flex-1 text-sm" />
+                                  </div>
+                                  <div className="flex items-center gap-1.5 flex-1">
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+                                    <input type="time" value={bulkEnd} onChange={e => setBulkEnd(e.target.value)} className="input-field flex-1 text-sm" />
+                                  </div>
+                                  <button type="button" disabled={!bulkStart && !bulkEnd}
+                                    onClick={() => {
+                                      setDraft(prev => {
+                                        const next = { ...prev.daySchedulesByGroup[groupKey] };
+                                        for (const d of SCHEDULE_DAYS) {
+                                          if (next[d].enabled) next[d] = { ...next[d], start: bulkStart, end: bulkEnd };
+                                        }
+                                        return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
+                                      });
+                                    }}
+                                    className="text-xs px-2.5 py-1.5 rounded-md border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap">
+                                    Apply to all
+                                  </button>
+                                </div>
+                                {!bulkStart && !bulkEnd && <p className="text-[10px] text-muted-foreground">Set times above then click Apply.</p>}
+                              </div>
+
+                              {/* Per-day toggles */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                                  <button type="button" className="text-xs text-primary hover:underline"
+                                    onClick={() => {
+                                      const allEnabled = SCHEDULE_DAYS.every(d => groupSched[d].enabled);
+                                      setDraft(prev => {
+                                        const next = { ...prev.daySchedulesByGroup[groupKey] };
+                                        for (const d of SCHEDULE_DAYS) next[d] = { ...next[d], enabled: !allEnabled };
+                                        return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } };
+                                      });
+                                    }}>
+                                    {SCHEDULE_DAYS.every(d => groupSched[d].enabled) ? 'All days' : 'Select all'}
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {SCHEDULE_DAYS.map(day => {
+                                    const sched = groupSched[day];
+                                    const isExpanded = expandedDay === day;
+                                    const hasTime = sched.start || sched.end;
+                                    return (
+                                      <button key={day} type="button"
+                                        onClick={() => {
+                                          if (!sched.enabled) {
+                                            setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [day]: { ...sched, enabled: true } } } }));
+                                            setExpandedDay(day);
+                                          } else if (isExpanded) {
+                                            setExpandedDay(null);
+                                          } else {
+                                            setExpandedDay(day);
+                                          }
+                                        }}
+                                        className={cn("px-2 py-1.5 rounded text-xs font-medium transition-colors border min-w-[36px]",
+                                          sched.enabled ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 text-muted-foreground border-border")}>
+                                        {day.slice(0, 1)}{sched.enabled && hasTime ? ' ·' : ''}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Expanded day time editor */}
+                                {expandedDay && groupSched[expandedDay].enabled && (
+                                  <div className="mt-2 p-3 rounded-md border border-border bg-muted/30 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-xs font-medium">{expandedDay} hours</p>
+                                      <div className="flex gap-2">
+                                        {(groupSched[expandedDay].start || groupSched[expandedDay].end) && (
+                                          <button type="button" className="text-xs text-muted-foreground hover:underline"
+                                            onClick={() => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: '', end: '' } } } }))}>
+                                            Clear
+                                          </button>
+                                        )}
+                                        <button type="button" className="text-xs text-destructive hover:underline"
+                                          onClick={() => {
+                                            setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { enabled: false, start: '', end: '' } } } }));
+                                            setExpandedDay(null);
+                                          }}>
+                                          Disable day
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1.5 flex-1">
+                                        <span className="text-xs text-muted-foreground whitespace-nowrap">From</span>
+                                        <input type="time" value={groupSched[expandedDay].start}
+                                          onChange={e => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], start: e.target.value } } } }))}
+                                          className="input-field flex-1 text-sm" />
+                                      </div>
+                                      <div className="flex items-center gap-1.5 flex-1">
+                                        <span className="text-xs text-muted-foreground whitespace-nowrap">To</span>
+                                        <input type="time" value={groupSched[expandedDay].end}
+                                          onChange={e => setDraft(prev => ({ ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: { ...prev.daySchedulesByGroup[groupKey], [expandedDay]: { ...prev.daySchedulesByGroup[groupKey][expandedDay], end: e.target.value } } } }))}
+                                          className="input-field flex-1 text-sm" />
+                                      </div>
+                                    </div>
+                                    {!groupSched[expandedDay].start && !groupSched[expandedDay].end && (
+                                      <p className="text-xs text-muted-foreground">All hours (no restriction)</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                )}
+              </div>{/* end AccordionContent space-y-4 */}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="taxes" className="border-b border-border px-3">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Taxes
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="tax" className="text-xs text-muted-foreground">Tax</Label>
+                    <button
+                      type="button"
+                      title={draft.taxLinkedWithParentSetting ? 'Tax linked to category (click to unlink)' : 'Tax unlinked from category (click to link)'}
+                      onClick={() => setDraft(d => ({ ...d, taxLinkedWithParentSetting: !d.taxLinkedWithParentSetting }))}
+                      className={`rounded p-0.5 transition-colors ${draft.taxLinkedWithParentSetting ? 'text-primary hover:bg-primary/20' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                    >
+                      {draft.taxLinkedWithParentSetting ? <Link className="w-3 h-3" /> : <Unlink className="w-3 h-3" />}
+                    </button>
+                  </div>
+                  <Select value={taxSelectValue} onValueChange={handleTaxChange}>
+                    <SelectTrigger id="tax" className="input-field">
+                      <SelectValue>
+                        {taxSelectValue === 'none'
+                          ? 'No tax'
+                          : taxSelectValue === 'standard'
+                            ? `Standard · ${taxRate}%`
+                            : (() => {
+                                const t = customTaxes.find((c) => c.id === draft.customTaxId);
+                                return t ? `${t.name} · ${t.rate}%` : `Standard · ${taxRate}%`;
+                              })()}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectOption value="none">No sales tax</SelectOption>
+                      <SelectOption value="standard">{`Standard rate (${taxRate}%)`}</SelectOption>
+                      {customTaxes.map((t) => (
+                        <SelectOption key={t.id} value={String(t.id)}>
+                          {`${t.name} · ${t.rate}%`}
+                        </SelectOption>
+                      ))}
+                      <div className="border-t mt-1 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('settings')}
+                          className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm transition-colors"
+                        >
+                          Manage custom taxes
+                        </button>
+                      </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Takeout exception */}
+                {effectiveTaxRate > 0 && (
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="takeoutException" className="text-sm font-normal cursor-pointer">Takeout exception</Label>
+                    <Switch
+                      id="takeoutException"
+                      checked={draft.takeoutException}
+                      onCheckedChange={(checked) => setDraft(d => ({ ...d, takeoutException: checked }))}
+                    />
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
           <AccordionItem value="tags" className="border-b border-border px-3">
             <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span className="flex items-center gap-2">
@@ -2112,65 +2230,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   >
                     <Plus className="w-3 h-3" /> New tag
                   </button>
-                )}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="stations" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <span className="flex items-center gap-2">
-                Stations
-                {stationDraft.length > 0 && (
-                  <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
-                    ({stationDraft.length})
-                  </span>
-                )}
-              </span>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Assign this item to one or more kitchen stations.
-                </p>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {stationDraft.length === 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      No stations assigned
-                    </span>
-                  )}
-                  {stationDraft.map((id) => {
-                    const st = stations.find((s) => s.id === id);
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => handleToggleStation(id)}
-                        className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex items-center gap-1"
-                      >
-                        <span>Station {id}{st?.label ? ` — ${st.label}` : ''}</span>
-                        <span className="text-[10px] leading-none">✕</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {stations.length > 0 && (
-                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                    {stations.map((station) => (
-                      <label
-                        key={station.id}
-                        className="flex items-center gap-2 text-xs cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={stationDraft.includes(station.id)}
-                          onCheckedChange={() => handleToggleStation(station.id)}
-                        />
-                        <span className="text-muted-foreground">
-                          Station {station.id}{station.label ? ` — ${station.label}` : ''}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
                 )}
               </div>
             </AccordionContent>
@@ -2359,41 +2418,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="third-party" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Third-party delivery prices
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Optional per-platform prices. Leave blank to use the base price.
-                </p>
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
-                    { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
-                    { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
-                  ]).map(({ label, value, setInput, field }) => (
-                    <div key={field} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">{label}</Label>
-                      <NumberStepperInput
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={value}
-                        onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
-                        onStep={(delta) =>
-                          handle3poPriceChange(Math.max(0, (parseFloat(value) || 0) + delta).toFixed(2), setInput, field)
-                        }
-                        prefix={<span className="text-muted-foreground">$</span>}
-                        wrapperClassName="w-full"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
           <AccordionItem value="order-quantity" className="border-b border-border px-3">
             <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Order quantity
@@ -2535,22 +2559,16 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         onOpenChange={(open) => { if (!open) setImageModalTarget(null); }}
         onSelect={(url) => {
           if (!imageModalTarget) return;
-          setDraft((current) => {
-            if (imageModalTarget === 'landscapeImage') {
-              return { ...current, landscapeImage: url };
-            }
-            const hasAnyImage = ITEM_IMAGE_FIELDS.some(({ field }) => current[field]);
-            if (!hasAnyImage) {
-              return {
-                ...current,
-                itemPicture: url,
-                kioskItemImage: url,
-                onlineImage: url,
-                thirdPartyImage: url,
-              };
-            }
-            return { ...current, [imageModalTarget]: url };
-          });
+          const patch: Partial<DraftState> = imageModalTarget === 'landscapeImage'
+            ? { landscapeImage: url }
+            : ITEM_IMAGE_FIELDS.every(({ field }) => !draft[field])
+              // The first image chosen seeds all channel-specific fields.
+              ? { itemPicture: url, kioskItemImage: url, onlineImage: url, thirdPartyImage: url }
+              : { [imageModalTarget]: url };
+          setDraft((current) => ({ ...current, ...patch }));
+          // Images upload to permanent storage immediately, so persist right
+          // away instead of waiting for the user to click Save.
+          updateItem(item.id, patch);
         }}
       />
 

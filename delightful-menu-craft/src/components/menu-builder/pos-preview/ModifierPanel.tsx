@@ -8,8 +8,12 @@ import type {
   ModifierOption,
   ModifierModifierOption,
   ItemModifier,
+  PizzaSide,
 } from '@/types/menu';
+import { pizzaOptionPrice } from '@/lib/posPricing';
 import { POS_TILE_FRAME } from './posTileStyles';
+
+export type { PizzaSide };
 
 /** Canonical modifier behavior type. Checks modType first, falls back to isOptional string for legacy data. */
 export function getEffectiveModType(mod: Modifier): 'Required' | 'Push Optional' | 'Optional' {
@@ -73,8 +77,6 @@ export function filterRootItemModifiers(linked: Modifier[], allModifiers: Modifi
   });
 }
 
-export type PizzaSide = 'left' | 'right' | 'whole';
-
 export function getChildModifiersForInit(modifier: Modifier, allModifiers: Modifier[]): Modifier[] {
   if (modifier.modifierIds) {
     const fromIds = modifier.modifierIds
@@ -96,6 +98,7 @@ export function buildInitialModifierState(
   modifiers: Modifier[],
   modifierModifierOptions: ModifierModifierOption[],
   modifierOptions: ModifierOption[],
+  initialPizzaSides?: Record<number, PizzaSide>,
 ): { selectedOptions: Record<number, number[]>; pizzaSides: Record<number, PizzaSide> } {
   const defaults: Record<number, number[]> = {};
   const seedDefaults = (modId: number) => {
@@ -132,7 +135,7 @@ export function buildInitialModifierState(
     }
     if (mod.pizzaSelection) {
       for (const oid of merged[mod.id] ?? []) {
-        pizzaSides[oid] = 'whole';
+        pizzaSides[oid] = initialPizzaSides?.[oid] ?? 'whole';
       }
     }
   };
@@ -163,11 +166,18 @@ const SIDE_COLORS: Record<PizzaSide, string> = { left: 'bg-blue-500', right: 'bg
 interface ModifierPanelProps {
   item: Item;
   categoryColor: string;
-  onDone: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
+  onDone: (
+    item: Item,
+    selectedOptions: Record<number, number[]>,
+    qty: number,
+    pizzaSides: Record<number, PizzaSide>,
+  ) => void;
   onCancel: () => void;
   /** When reopening a ticket line (QSR), pass saved selections so required mods stay satisfied. */
   initialSelectedOptions?: Record<number, number[]>;
   initialQty?: number;
+  /** Saved pizza sides for the reopened line (optionId → side). */
+  initialPizzaSides?: Record<number, PizzaSide>;
   /** When true, POS ticket overlay should dim (same condition as Done disabled: !canPressDone). */
   onTicketBlockChange?: (blocked: boolean) => void;
 }
@@ -179,6 +189,7 @@ export function ModifierPanel({
   onCancel,
   initialSelectedOptions,
   initialQty,
+  initialPizzaSides,
   onTicketBlockChange,
 }: ModifierPanelProps) {
   const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions } = useMenuStore();
@@ -205,6 +216,7 @@ export function ModifierPanel({
       modifiers,
       modifierModifierOptions,
       modifierOptions,
+      initialPizzaSides,
     ),
   );
   const [selectedOptions, setSelectedOptions] = useState(() => initialBundle.selectedOptions);
@@ -243,6 +255,7 @@ export function ModifierPanel({
       modifierOptionId: o.id,
       isDefaultSelected: false,
       maxLimit: 0,
+      wholePrice: undefined as number | undefined,
       optionDisplayName: o.optionName,
       sortOrder: idx,
       maxQtyPerOption: 1,
@@ -433,11 +446,14 @@ export function ModifierPanel({
 
         <div className="flex flex-wrap gap-2">
           {currentOptions.map(
-            ({ modifierOptionId, option, isDefaultSelected, maxQtyPerOption = 1, maxLimit }) => {
-            const surcharge = typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
+            ({ modifierOptionId, option, isDefaultSelected, maxQtyPerOption = 1, maxLimit, wholePrice }) => {
             const isPizza = mod.pizzaSelection;
             const activeSelections = selectedOptions[mod.id];
             const pizzaSide = pizzaSides[modifierOptionId];
+            // Pizza tiles price by side: the chosen side once selected, else the active strip side.
+            const surcharge = isPizza
+              ? pizzaOptionPrice({ maxLimit, wholePrice }, pizzaSide ?? currentPizzaSide)
+              : typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
             const isMultiQty = !isPizza && maxQtyPerOption !== 1;
             const qty = isMultiQty
               ? (activeSelections?.filter((id) => id === modifierOptionId).length ?? 0)
@@ -645,7 +661,7 @@ export function ModifierPanel({
             disabled={!canPressDone}
             onClick={() => {
               if (!canPressDone) return;
-              onDone(item, selectedOptions, qty);
+              onDone(item, selectedOptions, qty, pizzaSides);
             }}
             title={
               !canPressDone

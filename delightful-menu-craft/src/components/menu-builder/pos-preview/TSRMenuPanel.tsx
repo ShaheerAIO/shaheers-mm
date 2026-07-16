@@ -2,21 +2,31 @@ import { useState, useMemo, useCallback } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
-import { ChevronRight } from 'lucide-react';
-import type { Category, Item } from '@/types/menu';
+import { ChevronRight, UtensilsCrossed } from 'lucide-react';
+import type { Category, Item, PizzaSide } from '@/types/menu';
 import { ModifierPanel, itemHasPopupModifiers } from './ModifierPanel';
 import { POS_TILE_FRAME } from './posTileStyles';
 import { isAvailableOnChannelAt } from '@/lib/visibility';
 
 interface TSRMenuPanelProps {
-  onAddToTicket: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
+  onAddToTicket: (
+    item: Item,
+    selectedOptions: Record<number, number[]>,
+    qty: number,
+    pizzaSides?: Record<number, PizzaSide>,
+  ) => void;
   onTicketBlockChange?: (blocked: boolean) => void;
   searchQuery?: string;
+  /** When true, categories/subcategories/items render as image row cards. */
+  imageMode?: boolean;
 }
 
 type DrillLevel = 'categories' | 'subcategories' | 'items' | 'modifiers';
 
-export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery = '' }: TSRMenuPanelProps) {
+/** Fixed 16:9-ish image-mode card: image on the left, name on the right. */
+const IMAGE_CARD_FRAME = 'w-[210px] h-[118px] shrink-0';
+
+export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery = '', imageMode = false }: TSRMenuPanelProps) {
   const {
     categories,
     items,
@@ -216,8 +226,8 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
     setActiveItemId(item.id);
   };
 
-  const handleDone = (item: Item, opts: Record<number, number[]>, qty: number) => {
-    onAddToTicket(item, opts, qty);
+  const handleDone = (item: Item, opts: Record<number, number[]>, qty: number, sides: Record<number, PizzaSide>) => {
+    onAddToTicket(item, opts, qty, sides);
     setActiveItemId(null);
   };
 
@@ -278,6 +288,8 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
                   )}
                   style={{ borderLeftWidth: 3, borderLeftColor: accent }}
                 >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {imageMode && <Thumb image={item.itemPicture} name={item.itemName} />}
                   <div className="min-w-0">
                     <div className={cn('text-sm font-medium text-zinc-100 truncate', unavailable && 'line-through')}>
                       {item.posDisplayName || item.itemName}
@@ -285,6 +297,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
                     {categoryName && (
                       <div className="text-[10px] text-zinc-500 truncate">{categoryName}</div>
                     )}
+                  </div>
                   </div>
                   <span className="text-xs font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums shrink-0">
                     ${item.itemPrice.toFixed(2)}
@@ -304,6 +317,24 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       >
         {/* Level: categories */}
         {level === 'categories' && (
+          imageMode ? (
+            <div className="flex flex-wrap gap-2.5">
+              {rootCategories.map((cat) => (
+                <CategoryImageCard
+                  key={cat.id}
+                  name={cat.posDisplayName || cat.categoryName}
+                  color={cat.color || '#f97316'}
+                  image={cat.image}
+                  onClick={() => handleCategoryClick(cat)}
+                />
+              ))}
+              {rootCategories.length === 0 && (
+                <p className="w-full text-center text-zinc-600 text-sm py-8">
+                  No categories in this menu
+                </p>
+              )}
+            </div>
+          ) : (
           <div className="flex flex-wrap gap-2">
             {rootCategories.map((cat) => (
               <button
@@ -324,6 +355,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
               </p>
             )}
           </div>
+          )
         )}
 
         {/* Level: subcategories — subcategory buttons on top; items stack underneath (not above) */}
@@ -334,7 +366,16 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
               const expanded = activeSubcategoryId === cat.id;
               const subItems = getItemsForCategoryId(cat.id);
               return (
-                <div key={cat.id} className="flex flex-col gap-2 min-w-0 items-start">
+                <div key={cat.id} className={cn('flex flex-col gap-2 min-w-0', imageMode ? 'items-stretch' : 'items-start')}>
+                  {imageMode ? (
+                    <CategoryImageCard
+                      name={cat.posDisplayName || cat.categoryName}
+                      color={subAccent}
+                      image={cat.image}
+                      expanded={expanded}
+                      onClick={() => handleSubcategoryClick(cat.id)}
+                    />
+                  ) : (
                   <button
                     type="button"
                     onClick={() => handleSubcategoryClick(cat.id)}
@@ -349,7 +390,24 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
                       {cat.posDisplayName || cat.categoryName}
                     </span>
                   </button>
+                  )}
                   {expanded && (
+                    imageMode ? (
+                      <div className="flex flex-wrap gap-2.5 w-full max-w-full pl-2 sm:pl-3 ml-0.5 sm:ml-1 border-l-2 border-zinc-600/70 pt-1 pb-1">
+                        {subItems.map((item) => (
+                          <ItemTileButton
+                            key={item.id}
+                            item={item}
+                            accentColor={subAccent}
+                            onPick={() => handleItemClick(item)}
+                            imageMode
+                          />
+                        ))}
+                        {subItems.length === 0 && (
+                          <p className="w-full text-zinc-600 text-xs py-2">No items in this subcategory</p>
+                        )}
+                      </div>
+                    ) : (
                     <div className="flex flex-col gap-2 w-full max-w-full pl-2 sm:pl-3 ml-0.5 sm:ml-1 border-l-2 border-zinc-600/70 pt-1 pb-1">
                       {subItems.map((item) => (
                         <ItemTileButton
@@ -363,6 +421,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
                         <p className="w-full text-zinc-600 text-xs py-2">No items in this subcategory</p>
                       )}
                     </div>
+                    )
                   )}
                 </div>
               );
@@ -373,13 +432,14 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 px-0.5">
                   {activeCategory?.posDisplayName || activeCategory?.categoryName}
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className={cn('flex flex-wrap', imageMode ? 'gap-2.5' : 'gap-2')}>
                   {directRootItems.map((item) => (
                     <ItemTileButton
                       key={item.id}
                       item={item}
                       accentColor={activeCategory?.color || '#f97316'}
                       onPick={() => handleItemClick(item)}
+                      imageMode={imageMode}
                     />
                   ))}
                 </div>
@@ -390,13 +450,14 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
 
         {/* Level: items (category has no subcategories) */}
         {level === 'items' && (
-          <div className="flex flex-wrap gap-2">
+          <div className={cn('flex flex-wrap', imageMode ? 'gap-2.5' : 'gap-2')}>
             {currentItemsNoSubcats.map((item) => (
               <ItemTileButton
                 key={item.id}
                 item={item}
                 accentColor={accentColor}
                 onPick={() => handleItemClick(item)}
+                imageMode={imageMode}
               />
             ))}
             {currentItemsNoSubcats.length === 0 && (
@@ -427,12 +488,47 @@ function ItemTileButton({
   item,
   accentColor,
   onPick,
+  imageMode = false,
 }: {
   item: Item;
   accentColor: string;
   onPick: () => void;
+  imageMode?: boolean;
 }) {
   const unavailable = item.stockStatus !== 'inStock';
+
+  if (imageMode) {
+    return (
+      <button
+        type="button"
+        onClick={onPick}
+        className={cn(
+          `${IMAGE_CARD_FRAME} flex items-stretch rounded-lg overflow-hidden box-border text-left transition-all`,
+          'bg-[hsl(var(--pos-menu-tile))] border border-zinc-700/80',
+          'hover:border-zinc-500 hover:bg-zinc-800/80 active:scale-[0.98]',
+          unavailable && 'opacity-45 border-red-900/50 cursor-not-allowed',
+        )}
+        style={{ borderLeftWidth: 5, borderLeftColor: accentColor }}
+        disabled={unavailable}
+      >
+        <Thumb image={item.itemPicture} name={item.itemName} tall />
+        <div className="flex flex-col min-w-0 flex-1 justify-center gap-1 px-3 py-2">
+          <span
+            className={cn(
+              'text-sm font-medium leading-snug text-zinc-100 line-clamp-3',
+              unavailable && 'line-through',
+            )}
+          >
+            {shortenName(item.posDisplayName || item.itemName)}
+          </span>
+          <span className="text-xs font-semibold text-[hsl(var(--pos-accent-muted))] tabular-nums">
+            ${item.itemPrice.toFixed(2)}
+          </span>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -458,5 +554,66 @@ function ItemTileButton({
         ${item.itemPrice.toFixed(2)}
       </span>
     </button>
+  );
+}
+
+/** Horizontal category / subcategory card with an image thumbnail (image mode). */
+function CategoryImageCard({
+  name,
+  color,
+  image,
+  expanded = false,
+  onClick,
+}: {
+  name: string;
+  color: string;
+  image?: string;
+  expanded?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        `${IMAGE_CARD_FRAME} flex items-stretch rounded-lg overflow-hidden box-border text-left transition-all`,
+        'bg-[hsl(var(--pos-menu-tile))] border border-zinc-700/80',
+        'hover:border-zinc-500 hover:bg-zinc-800/80 active:scale-[0.98]',
+        expanded && 'ring-2 ring-white/50',
+      )}
+      style={{ borderLeftWidth: 5, borderLeftColor: color }}
+    >
+      <Thumb image={image} name={name} tall />
+      <span className="flex-1 flex items-center text-sm font-semibold text-zinc-100 line-clamp-3 leading-tight px-3 py-2">
+        {name}
+      </span>
+    </button>
+  );
+}
+
+/** Image thumbnail with graceful fallback to a utensils icon. */
+function Thumb({ image, name, tall = false }: { image?: string; name: string; tall?: boolean }) {
+  const [imgError, setImgError] = useState(false);
+  const showImage = image && !imgError;
+  return (
+    <div
+      className={cn(
+        'shrink-0 overflow-hidden bg-zinc-800',
+        tall ? 'h-full w-[120px]' : 'h-11 w-11 rounded-md',
+      )}
+    >
+      {showImage ? (
+        <img
+          src={image}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-zinc-600">
+          <UtensilsCrossed className="h-6 w-6" />
+        </div>
+      )}
+    </div>
   );
 }

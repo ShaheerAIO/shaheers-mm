@@ -10,6 +10,8 @@ import {
   MoreVertical,
   Trash2,
   AlertCircle,
+  Image as ImageIcon,
+  List,
 } from 'lucide-react';
 import {
   Select,
@@ -18,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Item } from '@/types/menu';
+import type { Item, PizzaSide } from '@/types/menu';
 import { QSRMenuPanel } from './pos-preview/QSRMenuPanel';
 import { TSRMenuPanel } from './pos-preview/TSRMenuPanel';
 import { ModifierPanel, itemHasPopupModifiers } from './pos-preview/ModifierPanel';
@@ -36,6 +38,8 @@ interface TicketLine {
   qty: number;
   /** modifierId -> selected optionIds */
   selectedOptions: Record<number, number[]>;
+  /** optionId -> pizza side, for pizza-selection modifiers (drives half/whole pricing) */
+  pizzaSides?: Record<number, PizzaSide>;
 }
 
 type PosMode = 'qsr' | 'tsr';
@@ -50,6 +54,9 @@ export function POSPreview() {
 
   // POS mode toggle
   const [posMode, setPosMode] = useState<PosMode>('tsr');
+
+  // TSR image / text view toggle
+  const [tsrImageMode, setTsrImageMode] = useState(true);
 
   // Search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -93,6 +100,7 @@ export function POSPreview() {
     item: Item,
     selectedOptions: Record<number, number[]> = {},
     qty = 1,
+    pizzaSides: Record<number, PizzaSide> = {},
   ) => {
     setTicketLines((prev) => [
       ...prev,
@@ -101,6 +109,7 @@ export function POSPreview() {
         item,
         qty,
         selectedOptions,
+        pizzaSides,
       },
     ]);
   };
@@ -148,18 +157,23 @@ export function POSPreview() {
     return ticketLines.find((l) => l.lineId === editingLineId)?.qty;
   }, [editingLineId, ticketLines]);
 
+  const qsrModifierInitialPizzaSides = useMemo(() => {
+    if (!editingLineId) return undefined;
+    return ticketLines.find((l) => l.lineId === editingLineId)?.pizzaSides;
+  }, [editingLineId, ticketLines]);
+
   // Financials
   const subtotal = useMemo(
     () =>
       ticketLines.reduce((s, l) => {
-        const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+        const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions, l.pizzaSides);
         return s + unit * l.qty;
       }, 0),
     [ticketLines, modifiers, modifierModifierOptions],
   );
   const tax = useMemo(() => {
     const raw = ticketLines.reduce((s, l) => {
-      const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+      const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions, l.pizzaSides);
       const base = unit * l.qty;
       const rate = effectiveItemTaxRate(l.item, customTaxes, taxRate);
       return s + base * (rate / 100);
@@ -250,8 +264,10 @@ export function POSPreview() {
             ) : (
               ticketLines.map((line) => {
                 const hasModifiers = itemModifiers.some((im) => im.itemId === line.item.id);
-                const unitPrice = effectiveUnitPrice(line.item.itemPrice, line.selectedOptions, modifiers, modifierModifierOptions);
+                const unitPrice = effectiveUnitPrice(line.item.itemPrice, line.selectedOptions, modifiers, modifierModifierOptions, line.pizzaSides);
                 const lineTotal = unitPrice * line.qty;
+                /** Per-unit delta from base price (mod surcharges; size pricing can shift it too). */
+                const modPerUnit = unitPrice - line.item.itemPrice;
                 return (
                 <div
                   key={line.lineId}
@@ -431,6 +447,38 @@ export function POSPreview() {
             </div>
 
             <div className="flex items-center gap-1">
+              {posMode === 'tsr' && (
+                <div className="flex rounded-lg border border-[hsl(var(--pos-shell-border))] overflow-hidden shrink-0 mr-1">
+                  <button
+                    type="button"
+                    onClick={() => setTsrImageMode(true)}
+                    className={cn(
+                      'p-1.5 transition-colors',
+                      tsrImageMode
+                        ? 'bg-[hsl(var(--pos-primary))] text-white'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                    )}
+                    aria-label="Image view"
+                    aria-pressed={tsrImageMode}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTsrImageMode(false)}
+                    className={cn(
+                      'p-1.5 transition-colors border-l border-[hsl(var(--pos-shell-border))]',
+                      !tsrImageMode
+                        ? 'bg-[hsl(var(--pos-primary))] text-white'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                    )}
+                    aria-label="List view"
+                    aria-pressed={!tsrImageMode}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {searchOpen && (
                 <input
                   autoFocus
@@ -479,21 +527,22 @@ export function POSPreview() {
                   categoryColor="#f97316"
                   initialSelectedOptions={qsrModifierInitialSelections}
                   initialQty={qsrModifierInitialQty}
+                  initialPizzaSides={qsrModifierInitialPizzaSides}
                   onTicketBlockChange={handleModifierTicketBlock}
-                  onDone={(item, opts, qty) => {
+                  onDone={(item, opts, qty, sides) => {
                     if (editingLineId) {
                       // Update existing line
                       setTicketLines((prev) =>
                         prev.map((line) =>
                           line.lineId === editingLineId
-                            ? { ...line, selectedOptions: opts, qty }
+                            ? { ...line, selectedOptions: opts, qty, pizzaSides: sides }
                             : line
                         )
                       );
                       setEditingLineId(null);
                     } else {
                       // Add new line
-                      addToTicket(item, opts, qty);
+                      addToTicket(item, opts, qty, sides);
                     }
                     setQsrModifierItem(null);
                   }}
@@ -513,6 +562,7 @@ export function POSPreview() {
                 onAddToTicket={addToTicket}
                 onTicketBlockChange={handleModifierTicketBlock}
                 searchQuery={searchQuery}
+                imageMode={tsrImageMode}
               />
             )}
           </div>
@@ -526,6 +576,8 @@ export function POSPreview() {
 // Sub-component: display selected modifier option names on a ticket line
 // ---------------------------------------------------------------------------
 
+const TICKET_SIDE_LABELS: Record<PizzaSide, string> = { left: ' (Left)', right: ' (Right)', whole: ' (Whole)' };
+
 function TicketLineOptions({ line }: { line: TicketLine }) {
   const { modifiers, modifierOptions } = useMenuStore();
 
@@ -536,9 +588,11 @@ function TicketLineOptions({ line }: { line: TicketLine }) {
     for (const optionId of optionIds) {
       const option = modifierOptions.find((o) => o.id === optionId);
       if (option) {
+        const side = line.pizzaSides?.[optionId];
+        const name = (option.posDisplayName || option.optionName) + (side ? TICKET_SIDE_LABELS[side] : '');
         const label = modifier
-          ? `${modifier.posDisplayName || modifier.modifierName}: ${option.posDisplayName || option.optionName}`
-          : option.posDisplayName || option.optionName;
+          ? `${modifier.posDisplayName || modifier.modifierName}: ${name}`
+          : name;
         labels.push(label);
       }
     }
