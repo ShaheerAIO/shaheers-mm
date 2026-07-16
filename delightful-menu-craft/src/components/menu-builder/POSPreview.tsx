@@ -10,6 +10,8 @@ import {
   MoreVertical,
   Trash2,
   AlertCircle,
+  Image as ImageIcon,
+  List,
 } from 'lucide-react';
 import {
   Select,
@@ -50,6 +52,9 @@ export function POSPreview() {
 
   // POS mode toggle
   const [posMode, setPosMode] = useState<PosMode>('tsr');
+
+  // TSR image / text view toggle
+  const [tsrImageMode, setTsrImageMode] = useState(true);
 
   // Search
   const [searchOpen, setSearchOpen] = useState(false);
@@ -252,6 +257,8 @@ export function POSPreview() {
                 const hasModifiers = itemModifiers.some((im) => im.itemId === line.item.id);
                 const unitPrice = effectiveUnitPrice(line.item.itemPrice, line.selectedOptions, modifiers, modifierModifierOptions);
                 const lineTotal = unitPrice * line.qty;
+                /** Per-unit delta from base price (mod surcharges; size pricing can shift it too). */
+                const modPerUnit = unitPrice - line.item.itemPrice;
                 return (
                 <div
                   key={line.lineId}
@@ -431,6 +438,38 @@ export function POSPreview() {
             </div>
 
             <div className="flex items-center gap-1">
+              {posMode === 'tsr' && (
+                <div className="flex rounded-lg border border-[hsl(var(--pos-shell-border))] overflow-hidden shrink-0 mr-1">
+                  <button
+                    type="button"
+                    onClick={() => setTsrImageMode(true)}
+                    className={cn(
+                      'p-1.5 transition-colors',
+                      tsrImageMode
+                        ? 'bg-[hsl(var(--pos-primary))] text-white'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                    )}
+                    aria-label="Image view"
+                    aria-pressed={tsrImageMode}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTsrImageMode(false)}
+                    className={cn(
+                      'p-1.5 transition-colors border-l border-[hsl(var(--pos-shell-border))]',
+                      !tsrImageMode
+                        ? 'bg-[hsl(var(--pos-primary))] text-white'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5',
+                    )}
+                    aria-label="List view"
+                    aria-pressed={!tsrImageMode}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {searchOpen && (
                 <input
                   autoFocus
@@ -513,6 +552,7 @@ export function POSPreview() {
                 onAddToTicket={addToTicket}
                 onTicketBlockChange={handleModifierTicketBlock}
                 searchQuery={searchQuery}
+                imageMode={tsrImageMode}
               />
             )}
           </div>

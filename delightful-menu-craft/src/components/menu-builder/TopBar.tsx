@@ -7,7 +7,7 @@ import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import { toast } from 'sonner';
 import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useWorkspaceSession, closeWorkspace, useIsReadOnly } from '@/lib/workspaceSync';
+import { useWorkspaceSession, closeWorkspace, useIsReadOnly, renameWorkspace } from '@/lib/workspaceSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye } from 'lucide-react';
 import {
@@ -50,13 +50,51 @@ export function TopBar() {
     (isCreatingOption ? RIGHT_PANEL_WIDTH_PX : 0);
 
   const navigate = useNavigate();
-  const { currentName, status } = useWorkspaceSession();
+  const { currentId, currentName, status } = useWorkspaceSession();
   const isReadOnly = useIsReadOnly();
   const { signOut } = useAuth();
 
   const handleSwitchProject = () => {
     closeWorkspace();
     navigate('/workspaces');
+  };
+
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState('');
+  const [renamingProject, setRenamingProject] = useState(false);
+  const renameCancelledRef = useRef(false);
+
+  const startRenameProject = () => {
+    setProjectNameDraft(currentName ?? '');
+    setIsRenamingProject(true);
+  };
+
+  const cancelRenameProject = () => {
+    renameCancelledRef.current = true;
+    setIsRenamingProject(false);
+    setProjectNameDraft('');
+  };
+
+  const commitRenameProject = async () => {
+    if (renameCancelledRef.current) {
+      renameCancelledRef.current = false;
+      return;
+    }
+    const trimmed = projectNameDraft.trim();
+    setIsRenamingProject(false);
+    if (!currentId || !trimmed || trimmed === currentName) {
+      setProjectNameDraft('');
+      return;
+    }
+    setRenamingProject(true);
+    try {
+      await renameWorkspace(currentId, trimmed);
+    } catch (e) {
+      toast.error(`Could not rename project: ${(e as Error).message}`);
+    } finally {
+      setRenamingProject(false);
+      setProjectNameDraft('');
+    }
   };
 
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
@@ -175,15 +213,45 @@ export function TopBar() {
     >
       <div className="flex items-center gap-3 flex-shrink-0">
         {/* Current workspace + save status + switch */}
-        <button
-          type="button"
-          onClick={handleSwitchProject}
-          title="Switch project"
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors max-w-[200px]"
-        >
-          <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{currentName ?? 'Projects'}</span>
-        </button>
+        {isRenamingProject ? (
+          <div className="flex items-center gap-1">
+            <input
+              autoFocus
+              type="text"
+              value={projectNameDraft}
+              disabled={renamingProject}
+              onChange={(e) => setProjectNameDraft(e.target.value)}
+              onBlur={() => void commitRenameProject()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commitRenameProject();
+                if (e.key === 'Escape') cancelRenameProject();
+              }}
+              className="h-8 max-w-[200px] rounded-md border border-ring bg-background px-2 text-sm font-medium outline-none ring-1 ring-ring"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleSwitchProject}
+              title="Switch project"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors max-w-[200px]"
+            >
+              <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{currentName ?? 'Projects'}</span>
+            </button>
+            {currentId && !isReadOnly && (
+              <button
+                type="button"
+                onClick={startRenameProject}
+                title="Rename project"
+                className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
         {isReadOnly ? (
           <span className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
             <Eye className="w-3 h-3" /> View only

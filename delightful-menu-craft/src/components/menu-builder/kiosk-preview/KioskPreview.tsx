@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Item } from '@/types/menu';
-import { modifierSurchargePerUnit } from '@/lib/posPricing';
+import { effectiveUnitPrice } from '@/lib/posPricing';
 import { KioskMenuScreen } from './KioskMenuScreen';
 import { KioskCustomizeScreen } from './KioskCustomizeScreen';
 import { KioskCartScreen } from './KioskCartScreen';
@@ -24,15 +24,18 @@ export interface CartLine {
   selectedOptions: Record<number, number[]>;
 }
 
+// Design flow: single scrolling menu list → item detail → cart → checkout →
+// confirmation.
 type Screen = 'menu' | 'customize' | 'cart' | 'checkout' | 'confirmation';
 
 /**
  * Kiosk preview: renders the menu the way the Android kiosk displays it so menu
  * engineers can verify items/categories/prices/subtotals after editing. Mirrors
- * POSPreview's local-state model; reuses the shared surcharge math.
+ * POSPreview's local-state model; reuses the shared size-aware pricing math.
  */
 export function KioskPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, modifierModifierOptions } = useMenuStore();
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, modifiers, modifierModifierOptions } =
+    useMenuStore();
 
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   const [screen, setScreen] = useState<Screen>('menu');
@@ -54,11 +57,12 @@ export function KioskPreview() {
 
   const subtotal = useMemo(
     () =>
-      cartLines.reduce((s, l) => {
-        const mod = modifierSurchargePerUnit(l.selectedOptions, modifierModifierOptions);
-        return s + (l.item.itemPrice + mod) * l.qty;
-      }, 0),
-    [cartLines, modifierModifierOptions],
+      cartLines.reduce(
+        (s, l) =>
+          s + effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions) * l.qty,
+        0,
+      ),
+    [cartLines, modifiers, modifierModifierOptions],
   );
   const cartCount = useMemo(() => cartLines.reduce((n, l) => n + l.qty, 0), [cartLines]);
 
@@ -144,6 +148,8 @@ export function KioskPreview() {
               setEditingLineId(null);
               setCustomizeItem(null);
             }}
+            onViewCart={() => setScreen('cart')}
+            cartCount={cartCount}
             onBack={() => {
               setScreen(editingLineId ? 'cart' : 'menu');
               setEditingLineId(null);
@@ -166,7 +172,6 @@ export function KioskPreview() {
             lines={cartLines}
             subtotal={subtotal}
             onBack={() => setScreen('cart')}
-            onAddMore={() => setScreen('menu')}
             onPlaceOrder={() => setScreen('confirmation')}
           />
         ) : screen === 'confirmation' ? (
@@ -182,6 +187,10 @@ export function KioskPreview() {
             cartCount={cartCount}
             subtotal={subtotal}
             onViewCart={() => setScreen('cart')}
+            onStartNewOrder={() => {
+              clearCart();
+              setScreen('menu');
+            }}
           />
         )}
         </div>

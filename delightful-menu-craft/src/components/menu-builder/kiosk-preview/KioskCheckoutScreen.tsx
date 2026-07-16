@@ -1,110 +1,104 @@
+import { useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { ChevronLeft, CheckCircle2 } from 'lucide-react';
-import { modifierSurchargePerUnit } from '@/lib/posPricing';
+import { effectiveUnitPrice } from '@/lib/posPricing';
+import { effectiveItemTaxRate } from '@/lib/tax';
 import type { CartLine } from './KioskPreview';
-import { CartThumb } from './KioskCartScreen';
 
 interface KioskCheckoutScreenProps {
   lines: CartLine[];
   subtotal: number;
   onBack: () => void;
-  onAddMore: () => void;
   onPlaceOrder: () => void;
 }
 
-/** Kiosk checkout: read-only "Review Your Order" recap + Place Order. */
-export function KioskCheckoutScreen({
-  lines,
-  subtotal,
-  onBack,
-  onAddMore,
-  onPlaceOrder,
-}: KioskCheckoutScreenProps) {
-  const { modifiers, modifierOptions, modifierModifierOptions } = useMenuStore();
+/**
+ * Kiosk checkout: Subtotal / Tax / Total summary + estimated prep time + Pay.
+ * Tax mirrors the POS preview exactly (per-item rate × line base, standard rate
+ * from store settings). Tip is intentionally omitted (no menu-data backing).
+ */
+export function KioskCheckoutScreen({ lines, subtotal, onBack, onPlaceOrder }: KioskCheckoutScreenProps) {
+  const { modifiers, modifierModifierOptions, customTaxes, taxRate } = useMenuStore();
 
-  const optionLabels = (line: CartLine): string[] => {
-    const labels: string[] = [];
-    for (const [modifierIdStr, optionIds] of Object.entries(line.selectedOptions)) {
-      const modifier = modifiers.find((m) => m.id === parseInt(modifierIdStr, 10));
-      for (const optionId of optionIds) {
-        const option = modifierOptions.find((o) => o.id === optionId);
-        if (!option) continue;
-        const name = option.posDisplayName || option.optionName;
-        labels.push(modifier ? `${modifier.posDisplayName || modifier.modifierName}: ${name}` : name);
-      }
-    }
-    return labels;
-  };
+  const tax = useMemo(() => {
+    const raw = lines.reduce((s, l) => {
+      const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+      const base = unit * l.qty;
+      const rate = effectiveItemTaxRate(l.item, customTaxes, taxRate);
+      return s + base * (rate / 100);
+    }, 0);
+    return Math.round(raw * 100) / 100;
+  }, [lines, modifiers, modifierModifierOptions, customTaxes, taxRate]);
+
+  const total = Math.round((subtotal + tax) * 100) / 100;
+
+  // Items cook in parallel, so the order's prep time is the slowest item's.
+  const prepTime = useMemo(
+    () => lines.reduce((max, l) => Math.max(max, l.item.preparationTime || 0), 0),
+    [lines],
+  );
 
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/5 bg-white px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F1F1F1]"
-            aria-label="Back"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h2 className="text-base font-semibold text-[#242528]">Review Your Order</h2>
-        </div>
+      <div className="relative flex shrink-0 items-center justify-center border-b border-black/5 bg-white px-4 py-3">
         <button
           type="button"
-          onClick={onAddMore}
-          className="text-sm font-medium text-[#9A9A9A] hover:text-[#ED7C69]"
+          onClick={onBack}
+          className="absolute left-3 flex h-9 w-9 items-center justify-center rounded-full text-[#ED7C69] hover:bg-[#F1F1F1]"
+          aria-label="Back"
         >
-          Add More
+          <ChevronLeft className="h-5 w-5" />
         </button>
+        <h2 className="text-lg font-bold text-[#242528]">Checkout</h2>
       </div>
 
-      {/* Read-only recap */}
+      {/* Summary */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="space-y-3">
-          {lines.map((line) => {
-            const perUnit = modifierSurchargePerUnit(line.selectedOptions, modifierModifierOptions);
-            const lineTotal = (line.item.itemPrice + perUnit) * line.qty;
-            return (
-              <div key={line.lineId} className="flex gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-                <CartThumb item={line.item} />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-[#242528]">
-                      {line.item.posDisplayName || line.item.itemName}
-                    </span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-[#242528]">
-                      ${lineTotal.toFixed(2)}
-                    </span>
-                  </div>
-                  <span className="text-xs text-[#9A9A9A]">Qty {line.qty}</span>
-                  {optionLabels(line).map((label, i) => (
-                    <p key={i} className="truncate text-xs text-[#9A9A9A]">
-                      {label}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+          <div className="space-y-2.5">
+            <SummaryRow label="Subtotal" value={subtotal} />
+            <SummaryRow label="Tax" value={tax} />
+          </div>
+          <div className="mt-3 flex items-center justify-between border-t border-black/10 pt-3">
+            <span className="text-lg font-bold text-[#242528]">Total</span>
+            <span className="text-lg font-bold tabular-nums text-[#ED7C69]">${total.toFixed(2)}</span>
+          </div>
         </div>
+
+        {prepTime > 0 && (
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-black/5">
+            <span className="text-base font-semibold text-[#242528]">Estimated prep time</span>
+            <span className="text-base font-semibold tabular-nums text-[#242528]">{prepTime} mins</span>
+          </div>
+        )}
       </div>
 
-      {/* Subtotal + Place Order */}
-      <div className="shrink-0 space-y-3 border-t border-black/5 bg-white px-4 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-base font-semibold text-[#242528]">Subtotal</span>
-          <span className="text-xl font-bold tabular-nums text-[#ED7C69]">${subtotal.toFixed(2)}</span>
-        </div>
+      {/* Footer */}
+      <div className="flex shrink-0 items-center gap-3 border-t border-black/5 bg-white px-4 py-4">
+        <button
+          type="button"
+          className="rounded-2xl border border-[#ED7C69] px-5 py-3 text-sm font-semibold text-[#ED7C69] transition-colors hover:bg-[#ED7C69]/5"
+        >
+          Need help
+        </button>
         <button
           type="button"
           onClick={onPlaceOrder}
-          className="w-full rounded-2xl bg-[#ED7C69] px-5 py-3.5 text-base font-semibold text-white transition-colors hover:bg-[#E06A55]"
+          className="flex-1 rounded-2xl bg-[#ED7C69] px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-[#E06A55]"
         >
-          Place Order
+          Pay ${total.toFixed(2)}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-[#6B6B6B]">{label}</span>
+      <span className="text-sm font-medium tabular-nums text-[#242528]">${value.toFixed(2)}</span>
     </div>
   );
 }
