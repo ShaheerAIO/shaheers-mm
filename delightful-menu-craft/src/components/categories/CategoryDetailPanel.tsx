@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, X, Plus, Trash2, ChevronDown, ChevronRight, ImageIcon, Upload } from 'lucide-react';
+import { Check, X, Plus, Trash2, ChevronDown, ChevronRight, ImageIcon, Upload, AlertTriangle } from 'lucide-react';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { ColorPalettePicker } from '@/components/ColorPalettePicker';
@@ -16,6 +16,7 @@ import {
   serializeGroupSchedules,
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
+  toggleVisibilityChannel,
   type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
@@ -327,13 +328,14 @@ export function CategoryDetailPanel({ category }: Props) {
 
   const handleImageSelected = (url: string) => {
     if (!imageModalTarget) return;
-    setDraft((current) => {
-      // The first image chosen for a category seeds both channel-specific fields.
-      if (!current.image && !current.kioskImage) {
-        return { ...current, image: url, kioskImage: url };
-      }
-      return { ...current, [imageModalTarget]: url };
-    });
+    // The first image chosen for a category seeds both channel-specific fields.
+    const patch = !draft.image && !draft.kioskImage
+      ? { image: url, kioskImage: url }
+      : { [imageModalTarget]: url };
+    setDraft((current) => ({ ...current, ...patch }));
+    // Images upload to permanent storage immediately, so persist right away
+    // instead of waiting for the user to click Save.
+    updateCategory(category.id, patch);
   };
 
   const assignedCatMods = categoryModifiers
@@ -474,7 +476,19 @@ export function CategoryDetailPanel({ category }: Props) {
               onClick={() => setImagesOpen((o) => !o)}
               className="mb-1.5 flex w-full items-center justify-between gap-2"
             >
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {draft.image || draft.kioskImage ? (
+                  <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded border border-border">
+                    <LoadingImage src={draft.image || draft.kioskImage} alt="Category preview" className="h-full w-full object-cover" />
+                  </span>
+                ) : (
+                  <span
+                    title="No image set"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-600"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                  </span>
+                )}
                 Images{(draft.image || draft.kioskImage) ? ` (${[draft.image, draft.kioskImage].filter(Boolean).length})` : ''}
               </span>
               <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', imagesOpen && 'rotate-180')} />
@@ -547,6 +561,232 @@ export function CategoryDetailPanel({ category }: Props) {
             )}
           </section>
 
+          {/* Category Modifiers */}
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Modifiers ({assignedCatMods.length})
+            </p>
+            <div className="space-y-2">
+              {/* Assigned modifier chips */}
+              {assignedCatMods.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedCatMods.map((cm) => {
+                    const mod = modifiers.find((m) => m.id === cm.modifierId);
+                    if (!mod) return null;
+                    return (
+                      <span
+                        key={cm.modifierId}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted border-border text-foreground"
+                      >
+                        {mod.modifierName}
+                        <button
+                          type="button"
+                          onClick={() => removeCategoryModifier(category.id, cm.modifierId)}
+                          className="text-muted-foreground hover:text-destructive ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add modifier dropdown */}
+              <div className="relative" ref={modifierDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => { setModifierDropdownOpen((o) => !o); setModifierSearch(''); }}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                    modifierDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50'
+                  )}
+                >
+                  <span className="text-muted-foreground">Add modifier…</span>
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', modifierDropdownOpen && 'rotate-90')} />
+                </button>
+                {modifierDropdownOpen && (
+                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                    <div className="p-1.5 border-b border-border">
+                      <input
+                        type="text"
+                        value={modifierSearch}
+                        onChange={(e) => setModifierSearch(e.target.value)}
+                        placeholder="Search modifiers…"
+                        className="input-field h-7 text-xs w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {availableModifiers.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">
+                          {modifierSearch ? 'No matches' : 'All modifiers assigned'}
+                        </p>
+                      ) : (
+                        availableModifiers.map((mod) => (
+                          <button
+                            key={mod.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                            onClick={() => {
+                              addCategoryModifier(category.id, mod.id);
+                              setModifierDropdownOpen(false);
+                              setModifierSearch('');
+                            }}
+                          >
+                            <span>{mod.modifierName}</span>
+                            <span className="text-muted-foreground/60">#{mod.id}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk apply buttons */}
+              {assignedCatMods.length > 0 && (
+                <div className="space-y-1.5 pt-0.5">
+                  {applyFeedback && (
+                    <p className="text-[10px] text-green-600 dark:text-green-400 font-medium">{applyFeedback}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyCategoryModifiersToOptInItems(category.id);
+                      showApplyFeedback(`Applied to ${optInCount} opted-in item${optInCount !== 1 ? 's' : ''}`);
+                    }}
+                    disabled={optInCount === 0}
+                    className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Apply to opted-in items
+                    <span className="text-muted-foreground ml-1">({optInCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyCategoryModifiersToAllItems(category.id);
+                      showApplyFeedback(`Applied to all ${itemsInCategory.length} item${itemsInCategory.length !== 1 ? 's' : ''}`);
+                    }}
+                    disabled={itemsInCategory.length === 0}
+                    className="w-full px-3 py-1.5 rounded-md border border-primary/30 text-xs text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Force apply to all items
+                    <span className="text-muted-foreground ml-1 text-[10px]">— sets inherit flag on all</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Category Modifier Groups */}
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Modifier Groups ({assignedCatGroups.length})
+            </p>
+            <div className="space-y-2">
+              {/* Assigned group chips */}
+              {assignedCatGroups.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedCatGroups.map((cmg) => {
+                    const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
+                    if (!grp) return null;
+                    return (
+                      <span
+                        key={cmg.modifierGroupId}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-primary/5 border-primary/20 text-foreground"
+                      >
+                        {grp.groupName}
+                        <button
+                          type="button"
+                          onClick={() => removeCategoryModifierGroup(category.id, cmg.modifierGroupId)}
+                          className="text-muted-foreground hover:text-destructive ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add group dropdown */}
+              <div className="relative" ref={groupDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => { setGroupDropdownOpen((o) => !o); setGroupSearch(''); }}
+                  className={cn(
+                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                    groupDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
+                  )}
+                >
+                  <span className="text-muted-foreground">Add modifier group…</span>
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', groupDropdownOpen && 'rotate-90')} />
+                </button>
+                {groupDropdownOpen && (
+                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                    <div className="p-1.5 border-b border-border">
+                      <input
+                        type="text"
+                        value={groupSearch}
+                        onChange={(e) => setGroupSearch(e.target.value)}
+                        placeholder="Search groups…"
+                        className="input-field h-7 text-xs w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {availableGroups.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">
+                          {groupSearch ? 'No matches' : modifierGroups.length === 0 ? 'No groups yet — create them in the Modifier Library' : 'All groups assigned'}
+                        </p>
+                      ) : (
+                        availableGroups.map((grp) => (
+                          <button
+                            key={grp.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
+                            onClick={() => {
+                              addCategoryModifierGroup(category.id, grp.id);
+                              setGroupDropdownOpen(false);
+                              setGroupSearch('');
+                            }}
+                          >
+                            <span>{grp.groupName}</span>
+                            <span className="text-muted-foreground/60 text-[10px]">
+                              {grp.modifierIds ? grp.modifierIds.split(',').filter(Boolean).length : 0} mods
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Expand group modifiers into category */}
+              {assignedCatGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    assignedCatGroups.forEach((cmg) => {
+                      const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
+                      if (!grp?.modifierIds) return;
+                      grp.modifierIds.split(',').forEach((idStr) => {
+                        const modId = parseInt(idStr.trim(), 10);
+                        if (!isNaN(modId) && modId > 0) addCategoryModifier(category.id, modId);
+                      });
+                    });
+                    showApplyFeedback('Group modifiers added to category');
+                  }}
+                  className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                >
+                  Expand groups → add to category modifiers
+                </button>
+              )}
+            </div>
+          </section>
+
           {/* Availability — channels + per-group schedule */}
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Availability</p>
@@ -596,7 +836,7 @@ export function CategoryDetailPanel({ category }: Props) {
                                 return (
                                   <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
                                     <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                                    <input type="checkbox" checked={checked} onChange={() => setDraft((d) => ({ ...d, [key]: !d[key] }))} className="accent-primary cursor-pointer" />
+                                    <input type="checkbox" checked={checked} onChange={() => setDraft((d) => toggleVisibilityChannel(d, key))} className="accent-primary cursor-pointer" />
                                   </label>
                                 );
                               })}
@@ -846,232 +1086,6 @@ export function CategoryDetailPanel({ category }: Props) {
               ) : (
                 <button type="button" onClick={() => setShowAllergenInput(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                   <Plus className="w-3 h-3" /> New allergen
-                </button>
-              )}
-            </div>
-          </section>
-
-          {/* Category Modifiers */}
-          <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Modifiers ({assignedCatMods.length})
-            </p>
-            <div className="space-y-2">
-              {/* Assigned modifier chips */}
-              {assignedCatMods.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {assignedCatMods.map((cm) => {
-                    const mod = modifiers.find((m) => m.id === cm.modifierId);
-                    if (!mod) return null;
-                    return (
-                      <span
-                        key={cm.modifierId}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted border-border text-foreground"
-                      >
-                        {mod.modifierName}
-                        <button
-                          type="button"
-                          onClick={() => removeCategoryModifier(category.id, cm.modifierId)}
-                          className="text-muted-foreground hover:text-destructive ml-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add modifier dropdown */}
-              <div className="relative" ref={modifierDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => { setModifierDropdownOpen((o) => !o); setModifierSearch(''); }}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
-                    modifierDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50'
-                  )}
-                >
-                  <span className="text-muted-foreground">Add modifier…</span>
-                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', modifierDropdownOpen && 'rotate-90')} />
-                </button>
-                {modifierDropdownOpen && (
-                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
-                    <div className="p-1.5 border-b border-border">
-                      <input
-                        type="text"
-                        value={modifierSearch}
-                        onChange={(e) => setModifierSearch(e.target.value)}
-                        placeholder="Search modifiers…"
-                        className="input-field h-7 text-xs w-full"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {availableModifiers.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {modifierSearch ? 'No matches' : 'All modifiers assigned'}
-                        </p>
-                      ) : (
-                        availableModifiers.map((mod) => (
-                          <button
-                            key={mod.id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
-                            onClick={() => {
-                              addCategoryModifier(category.id, mod.id);
-                              setModifierDropdownOpen(false);
-                              setModifierSearch('');
-                            }}
-                          >
-                            <span>{mod.modifierName}</span>
-                            <span className="text-muted-foreground/60">#{mod.id}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bulk apply buttons */}
-              {assignedCatMods.length > 0 && (
-                <div className="space-y-1.5 pt-0.5">
-                  {applyFeedback && (
-                    <p className="text-[10px] text-green-600 dark:text-green-400 font-medium">{applyFeedback}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      applyCategoryModifiersToOptInItems(category.id);
-                      showApplyFeedback(`Applied to ${optInCount} opted-in item${optInCount !== 1 ? 's' : ''}`);
-                    }}
-                    disabled={optInCount === 0}
-                    className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    Apply to opted-in items
-                    <span className="text-muted-foreground ml-1">({optInCount})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      applyCategoryModifiersToAllItems(category.id);
-                      showApplyFeedback(`Applied to all ${itemsInCategory.length} item${itemsInCategory.length !== 1 ? 's' : ''}`);
-                    }}
-                    disabled={itemsInCategory.length === 0}
-                    className="w-full px-3 py-1.5 rounded-md border border-primary/30 text-xs text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-left disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    Force apply to all items
-                    <span className="text-muted-foreground ml-1 text-[10px]">— sets inherit flag on all</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Category Modifier Groups */}
-          <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Modifier Groups ({assignedCatGroups.length})
-            </p>
-            <div className="space-y-2">
-              {/* Assigned group chips */}
-              {assignedCatGroups.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {assignedCatGroups.map((cmg) => {
-                    const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
-                    if (!grp) return null;
-                    return (
-                      <span
-                        key={cmg.modifierGroupId}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-primary/5 border-primary/20 text-foreground"
-                      >
-                        {grp.groupName}
-                        <button
-                          type="button"
-                          onClick={() => removeCategoryModifierGroup(category.id, cmg.modifierGroupId)}
-                          className="text-muted-foreground hover:text-destructive ml-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add group dropdown */}
-              <div className="relative" ref={groupDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => { setGroupDropdownOpen((o) => !o); setGroupSearch(''); }}
-                  className={cn(
-                    'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
-                    groupDropdownOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
-                  )}
-                >
-                  <span className="text-muted-foreground">Add modifier group…</span>
-                  <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', groupDropdownOpen && 'rotate-90')} />
-                </button>
-                {groupDropdownOpen && (
-                  <div className="absolute z-10 top-full mt-1 w-full rounded-md border border-border bg-background shadow-md">
-                    <div className="p-1.5 border-b border-border">
-                      <input
-                        type="text"
-                        value={groupSearch}
-                        onChange={(e) => setGroupSearch(e.target.value)}
-                        placeholder="Search groups…"
-                        className="input-field h-7 text-xs w-full"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {availableGroups.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {groupSearch ? 'No matches' : modifierGroups.length === 0 ? 'No groups yet — create them in the Modifier Library' : 'All groups assigned'}
-                        </p>
-                      ) : (
-                        availableGroups.map((grp) => (
-                          <button
-                            key={grp.id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
-                            onClick={() => {
-                              addCategoryModifierGroup(category.id, grp.id);
-                              setGroupDropdownOpen(false);
-                              setGroupSearch('');
-                            }}
-                          >
-                            <span>{grp.groupName}</span>
-                            <span className="text-muted-foreground/60 text-[10px]">
-                              {grp.modifierIds ? grp.modifierIds.split(',').filter(Boolean).length : 0} mods
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Expand group modifiers into category */}
-              {assignedCatGroups.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    assignedCatGroups.forEach((cmg) => {
-                      const grp = modifierGroups.find((g) => g.id === cmg.modifierGroupId);
-                      if (!grp?.modifierIds) return;
-                      grp.modifierIds.split(',').forEach((idStr) => {
-                        const modId = parseInt(idStr.trim(), 10);
-                        if (!isNaN(modId) && modId > 0) addCategoryModifier(category.id, modId);
-                      });
-                    });
-                    showApplyFeedback('Group modifiers added to category');
-                  }}
-                  className="w-full px-3 py-1.5 rounded-md border border-border text-xs text-foreground bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-                >
-                  Expand groups → add to category modifiers
                 </button>
               )}
             </div>

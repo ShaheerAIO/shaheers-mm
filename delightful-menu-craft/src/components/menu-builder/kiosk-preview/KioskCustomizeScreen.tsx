@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, Minus, Plus, UtensilsCrossed, Check } from 'lucide-react';
+import { ChevronLeft, Minus, Plus, UtensilsCrossed } from 'lucide-react';
 import type { Item, Modifier } from '@/types/menu';
 import { effectiveUnitPrice } from '@/lib/posPricing';
 import {
@@ -9,27 +9,50 @@ import {
   buildInitialModifierState,
   getChildModifiersForInit,
   filterRootItemModifiers,
-  isMeaningfulOptionalLabel,
 } from '../pos-preview/ModifierPanel';
 
 interface KioskCustomizeScreenProps {
   item: Item;
   initialSelectedOptions?: Record<number, number[]>;
   initialQty?: number;
+  cartCount: number;
   onAddToCart: (item: Item, selectedOptions: Record<number, number[]>, qty: number) => void;
+  onViewCart: () => void;
   onBack: () => void;
 }
 
+/** Green "Required" / gray "Optional" (or "Pre-selected") badge per group. */
+function ruleBadge(mod: Modifier) {
+  const et = getEffectiveModType(mod);
+  if (et === 'Required') return { label: 'Required', className: 'bg-[#3FBF8F] text-white' };
+  if (et === 'Push Optional') return { label: 'Pre-selected', className: 'bg-[#B7B7B7] text-white' };
+  return { label: 'Optional', className: 'bg-[#B7B7B7] text-white' };
+}
+
+/** Coral helper line under a group heading ("Select 1" / "Select any (optional)"). */
+function selectionHint(mod: Modifier): string {
+  const et = getEffectiveModType(mod);
+  if (et === 'Required') {
+    const max = mod.noMaxSelection ? 0 : mod.maxSelector;
+    if (max === 1) return 'Select 1';
+    if (mod.minSelector > 0) return `Select ${mod.minSelector}${max > mod.minSelector ? `–${max}` : ''}`;
+    return max > 0 ? `Select up to ${max}` : 'Select any';
+  }
+  return 'Select any (optional)';
+}
+
 /**
- * Kiosk item-customize screen. Visuals are kiosk-styled and lighter than the
- * real kiosk (no pizza-side L/R/W strip), but the selection/validity/pricing
- * logic mirrors the POS ModifierPanel so subtotals match exactly.
+ * Kiosk item-customize screen. Visuals mirror the kiosk design (centered hero
+ * image, colored rule badges, chip-style options); the selection/validity/
+ * pricing logic mirrors the POS ModifierPanel so subtotals match exactly.
  */
 export function KioskCustomizeScreen({
   item,
   initialSelectedOptions,
   initialQty,
+  cartCount,
   onAddToCart,
+  onViewCart,
   onBack,
 }: KioskCustomizeScreenProps) {
   const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions } = useMenuStore();
@@ -155,144 +178,110 @@ export function KioskCustomizeScreen({
   const linePrice = unitPrice * qty;
   const showImage = item.kioskItemImage && !imgError;
 
+  /** One option rendered as a selectable chip (with a ± stepper for multi-qty). */
+  const renderOptionChip = (
+    mod: Modifier,
+    o: { modifierOptionId: number; option?: { posDisplayName?: string; optionName?: string }; maxQtyPerOption?: number; maxLimit: number },
+  ) => {
+    const { modifierOptionId, option, maxQtyPerOption = 1, maxLimit } = o;
+    const surcharge = typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
+    const current = selectedOptions[mod.id] ?? [];
+    const isMultiQty = maxQtyPerOption !== 1;
+    const count = current.filter((id) => id === modifierOptionId).length;
+    const isSelected = isMultiQty ? count > 0 : current.includes(modifierOptionId);
+    const name = option?.posDisplayName || option?.optionName || '';
+    const priceLabel = surcharge > 0 ? (mod.isSizeModifier ? ` $${surcharge.toFixed(2)}` : ` +$${surcharge.toFixed(2)}`) : '';
+
+    if (isMultiQty) {
+      return (
+        <div
+          key={modifierOptionId}
+          className={cn(
+            'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
+            isSelected ? 'border-[#ED7C69] bg-[#ED7C69]/8 text-[#ED7C69]' : 'border-black/15 bg-white text-[#242528]',
+          )}
+        >
+          <span>
+            {name}
+            {priceLabel && <span className="tabular-nums">{priceLabel}</span>}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => decrementOption(mod, modifierOptionId)}
+              disabled={count === 0}
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B] disabled:opacity-30"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="w-4 text-center tabular-nums">{count}</span>
+            <button
+              type="button"
+              onClick={() => incrementOption(mod, modifierOptionId, maxQtyPerOption)}
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B]"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        key={modifierOptionId}
+        type="button"
+        onClick={() => toggleOption(mod, modifierOptionId)}
+        className={cn(
+          'rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors',
+          isSelected ? 'border-[#ED7C69] bg-[#ED7C69]/8 text-[#ED7C69]' : 'border-black/15 bg-white text-[#242528]',
+        )}
+      >
+        {name}
+        {priceLabel && <span className="tabular-nums">{priceLabel}</span>}
+      </button>
+    );
+  };
+
   /** Render a modifier group (recurses into nested child groups). */
   const renderModifier = (mod: Modifier, locked: boolean): JSX.Element => {
     const children = getChildModifiers(mod);
-    const et = getEffectiveModType(mod);
-    const ruleLabel =
-      et === 'Required'
-        ? 'Required'
-        : et === 'Push Optional'
-          ? 'Pre-selected'
-          : isMeaningfulOptionalLabel(mod.isOptional)
-            ? mod.isOptional
-            : 'Optional';
+    const badge = ruleBadge(mod);
+    const options = getOptions(mod.id);
 
     return (
-      <section key={mod.id} className="border-b border-black/5 py-4 last:border-0">
-        <div className="mb-3 flex items-baseline justify-between gap-2">
-          <h3 className="text-base font-semibold text-[#242528]">
-            {mod.posDisplayName || mod.modifierName}
-            {mod.isSizeModifier && (
-              <span className="ml-2 rounded bg-[#ED7C69]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#ED7C69]">
-                Size
-              </span>
-            )}
-          </h3>
-          <span className="text-xs font-medium uppercase tracking-wide text-[#9A9A9A]">{ruleLabel}</span>
+      <section key={mod.id} className="py-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <h3 className="text-base font-bold text-[#242528]">{mod.posDisplayName || mod.modifierName}</h3>
+          <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', badge.className)}>{badge.label}</span>
         </div>
+        {!locked && <p className="mb-3 text-sm font-medium text-[#ED7C69]">{selectionHint(mod)}</p>}
 
         {locked ? (
           <p className="text-sm text-[#9A9A9A]">Select a size first to unlock.</p>
         ) : children.length > 0 ? (
-          <div className="space-y-2">{children.map((child) => renderModifier(child, false))}</div>
+          <div className="space-y-3">{children.map((child) => renderModifier(child, false))}</div>
+        ) : options.length === 0 ? (
+          <p className="text-sm text-[#9A9A9A]">No options defined</p>
         ) : (
-          <div className="space-y-2">{renderOptions(mod)}</div>
+          <div className="flex flex-wrap gap-2">{options.map((o) => renderOptionChip(mod, o))}</div>
         )}
       </section>
     );
   };
 
-  const renderOptions = (mod: Modifier) => {
-    const options = getOptions(mod.id);
-    if (options.length === 0) {
-      return <p className="text-sm text-[#9A9A9A]">No options defined</p>;
-    }
-    return options.map(({ modifierOptionId, option, maxQtyPerOption = 1, maxLimit }) => {
-      const surcharge = typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
-      const current = selectedOptions[mod.id] ?? [];
-      const isMultiQty = maxQtyPerOption !== 1;
-      const count = current.filter((id) => id === modifierOptionId).length;
-      const isSelected = isMultiQty ? count > 0 : current.includes(modifierOptionId);
-
-      return (
-        <div
-          key={modifierOptionId}
-          className={cn(
-            'flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-colors',
-            isSelected ? 'border-[#ED7C69] bg-[#ED7C69]/8' : 'border-black/10 bg-white',
-          )}
-        >
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-medium text-[#242528]">
-              {option?.posDisplayName || option?.optionName}
-            </span>
-            {surcharge > 0 && (
-              <span className="text-xs font-semibold tabular-nums text-[#ED7C69]">
-                {mod.isSizeModifier ? `$${surcharge.toFixed(2)}` : `+$${surcharge.toFixed(2)}`}
-              </span>
-            )}
-          </div>
-
-          {isMultiQty ? (
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => decrementOption(mod, modifierOptionId)}
-                disabled={count === 0}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B] disabled:opacity-30"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="w-5 text-center text-sm font-semibold tabular-nums text-[#242528]">{count}</span>
-              <button
-                type="button"
-                onClick={() => incrementOption(mod, modifierOptionId, maxQtyPerOption)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B]"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => toggleOption(mod, modifierOptionId)}
-              className={cn(
-                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                isSelected ? 'border-[#ED7C69] bg-[#ED7C69] text-white' : 'border-black/20 bg-white',
-              )}
-              aria-label={isSelected ? 'Deselect' : 'Select'}
-            >
-              {isSelected && <Check className="h-3.5 w-3.5" />}
-            </button>
-          )}
-        </div>
-      );
-    });
-  };
-
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-black/5 bg-white px-4 py-3">
+      {/* Header: Go back */}
+      <div className="flex shrink-0 items-center border-b border-black/5 bg-white px-4 py-3">
         <button
           type="button"
           onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-[#6B6B6B] hover:bg-[#F1F1F1]"
-          aria-label="Back"
+          className="flex items-center gap-1 text-sm font-semibold text-[#ED7C69]"
         >
           <ChevronLeft className="h-5 w-5" />
+          Go back
         </button>
-        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#F1F1F1]">
-          {showImage ? (
-            <img
-              src={item.kioskItemImage}
-              alt={item.itemName}
-              className="h-full w-full object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-[#C9C9C9]">
-              <UtensilsCrossed className="h-5 w-5" />
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold text-[#242528]">
-            {item.posDisplayName || item.itemName}
-          </h2>
-          <p className="text-sm tabular-nums text-[#9A9A9A]">${item.itemPrice.toFixed(2)}</p>
-        </div>
       </div>
 
       {/* Size prompt */}
@@ -302,65 +291,89 @@ export function KioskCustomizeScreen({
         </div>
       )}
 
-      {/* Modifier groups */}
+      {/* Scroll body: hero + modifier groups */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4">
-        {attachedModifiers.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-6">
-            <div className="aspect-square w-44 overflow-hidden rounded-2xl bg-[#F1F1F1]">
-              {showImage ? (
-                <img
-                  src={item.kioskItemImage}
-                  alt={item.itemName}
-                  className="h-full w-full object-cover"
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[#C9C9C9]">
-                  <UtensilsCrossed className="h-12 w-12" />
-                </div>
-              )}
-            </div>
-            <p className="text-center text-sm text-[#6B6B6B]">
-              {item.itemDescription || 'Tap “Add to Cart” to add this item to your order.'}
-            </p>
+        {/* Hero: centered image, name, price */}
+        <div className="flex flex-col items-center gap-2 pb-2 pt-5">
+          <div className="aspect-square w-44 overflow-hidden rounded-2xl bg-[#F1F1F1]">
+            {showImage ? (
+              <img
+                src={item.kioskItemImage}
+                alt={item.itemName}
+                className="h-full w-full object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[#C9C9C9]">
+                <UtensilsCrossed className="h-12 w-12" />
+              </div>
+            )}
           </div>
-        ) : (
-          attachedModifiers.map((mod) =>
-            renderModifier(mod, !mod.isSizeModifier && !sizeIsSelected && sizeModifier !== null),
+          <h2 className="text-center text-xl font-bold text-[#242528]">
+            {item.posDisplayName || item.itemName}
+          </h2>
+          <p className="text-lg font-bold tabular-nums text-[#ED7C69]">${unitPrice.toFixed(2)}</p>
+        </div>
+
+        {attachedModifiers.length === 0 ? (
+          item.itemDescription ? (
+            <p className="pb-6 text-center text-sm text-[#6B6B6B]">{item.itemDescription}</p>
+          ) : (
+            <p className="pb-6 text-center text-sm text-[#9A9A9A]">
+              Tap “Add to cart” to add this item to your order.
+            </p>
           )
+        ) : (
+          <div className="divide-y divide-black/5 pb-4">
+            {attachedModifiers.map((mod) =>
+              renderModifier(mod, !mod.isSizeModifier && !sizeIsSelected && sizeModifier !== null),
+            )}
+          </div>
         )}
+
+        {/* Quantity */}
+        <div className="flex items-center justify-between border-t border-black/5 py-4">
+          <h3 className="text-base font-bold text-[#242528]">Quantity</h3>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-[#6B6B6B]"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className="w-6 text-center text-base font-semibold tabular-nums text-[#242528]">{qty}</span>
+            <button
+              type="button"
+              onClick={() => setQty((q) => q + 1)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ED7C69] text-white"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Footer: qty + add to cart */}
-      <div className="flex shrink-0 items-center gap-3 border-t border-black/5 bg-white px-4 py-3">
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B]"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="w-6 text-center text-base font-semibold tabular-nums text-[#242528]">{qty}</span>
-          <button
-            type="button"
-            onClick={() => setQty((q) => q + 1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B]"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
+      {/* Footer: View cart + Add to cart */}
+      <div className="flex shrink-0 items-center gap-3 border-t border-black/5 bg-white px-4 py-4">
+        <button
+          type="button"
+          onClick={onViewCart}
+          className="rounded-2xl border border-[#ED7C69] px-5 py-3 text-sm font-semibold text-[#ED7C69] transition-colors hover:bg-[#ED7C69]/5"
+        >
+          View cart{cartCount > 0 ? ` (${cartCount})` : ''}
+        </button>
         <button
           type="button"
           disabled={!canAddToCart}
           onClick={() => canAddToCart && onAddToCart(item, selectedOptions, qty)}
           className={cn(
-            'flex flex-1 items-center justify-between rounded-2xl px-5 py-3.5 text-base font-semibold text-white transition-colors',
+            'flex flex-1 items-center justify-center gap-1 rounded-2xl px-5 py-3 text-base font-semibold text-white transition-colors',
             canAddToCart ? 'bg-[#ED7C69] hover:bg-[#E06A55]' : 'cursor-not-allowed bg-[#D9D9D9]',
           )}
         >
-          <span>{initialSelectedOptions !== undefined ? 'Update Cart' : 'Add to Cart'}</span>
-          <span className="tabular-nums">${linePrice.toFixed(2)}</span>
+          <span>{initialSelectedOptions !== undefined ? 'Update cart' : 'Add to cart'}</span>
+          <span className="tabular-nums">(${linePrice.toFixed(2)})</span>
         </button>
       </div>
     </div>
