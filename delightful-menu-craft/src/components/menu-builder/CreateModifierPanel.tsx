@@ -29,6 +29,7 @@ import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
   getChannelsByGroup,
+  toggleVisibilityChannel,
   type VisibilityChannelKey,
 } from '@/lib/visibility';
 import {
@@ -90,6 +91,7 @@ export function CreateModifierPanel({ itemId, onSaved, onCancel }: CreateModifie
     modifierOptions,
     modifierModifierOptions,
     itemModifiers,
+    items,
     addModifier,
     updateModifier,
     addModifierOption,
@@ -777,264 +779,6 @@ export function CreateModifierPanel({ itemId, onSaved, onCancel }: CreateModifie
           </div>
         </div>
 
-        {/* POS / ticket naming — collapsible; uses Selects inside */}
-        <Accordion
-          type="multiple"
-          defaultValue={[]}
-          className="rounded-lg border border-border bg-muted/10 overflow-hidden"
-        >
-          <AccordionItem value="pos-labels" className="border-b border-border px-3">
-            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              POS & ticket labels
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3 pb-1">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">POS display name</Label>
-                  <Select
-                    value={posDisplayMode}
-                    onValueChange={(v: 'match_modifier' | 'custom_pos') => {
-                      setPosDisplayMode(v);
-                      if (v === 'match_modifier') {
-                        setPosDisplayName(modifierName);
-                      } else {
-                        setPosDisplayName((prev) => (prev.trim() ? prev : modifierName));
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="match_modifier">Same as modifier name</SelectItem>
-                      <SelectItem value="custom_pos">Custom POS name</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {posDisplayMode === 'custom_pos' && (
-                    <>
-                      <input
-                        type="text"
-                        value={posDisplayName}
-                        onChange={(e) => setPosDisplayName(e.target.value)}
-                        onBlur={() => {
-                          setPosDisplayName((v) => v.trim());
-                          setTouched((t) => ({ ...t, posDisplayName: true }));
-                        }}
-                        className="input-field w-full text-sm"
-                        placeholder="Guest-facing POS label"
-                      />
-                      {touched.posDisplayName && posNameError && (
-                        <p className="text-[10px] text-destructive">{posNameError}</p>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="modPrefix" className="text-xs text-muted-foreground">
-                    Ticket / KDS prefix (optional)
-                  </Label>
-                  <input
-                    id="modPrefix"
-                    type="text"
-                    value={prefix}
-                    onChange={(e) => setPrefix(e.target.value)}
-                    className="input-field w-full text-sm"
-                    placeholder="e.g. TOP, SIDE"
-                  />
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="channels-product" className="border-b border-border px-3">
-            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Channels & product
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3 pb-1">
-                <div className="space-y-1.5">
-                  {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
-                    const isOpen = openChannelGroup === group;
-                    const active = channels.filter(c => channelVisibility[c.key as VisibilityChannelKey]);
-                    const triggerLabel =
-                      active.length === 0 ? 'None' :
-                        active.length === channels.length ? 'All' :
-                          active.map(c => c.label).join(', ');
-                    return (
-                      <div key={group}>
-                        <button
-                          type="button"
-                          onClick={() => setOpenChannelGroup(isOpen ? null : group)}
-                          className={cn(
-                            'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
-                            isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
-                          )}
-                        >
-                          <span className="font-medium text-foreground">{group}</span>
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <span className={cn(active.length > 0 && active.length < channels.length && 'text-primary')}>
-                              {triggerLabel}
-                            </span>
-                            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
-                          </span>
-                        </button>
-                        {isOpen && (
-                          <div className="mt-0.5 rounded-md border border-border divide-y divide-border overflow-hidden">
-                            {channels.map(({ key, label }) => {
-                              const checked = channelVisibility[key as VisibilityChannelKey];
-                              return (
-                                <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
-                                  <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => setChannelVisibility(v => ({ ...v, [key]: !v[key as VisibilityChannelKey] }))}
-                                    className="accent-primary cursor-pointer"
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="pizzaSelection" className="text-sm">Pizza selection</Label>
-                    <p className="text-[10px] text-muted-foreground">Left / right / whole</p>
-                  </div>
-                  <Switch
-                    id="pizzaSelection"
-                    checked={pizzaSelection}
-                    onCheckedChange={setPizzaSelection}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <Label htmlFor="isSizeModifier" className="text-sm">Size modifier</Label>
-                    <p className="text-[10px] text-muted-foreground">e.g. 10&quot;, 14&quot;, 20&quot;</p>
-                  </div>
-                  <Switch
-                    id="isSizeModifier"
-                    checked={isSizeModifier}
-                    onCheckedChange={setIsSizeModifier}
-                  />
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="selection-rules" className="px-3">
-            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Selection rules
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-2.5 pb-1">
-                <div className="text-xs text-muted-foreground">
-                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-end gap-2 flex-wrap">
-                    <div className="space-y-1 w-16 shrink-0">
-                      <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
-                      <NumberStepperInput
-                        inputMode="numeric"
-                        value={minSelectorField.value}
-                        disabled={isOptionalType}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => minSelectorField.onChange(e.target.value)}
-                        onBlur={minSelectorField.onBlur}
-                        onStep={minSelectorField.step}
-                        wrapperClassName="w-full h-8"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1 w-16 shrink-0">
-                      <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
-                      <NumberStepperInput
-                        inputMode="numeric"
-                        value={maxSelectorField.value}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => maxSelectorField.onChange(e.target.value)}
-                        onBlur={maxSelectorField.onBlur}
-                        onStep={maxSelectorField.step}
-                        disabled={noMaxSelection}
-                        wrapperClassName="w-full h-8"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
-                      <Label htmlFor="noMaxSelection" className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">No max</Label>
-                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
-                    </div>
-                  </div>
-                  <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
-                  {isFinite(selectionCeiling) && (
-                    <p className="text-[9px] text-muted-foreground leading-tight">Max {selectionCeiling} selections</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="section-header text-xs">Selection type</Label>
-                    <Select
-                      value={isOptional}
-                      onValueChange={setIsOptional}
-                    >
-                      <SelectTrigger className="w-full h-8 text-xs">
-                        <SelectValue placeholder="Optional (select any)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Select any">Optional (select any)</SelectItem>
-                        <SelectItem value="Required">Required</SelectItem>
-                        <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="section-header text-xs">Pricing</Label>
-                    <Select
-                      value={modifierOptionPriceType}
-                      onValueChange={setModifierOptionPriceType}
-                    >
-                      <SelectTrigger className="w-full h-8 text-xs">
-                        <SelectValue placeholder="No charge" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="NoCharge">No charge</SelectItem>
-                        <SelectItem value="Individual">Individual pricing</SelectItem>
-                        <SelectItem value="Group">Group pricing</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label
-                    htmlFor="multiSelect"
-                    title="Guest can pick more than one option"
-                    className="text-xs font-normal cursor-pointer"
-                  >
-                    Allow multiple selections
-                  </Label>
-                  <Switch id="multiSelect" checked={multiSelect} onCheckedChange={setMultiSelect} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label
-                    htmlFor="canGuestSelectMoreModifiers"
-                    title="Guest can pick the same option more than once"
-                    className="text-xs font-normal cursor-pointer"
-                  >
-                    Allow same option more than once
-                  </Label>
-                  <Switch id="canGuestSelectMoreModifiers" checked={canGuestSelectMoreModifiers} onCheckedChange={setCanGuestSelectMoreModifiers} />
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-        </Accordion>
-
         {/* Flat and child modifiers both use regular modifier options. */}
         {(modifierMode === 'flat' || isNested) && <div className="space-y-2.5">
           {/* Header row: label + action buttons inline */}
@@ -1394,6 +1138,263 @@ export function CreateModifierPanel({ itemId, onSaved, onCancel }: CreateModifie
             </div>
           </div>
         )}
+
+        {/* Advanced settings — collapsed by default */}
+        <Accordion
+          type="multiple"
+          defaultValue={[]}
+          className="rounded-lg border border-border bg-muted/10 overflow-hidden"
+        >
+          <AccordionItem value="selection-rules" className="border-b border-border px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Selection rules
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2.5 pb-1">
+                <div className="text-xs text-muted-foreground">
+                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-end gap-2 flex-wrap">
+                    <div className="space-y-1 w-16 shrink-0">
+                      <Label className="text-[10px] uppercase text-muted-foreground">Min</Label>
+                      <NumberStepperInput
+                        inputMode="numeric"
+                        value={minSelectorField.value}
+                        disabled={isOptionalType}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => minSelectorField.onChange(e.target.value)}
+                        onBlur={minSelectorField.onBlur}
+                        onStep={minSelectorField.step}
+                        wrapperClassName="w-full h-8"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1 w-16 shrink-0">
+                      <Label className="text-[10px] uppercase text-muted-foreground">Max</Label>
+                      <NumberStepperInput
+                        inputMode="numeric"
+                        value={maxSelectorField.value}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => maxSelectorField.onChange(e.target.value)}
+                        onBlur={maxSelectorField.onBlur}
+                        onStep={maxSelectorField.step}
+                        disabled={noMaxSelection}
+                        wrapperClassName="w-full h-8"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 pb-0.5 ml-auto">
+                      <Label htmlFor="noMaxSelection" className="text-[10px] uppercase text-muted-foreground whitespace-nowrap">No max</Label>
+                      <Switch id="noMaxSelection" checked={noMaxSelection} onCheckedChange={setNoMaxSelection} />
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Combination limit</p>
+                  {isFinite(selectionCeiling) && (
+                    <p className="text-[9px] text-muted-foreground leading-tight">Max {selectionCeiling} selections</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="section-header text-xs">Selection type</Label>
+                    <Select
+                      value={isOptional}
+                      onValueChange={setIsOptional}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectValue placeholder="Optional (select any)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Select any">Optional (select any)</SelectItem>
+                        <SelectItem value="Required">Required</SelectItem>
+                        <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="section-header text-xs">Pricing</Label>
+                    <Select
+                      value={modifierOptionPriceType}
+                      onValueChange={setModifierOptionPriceType}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs">
+                        <SelectValue placeholder="No charge" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NoCharge">No charge</SelectItem>
+                        <SelectItem value="Individual">Individual pricing</SelectItem>
+                        <SelectItem value="Group">Group pricing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="multiSelect"
+                    title="Guest can pick more than one option"
+                    className="text-xs font-normal cursor-pointer"
+                  >
+                    Allow multiple selections
+                  </Label>
+                  <Switch id="multiSelect" checked={multiSelect} onCheckedChange={setMultiSelect} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label
+                    htmlFor="canGuestSelectMoreModifiers"
+                    title="Guest can pick the same option more than once"
+                    className="text-xs font-normal cursor-pointer"
+                  >
+                    Allow same option more than once
+                  </Label>
+                  <Switch id="canGuestSelectMoreModifiers" checked={canGuestSelectMoreModifiers} onCheckedChange={setCanGuestSelectMoreModifiers} />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="channels-product" className="border-b border-border px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Channels & product
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="space-y-1.5">
+                  {Object.entries(getChannelsByGroup()).map(([group, channels]) => {
+                    const isOpen = openChannelGroup === group;
+                    const active = channels.filter(c => channelVisibility[c.key as VisibilityChannelKey]);
+                    const triggerLabel =
+                      active.length === 0 ? 'None' :
+                        active.length === channels.length ? 'All' :
+                          active.map(c => c.label).join(', ');
+                    return (
+                      <div key={group}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenChannelGroup(isOpen ? null : group)}
+                          className={cn(
+                            'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                            isOpen ? 'border-primary/40 bg-primary/5' : 'border-border bg-muted/30 hover:bg-muted/50',
+                          )}
+                        >
+                          <span className="font-medium text-foreground">{group}</span>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <span className={cn(active.length > 0 && active.length < channels.length && 'text-primary')}>
+                              {triggerLabel}
+                            </span>
+                            <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="mt-0.5 rounded-md border border-border divide-y divide-border overflow-hidden">
+                            {channels.map(({ key, label }) => {
+                              const checked = channelVisibility[key as VisibilityChannelKey];
+                              return (
+                                <label key={key} className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                                  <span className={cn('text-xs', checked ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => setChannelVisibility(v => toggleVisibilityChannel(v, key as VisibilityChannelKey))}
+                                    className="accent-primary cursor-pointer"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="pizzaSelection" className="text-sm">Pizza selection</Label>
+                    <p className="text-[10px] text-muted-foreground">Left / right / whole</p>
+                  </div>
+                  <Switch
+                    id="pizzaSelection"
+                    checked={pizzaSelection}
+                    onCheckedChange={setPizzaSelection}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <Label htmlFor="isSizeModifier" className="text-sm">Size modifier</Label>
+                    <p className="text-[10px] text-muted-foreground">e.g. 10&quot;, 14&quot;, 20&quot;</p>
+                  </div>
+                  <Switch
+                    id="isSizeModifier"
+                    checked={isSizeModifier}
+                    onCheckedChange={setIsSizeModifier}
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="pos-labels" className="px-3">
+            <AccordionTrigger className="py-2.5 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              POS & ticket labels
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">POS display name</Label>
+                  <Select
+                    value={posDisplayMode}
+                    onValueChange={(v: 'match_modifier' | 'custom_pos') => {
+                      setPosDisplayMode(v);
+                      if (v === 'match_modifier') {
+                        setPosDisplayName(modifierName);
+                      } else {
+                        setPosDisplayName((prev) => (prev.trim() ? prev : modifierName));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="match_modifier">Same as modifier name</SelectItem>
+                      <SelectItem value="custom_pos">Custom POS name</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {posDisplayMode === 'custom_pos' && (
+                    <>
+                      <input
+                        type="text"
+                        value={posDisplayName}
+                        onChange={(e) => setPosDisplayName(e.target.value)}
+                        onBlur={() => {
+                          setPosDisplayName((v) => v.trim());
+                          setTouched((t) => ({ ...t, posDisplayName: true }));
+                        }}
+                        className="input-field w-full text-sm"
+                        placeholder="Guest-facing POS label"
+                      />
+                      {touched.posDisplayName && posNameError && (
+                        <p className="text-[10px] text-destructive">{posNameError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="modPrefix" className="text-xs text-muted-foreground">
+                    Ticket / KDS prefix (optional)
+                  </Label>
+                  <input
+                    id="modPrefix"
+                    type="text"
+                    value={prefix}
+                    onChange={(e) => setPrefix(e.target.value)}
+                    className="input-field w-full text-sm"
+                    placeholder="e.g. TOP, SIDE"
+                  />
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
 
       {/* Footer */}

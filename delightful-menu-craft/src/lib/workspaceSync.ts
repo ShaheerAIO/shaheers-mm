@@ -423,6 +423,20 @@ export async function createWorkspace(name: string, data?: WorkspaceData): Promi
   return row as WorkspaceMeta;
 }
 
+export async function renameWorkspace(id: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Name cannot be empty');
+  const uid = currentUid ?? (await currentUser()).id;
+  const { error } = await supabase
+    .from('workspaces')
+    .update({ name: trimmed, updated_by: uid })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+  if (useWorkspaceSession.getState().currentId === id) {
+    setSession({ currentName: trimmed });
+  }
+}
+
 export async function openWorkspace(id: string): Promise<void> {
   // Switching to a different project while holding a lock: release the old one
   // first so we don't appear to be editing two projects at once.

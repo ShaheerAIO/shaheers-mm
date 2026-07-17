@@ -33,6 +33,7 @@ import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
   getChannelsByGroup,
+  toggleVisibilityChannel,
   type VisibilityChannelKey,
 } from '@/lib/visibility';
 import { Label } from '@/components/ui/label';
@@ -2104,7 +2105,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                onChange={() => setDraft(d => ({ ...d, [key]: !d[key as VisibilityChannelKey] }))}
+                                onChange={() => setDraft(d => toggleVisibilityChannel(d, key as VisibilityChannelKey))}
                                 className="accent-primary cursor-pointer"
                               />
                             </label>

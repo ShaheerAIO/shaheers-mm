@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
-import { ShoppingCart } from 'lucide-react';
+import { RotateCcw, ShoppingCart, UtensilsCrossed } from 'lucide-react';
 import type { Item } from '@/types/menu';
 import { isVisibleOnChannel, isAvailableOnChannelAt } from '@/lib/visibility';
 import { KioskItemCard } from './KioskItemCard';
@@ -11,13 +11,40 @@ interface KioskMenuScreenProps {
   cartCount: number;
   subtotal: number;
   onViewCart: () => void;
+  onStartNewOrder: () => void;
 }
 
-/** Kiosk menu screen: horizontal category tabs + image-forward item grid + cart footer. */
-export function KioskMenuScreen({ onSelectItem, cartCount, subtotal, onViewCart }: KioskMenuScreenProps) {
-  const { categories, items, categoryItems, selectedMenuId } = useMenuStore();
+interface Section {
+  categoryId: number;
+  name: string;
+  image: string;
+  items: Item[];
+}
+
+/**
+ * Kiosk landing: a sticky category tab bar over one continuously-scrolling list.
+ * The whole menu is a single vertical scroll — each category is a labeled
+ * section stacked in order. Tapping a tab smooth-scrolls to that section, and
+ * the active tab tracks the section currently at the top of the scroll area
+ * (scrollspy). Mirrors the real kiosk's browse behaviour.
+ */
+export function KioskMenuScreen({
+  onSelectItem,
+  cartCount,
+  subtotal,
+  onViewCart,
+  onStartNewOrder,
+}: KioskMenuScreenProps) {
+  const { menus, categories, items, categoryItems, selectedMenuId, setSelectedMenu } = useMenuStore();
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
+  const tabRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
 
+  const sortedMenus = useMemo(() => [...menus].sort((a, b) => a.sortOrder - b.sortOrder), [menus]);
+
+  // Root categories of the active menu, kiosk-visible, in sort order.
   const rootCategories = useMemo(() => {
     if (!selectedMenuId) return [];
     return categories
@@ -36,80 +63,159 @@ export function KioskMenuScreen({ onSelectItem, cartCount, subtotal, onViewCart 
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories, selectedMenuId]);
 
-  // Default the active tab to the first category; fall back if it disappears.
-  const effectiveCategoryId =
-    activeCategoryId != null && rootCategories.some((c) => c.id === activeCategoryId)
-      ? activeCategoryId
-      : rootCategories[0]?.id ?? null;
-
-  const activeItems = useMemo(() => {
-    if (effectiveCategoryId == null) return [];
-    const cat = rootCategories.find((c) => c.id === effectiveCategoryId);
-    if (!cat) return [];
-
-    const subcats = categories
-      .filter((c) => c.parentCategoryId === cat.id)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-
-    const resolve = (categoryId: number) =>
+  // One section per root category (its own items + nested subcategory items,
+  // deduped, gated by kiosk visibility + schedule). Empty sections are dropped.
+  const sections = useMemo<Section[]>(() => {
+    const resolve = (catId: number) =>
       categoryItems
-        .filter((ci) => ci.categoryId === categoryId)
+        .filter((ci) => ci.categoryId === catId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((ci) => items.find((i) => i.id === ci.itemId))
         .filter((i): i is Item => i !== undefined && isAvailableOnChannelAt(i, 'visibilityKiosk'));
 
-    const seen = new Set<number>();
-    const flat: Item[] = [];
-    for (const item of [resolve(cat.id), ...subcats.map((s) => resolve(s.id))].flat()) {
-      if (!seen.has(item.id)) {
-        seen.add(item.id);
-        flat.push(item);
-      }
+    return rootCategories
+      .map((cat) => {
+        const subcats = categories
+          .filter((c) => c.parentCategoryId === cat.id)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const seen = new Set<number>();
+        const list: Item[] = [];
+        for (const item of [resolve(cat.id), ...subcats.map((s) => resolve(s.id))].flat()) {
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            list.push(item);
+          }
+        }
+        return {
+          categoryId: cat.id,
+          name: cat.posDisplayName || cat.categoryName,
+          image: cat.kioskImage || cat.image,
+          items: list,
+        };
+      })
+      .filter((s) => s.items.length > 0);
+  }, [rootCategories, categories, categoryItems, items]);
+
+  // Scrollspy: the active tab is the last section whose top has passed the
+  // scroll container's top edge.
+  const syncActive = useCallback(() => {
+    const c = scrollRef.current;
+    if (!c || sections.length === 0) return;
+    const threshold = c.scrollTop + 12;
+    let current = sections[0].categoryId;
+    for (const s of sections) {
+      const el = sectionRefs.current[s.categoryId];
+      if (el && el.offsetTop <= threshold) current = s.categoryId;
     }
-    return flat;
-  }, [effectiveCategoryId, rootCategories, categories, categoryItems, items]);
+    setActiveCategoryId(current);
+  }, [sections]);
+
+  useEffect(() => {
+    setActiveCategoryId(sections[0]?.categoryId ?? null);
+    // Reset scroll to top when the menu changes.
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [sections]);
+
+  // Keep the active tab scrolled into view within the tab bar.
+  useEffect(() => {
+    if (activeCategoryId != null) {
+      tabRefs.current[activeCategoryId]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+  }, [activeCategoryId]);
+
+  const scrollToSection = (categoryId: number) => {
+    setActiveCategoryId(categoryId);
+    sectionRefs.current[categoryId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      {/* Category tabs */}
-      <div className="shrink-0 border-b border-black/5 bg-white px-4 py-3">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {rootCategories.map((cat) => {
-            const isActive = cat.id === effectiveCategoryId;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setActiveCategoryId(cat.id)}
-                className={cn(
-                  'shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors',
-                  isActive
-                    ? 'bg-[#ED7C69] text-white shadow-sm'
-                    : 'bg-[#F1F1F1] text-[#6B6B6B] hover:bg-[#E7E7E7]',
-                )}
-              >
-                {cat.posDisplayName || cat.categoryName}
-              </button>
-            );
-          })}
-          {rootCategories.length === 0 && (
-            <span className="px-1 py-2 text-sm text-[#9A9A9A]">No kiosk-visible categories</span>
-          )}
-        </div>
+      {/* Header: title + start-new-order */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/5 bg-white px-4 py-3">
+        <h1 className="text-lg font-bold text-[#242528]">Menu</h1>
+        <button
+          type="button"
+          onClick={onStartNewOrder}
+          className="flex items-center gap-2 rounded-full border border-[#ED7C69] px-4 py-2 text-sm font-semibold text-[#ED7C69] transition-colors hover:bg-[#ED7C69]/5"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Start new order
+        </button>
       </div>
 
-      {/* Item grid */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {activeItems.length === 0 ? (
+      {/* Menu tabs (only when more than one menu exists) */}
+      {sortedMenus.length > 1 && (
+        <div className="shrink-0 bg-white px-4 pb-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {sortedMenus.map((menu) => {
+              const isActive = menu.id === selectedMenuId;
+              return (
+                <button
+                  key={menu.id}
+                  type="button"
+                  onClick={() => setSelectedMenu(menu.id)}
+                  className={cn(
+                    'shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors',
+                    isActive ? 'bg-[#242528] text-white' : 'text-[#6B6B6B] hover:bg-[#F1F1F1]',
+                  )}
+                >
+                  {menu.posDisplayName || menu.menuName}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Category tab bar — tapping scrolls to the section */}
+      {sections.length > 0 && (
+        <div className="shrink-0 border-b border-black/5 bg-white px-4 py-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {sections.map((s) => {
+              const isActive = s.categoryId === activeCategoryId;
+              return (
+                <button
+                  key={s.categoryId}
+                  ref={(el) => (tabRefs.current[s.categoryId] = el)}
+                  type="button"
+                  onClick={() => scrollToSection(s.categoryId)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-2 rounded-full py-1.5 pl-1.5 pr-4 text-sm font-semibold transition-colors',
+                    isActive
+                      ? 'bg-[#ED7C69] text-white shadow-sm'
+                      : 'bg-[#F1F1F1] text-[#6B6B6B] hover:bg-[#E7E7E7]',
+                  )}
+                >
+                  <CategoryThumb name={s.name} image={s.image} />
+                  {s.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* One continuous scrolling list, grouped into labeled sections */}
+      <div ref={scrollRef} onScroll={syncActive} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {sections.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-[#9A9A9A]">
-            No kiosk-visible items in this category
+            No kiosk-visible items in this menu
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {activeItems.map((item) => (
-              <KioskItemCard key={item.id} item={item} onClick={() => onSelectItem(item)} />
-            ))}
-          </div>
+          sections.map((s) => (
+            <section
+              key={s.categoryId}
+              ref={(el) => (sectionRefs.current[s.categoryId] = el)}
+              className="scroll-mt-2 pb-6"
+            >
+              <h2 className="mb-3 text-lg font-bold text-[#242528]">{s.name}</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {s.items.map((item) => (
+                  <KioskItemCard key={item.id} item={item} onClick={() => onSelectItem(item)} />
+                ))}
+              </div>
+            </section>
+          ))
         )}
       </div>
 
@@ -131,6 +237,28 @@ export function KioskMenuScreen({ onSelectItem, cartCount, subtotal, onViewCart 
           <span className="tabular-nums">${subtotal.toFixed(2)}</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Small round category image shown inside each category tab. */
+function CategoryThumb({ name, image }: { name: string; image: string }) {
+  const [imgError, setImgError] = useState(false);
+  const showImage = image && !imgError;
+  return (
+    <div className="h-7 w-7 shrink-0 overflow-hidden rounded-full bg-white/70">
+      {showImage ? (
+        <img
+          src={image}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-[#C9C9C9]">
+          <UtensilsCrossed className="h-3.5 w-3.5" />
+        </div>
+      )}
     </div>
   );
 }
