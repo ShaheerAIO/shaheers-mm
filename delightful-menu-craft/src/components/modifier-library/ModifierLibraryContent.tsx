@@ -73,6 +73,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CreateModifierPanel } from '@/components/menu-builder/CreateModifierPanel';
 
 // ---------------------------------------------------------------------------
 // Shared confirm dialog
@@ -120,7 +121,7 @@ export function ModifierLibraryContent() {
     itemModifiers,
     selectedModifierId,
     setSelectedModifier,
-    addModifier,
+    setIsCreatingOption,
     deleteModifier,
     duplicateModifier,
     addModifierGroup,
@@ -139,10 +140,12 @@ export function ModifierLibraryContent() {
   const [modifierSort, setModifierSort] = useState<'default' | 'name-asc' | 'name-desc' | 'options-desc' | 'options-asc'>('default');
   const [showOptionsLibrary, setShowOptionsLibrary] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [isCreatingNewModifier, setIsCreatingNewModifier] = useState(false);
+  const [isCreatingNewGroup, setIsCreatingNewGroup] = useState(false);
 
   const selectedModifier = modifiers.find(m => m.id === selectedModifierId);
   const selectedGroup = modifierGroups.find(g => g.id === selectedGroupId);
-  
+
   // Filter and sort modifiers
   const filteredModifiers = useMemo(() => {
     let result = modifiers.filter(m => {
@@ -186,12 +189,20 @@ export function ModifierLibraryContent() {
     setNewGroupName('');
   };
 
+  const handleCreateModifierGroup = () => {
+    setSelectedGroupId(null);
+    setIsCreatingNewGroup(true);
+  };
+
   const filteredGroups = modifierGroups.filter((g) => {
     if (!groupSearch.trim()) return true;
     return g.groupName.toLowerCase().includes(groupSearch.toLowerCase());
   });
 
   const handleAddModifier = () => {
+
+    // Commenting this because we cannot create mod group without modifiers
+    /*
     const newModifier: Modifier = {
       id: getNextId('modifiers'),
       modifierName: 'New Modifier',
@@ -218,6 +229,11 @@ export function ModifierLibraryContent() {
     };
     addModifier(newModifier);
     setSelectedModifier(newModifier.id);
+    */
+
+    setIsCreatingOption(false);
+    setSelectedModifier(null);
+    setIsCreatingNewModifier(true);
   };
 
   if (!isDataLoaded) {
@@ -289,170 +305,173 @@ export function ModifierLibraryContent() {
             </div>
           ) : libView === 'modifiers' ? (
             <>
-          <div className="p-4 border-b border-panel-border">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold">Modifiers</h2>
-              <button className="btn-add" onClick={handleAddModifier}>
-                <Plus className="w-3.5 h-3.5" />
-                New
-              </button>
-            </div>
-            {/* Options Library Button */}
-            <button
-              onClick={() => setShowOptionsLibrary(true)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <Package className="w-3.5 h-3.5" />
-              Options Library
-            </button>
-          </div>
-          
-          {/* Search */}
-          <div className="px-3 py-2 border-b border-panel-border">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search modifiers..."
-                value={modifierSearch}
-                onChange={(e) => setModifierSearch(e.target.value)}
-                className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {modifierSearch && (
-                <button
-                  onClick={() => setModifierSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Sort */}
-          <div className="px-3 py-1.5 border-b border-panel-border flex items-center gap-2">
-            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <Select value={modifierSort} onValueChange={(v) => setModifierSort(v as typeof modifierSort)}>
-              <SelectTrigger className="h-7 text-xs flex-1 border-0 bg-transparent shadow-none focus:ring-0 px-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Default order</SelectItem>
-                <SelectItem value="name-asc">Name A → Z</SelectItem>
-                <SelectItem value="name-desc">Name Z → A</SelectItem>
-                <SelectItem value="options-desc">Most options first</SelectItem>
-                <SelectItem value="options-asc">Fewest options first</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {filteredModifiers.length === 0 && modifierSearch ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                No modifiers match "{modifierSearch}"
-              </div>
-            ) : null}
-            {filteredModifiers.map((modifier) => {
-              // Count options for this modifier
-              const directOptionCount = modifierModifierOptions.filter(
-                mmo => mmo.modifierId === modifier.id
-              ).length;
-              const childModifierCount = modifiers.filter(
-                m => m.parentModifierId === modifier.id
-              ).length;
-              const usedByCount = itemModifiers.filter(
-                im => im.modifierId === modifier.id
-              ).length;
-
-              return (
-                <div
-                  key={modifier.id}
-                  className={cn(
-                    'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors',
-                    'hover:bg-item-hover',
-                    selectedModifierId === modifier.id && 'bg-item-selected border-l-2 border-l-primary',
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedModifier(modifier.id)}
-                    className="min-w-0 flex-1 text-left cursor-pointer"
-                  >
-                  <div className="font-medium text-sm flex items-center gap-1.5">
-                    {modifier.modifierName}
-                    <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
-                    {directOptionCount > 0 ? (
-                      <span>{directOptionCount} options</span>
-                    ) : childModifierCount > 0 ? (
-                      <span>{childModifierCount} nested</span>
-                    ) : (
-                      <span>0 options</span>
-                    )}
-                    <span className="bg-muted text-muted-foreground px-1 rounded">
-                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
-                    </span>
-                    {usedByCount > 0 && (
-                      <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
-                        used by {usedByCount}
-                      </span>
-                    )}
-                    {modifier.addNested && (
-                      <span className="flex items-center gap-0.5 text-primary">
-                        <GitBranch className="w-3 h-3" />
-                        nested
-                      </span>
-                    )}
-                    {modifier.isNested && (
-                      <span className="bg-primary/10 text-primary px-1 rounded">child</span>
-                    )}
-                    {modifier.pizzaSelection && <span className="bg-orange-500/10 text-orange-600 px-1 rounded">Pizza</span>}
-                    {modifier.isSizeModifier && <span className="bg-purple-500/10 text-purple-600 px-1 rounded">Size</span>}
-                    {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
-                      <span className="bg-amber-500/10 text-amber-600 px-1 rounded text-[10px]">
-                        {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
-                      </span>
-                    )}
-                  </div>
-                  </button>
-                  <button
-                    type="button"
-                    title="Duplicate modifier"
-                    className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      duplicateModifier(modifier.id);
-                    }}
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete modifier"
-                    className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmState({
-                        title: 'Delete modifier?',
-                        description: `"${modifier.modifierName}" will be permanently removed from the library.`,
-                        confirmLabel: 'Delete',
-                        destructive: true,
-                        onConfirm: () => deleteModifier(modifier.id),
-                      });
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
+              <div className="p-4 border-b border-panel-border">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold">Modifiers</h2>
+                  <button className="btn-add" onClick={handleAddModifier}>
+                    <Plus className="w-3.5 h-3.5" />
+                    New
                   </button>
                 </div>
-              );
-            })}
-          </div>
+                {/* Options Library Button */}
+                <button
+                  onClick={() => setShowOptionsLibrary(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Options Library
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="px-3 py-2 border-b border-panel-border">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search modifiers..."
+                    value={modifierSearch}
+                    onChange={(e) => setModifierSearch(e.target.value)}
+                    className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  {modifierSearch && (
+                    <button
+                      onClick={() => setModifierSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Sort */}
+              <div className="px-3 py-1.5 border-b border-panel-border flex items-center gap-2">
+                <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <Select value={modifierSort} onValueChange={(v) => setModifierSort(v as typeof modifierSort)}>
+                  <SelectTrigger className="h-7 text-xs flex-1 border-0 bg-transparent shadow-none focus:ring-0 px-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default order</SelectItem>
+                    <SelectItem value="name-asc">Name A → Z</SelectItem>
+                    <SelectItem value="name-desc">Name Z → A</SelectItem>
+                    <SelectItem value="options-desc">Most options first</SelectItem>
+                    <SelectItem value="options-asc">Fewest options first</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-thin">
+                {filteredModifiers.length === 0 && modifierSearch ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    No modifiers match "{modifierSearch}"
+                  </div>
+                ) : null}
+                {filteredModifiers.map((modifier) => {
+                  // Count options for this modifier
+                  const directOptionCount = modifierModifierOptions.filter(
+                    mmo => mmo.modifierId === modifier.id
+                  ).length;
+                  const childModifierCount = modifiers.filter(
+                    m => m.parentModifierId === modifier.id
+                  ).length;
+                  const usedByCount = itemModifiers.filter(
+                    im => im.modifierId === modifier.id
+                  ).length;
+
+                  return (
+                    <div
+                      key={modifier.id}
+                      className={cn(
+                        'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors',
+                        'hover:bg-item-hover',
+                        selectedModifierId === modifier.id && 'bg-item-selected border-l-2 border-l-primary',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingNewModifier(false);
+                          setSelectedModifier(modifier.id);
+                        }}
+                        className="min-w-0 flex-1 text-left cursor-pointer"
+                      >
+                        <div className="font-medium text-sm flex items-center gap-1.5">
+                          {modifier.modifierName}
+                          <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                          {directOptionCount > 0 ? (
+                            <span>{directOptionCount} options</span>
+                          ) : childModifierCount > 0 ? (
+                            <span>{childModifierCount} nested</span>
+                          ) : (
+                            <span>0 options</span>
+                          )}
+                          <span className="bg-muted text-muted-foreground px-1 rounded">
+                            Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                          </span>
+                          {usedByCount > 0 && (
+                            <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
+                              used by {usedByCount}
+                            </span>
+                          )}
+                          {modifier.addNested && (
+                            <span className="flex items-center gap-0.5 text-primary">
+                              <GitBranch className="w-3 h-3" />
+                              nested
+                            </span>
+                          )}
+                          {modifier.isNested && (
+                            <span className="bg-primary/10 text-primary px-1 rounded">child</span>
+                          )}
+                          {modifier.pizzaSelection && <span className="bg-orange-500/10 text-orange-600 px-1 rounded">Pizza</span>}
+                          {modifier.isSizeModifier && <span className="bg-purple-500/10 text-purple-600 px-1 rounded">Size</span>}
+                          {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
+                            <span className="bg-amber-500/10 text-amber-600 px-1 rounded text-[10px]">
+                              {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        title="Duplicate modifier"
+                        className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicateModifier(modifier.id);
+                        }}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete modifier"
+                        className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmState({
+                            title: 'Delete modifier?',
+                            description: `"${modifier.modifierName}" will be permanently removed from the library.`,
+                            confirmLabel: 'Delete',
+                            destructive: true,
+                            onConfirm: () => deleteModifier(modifier.id),
+                          });
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </>
           ) : (
             /* ---- Groups List ---- */
             <>
-              {/* Create new group */}
+              {/* Previous inline group creator retained for reference.
               <div className="p-3 border-b border-panel-border">
                 <div className="flex gap-1.5">
                   <input
@@ -476,6 +495,13 @@ export function ModifierLibraryContent() {
                 {newGroupName.length > 0 && getGroupNameError(newGroupName) && (
                   <p className="text-[10px] text-destructive mt-1">{getGroupNameError(newGroupName)}</p>
                 )}
+              </div>
+              */}
+              <div className="p-3 border-b border-panel-border">
+                <button type="button" className="btn-add w-full justify-center" onClick={handleCreateModifierGroup}>
+                  <Plus className="w-3.5 h-3.5" />
+                  Create Modifier Group
+                </button>
               </div>
               {/* Group search */}
               <div className="px-3 py-2 border-b border-panel-border">
@@ -516,7 +542,10 @@ export function ModifierLibraryContent() {
                         'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors hover:bg-item-hover cursor-pointer',
                         selectedGroupId === group.id && 'bg-item-selected border-l-2 border-l-primary',
                       )}
-                      onClick={() => setSelectedGroupId(group.id)}
+                      onClick={() => {
+                        setIsCreatingNewGroup(false);
+                        setSelectedGroupId(group.id);
+                      }}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">{group.groupName}</div>
@@ -561,13 +590,40 @@ export function ModifierLibraryContent() {
               setFilter={setOverviewFilter}
             />
           ) : libView === 'modifiers' ? (
-            selectedModifier ? (
+            isCreatingNewModifier ? (
+              <CreateModifierPanel
+                onCancel={() => setIsCreatingNewModifier(false)}
+                onSaved={(modifierId) => {
+                  setIsCreatingNewModifier(false);
+                  setSelectedModifier(modifierId);
+                }}
+              />
+            ) : selectedModifier ? (
               <ModifierDetail modifier={selectedModifier} />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 Select a modifier to edit
               </div>
             )
+          ) : isCreatingNewGroup ? (
+            <CreateModifierGroupForm
+              modifiers={modifiers}
+              onCancel={() => setIsCreatingNewGroup(false)}
+              onSave={({ groupName, posDisplayName, modifierIds }) => {
+                const newGroup: ModifierGroup = {
+                  id: getNextId('modifierGroups'),
+                  groupName,
+                  posDisplayName,
+                  onPrem: true,
+                  offPrem: true,
+                  modifierIds: modifierIds.join(','),
+                  modifierName: '',
+                };
+                addModifierGroup(newGroup);
+                setIsCreatingNewGroup(false);
+                setSelectedGroupId(newGroup.id);
+              }}
+            />
           ) : selectedGroup ? (
             <ModifierGroupDetail
               group={selectedGroup}
@@ -664,6 +720,8 @@ interface ModifierDraft {
   canGuestSelectMoreModifiers: boolean;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
+  isNested: boolean;
+  addNested: boolean;
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
@@ -694,7 +752,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setModifierOptionOrder,
     getNextId,
   } = useMenuStore();
-  
+
   const [optionSearch, setOptionSearch] = useState('');
   const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
@@ -730,6 +788,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
+    isNested: modifier.isNested,
+    addNested: modifier.addNested,
     ...defaultVisibility(),
     visibilityPos: modifier.visibilityPos ?? true,
     visibilityKiosk: modifier.visibilityKiosk ?? true,
@@ -757,6 +817,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
+      isNested: modifier.isNested,
+      addNested: modifier.addNested,
       ...defaultVisibility(),
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
@@ -853,7 +915,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       draft.multiSelect !== (modifier.multiSelect ?? false) ||
       draft.canGuestSelectMoreModifiers !== (modifier.canGuestSelectMoreModifiers ?? true) ||
       draft.pizzaSelection !== modifier.pizzaSelection ||
-      draft.isSizeModifier !== modifier.isSizeModifier
+      draft.isSizeModifier !== modifier.isSizeModifier ||
+      draft.isNested !== modifier.isNested ||
+      draft.addNested !== modifier.addNested
     );
   }, [draft, modifier]);
 
@@ -882,6 +946,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         canGuestSelectMoreModifiers: draft.canGuestSelectMoreModifiers,
         pizzaSelection: draft.pizzaSelection,
         isSizeModifier: draft.isSizeModifier,
+        isNested: draft.isNested,
+        addNested: draft.addNested,
         visibilityPos: draft.visibilityPos,
         visibilityKiosk: draft.visibilityKiosk,
         visibilityMenuBoard: draft.visibilityMenuBoard,
@@ -891,7 +957,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         visibilityDoordash: draft.visibilityDoordash,
       });
     }
-    setSelectedModifier(null);
   };
 
   const handleDiscard = () => {
@@ -910,6 +975,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
+      isNested: modifier.isNested,
+      addNested: modifier.addNested,
       ...defaultVisibility(),
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
@@ -942,7 +1009,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         option: modifierOptions.find(o => o.id === mmo.modifierOptionId),
       }));
   }, [modifierModifierOptions, modifier.id, modifierOptions]);
-  
+
   // Dynamic Max SELECTION ceiling from the three toggles (see modifierSelectionCeiling)
   const selectionCeiling = useMemo(
     () =>
@@ -970,7 +1037,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const filteredOptionAssignments = useMemo(() => {
     if (!optionSearch.trim()) return modifierOptionAssignments;
     const query = optionSearch.toLowerCase();
-    return modifierOptionAssignments.filter(a => 
+    return modifierOptionAssignments.filter(a =>
       a.option?.optionName.toLowerCase().includes(query) ||
       a.optionDisplayName.toLowerCase().includes(query)
     );
@@ -1068,7 +1135,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       ...defaultVisibility(),
     };
     addModifierOption(newOption);
-    
+
     // Assign it to this modifier with the price
     addModifierModifierOption({
       modifierId: modifier.id,
@@ -1306,8 +1373,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   // Total number of choices a guest could pick from (flat options or nested
   // sub-modifiers). The Max SELECTION field must never exceed this, regardless
   // of the (separately displayed) combination limit.
-  const availableOptionCount =
-    effectiveMode === 'nested' ? childModifiers.length : modifierOptionAssignments.length;
+  const availableOptionCount = draft.addNested
+    ? childModifiers.length
+    : modifierOptionAssignments.length;
   const maxSelectorCeiling =
     Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, availableOptionCount || Infinity);
 
@@ -1379,6 +1447,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     return modifiers.filter(m =>
       m.id !== modifier.id &&
       !childModifierIds.includes(m.id) &&
+      m.isNested &&
       (m.parentModifierId === 0 || m.parentModifierId === modifier.id)
     );
   }, [modifiers, modifier.id, childModifierIds]);
@@ -1419,7 +1488,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             You have unsaved changes
           </div>
         )}
-        
+
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Names (left) + Modifier Type (right) — same row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -1503,8 +1572,9 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             {/* Modifier Type — buttons + used-by/nested info underneath, to fill the column */}
             <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
               <Label className="section-header">Modifier Type</Label>
+              {/* Flat and Nested type buttons are kept for reference. Flat options are the default.
               <div className="flex flex-col gap-2">
-                {/* Flat Options button */}
+                Flat Options button
                 {(() => {
                   const isActive = effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat');
                   const willClear = effectiveMode === 'nested';
@@ -1523,13 +1593,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       <div>
                         <div className="font-semibold text-xs">Flat Options</div>
                         <div className="text-[10px] font-normal opacity-70 leading-tight">
-                          {willClear ? 'Switch — will clear nested' : 'Guest picks from a list'}
+                          {willClear ? 'Switch — will clear nested' : 'Guest picks from ad list'}
                         </div>
                       </div>
                     </button>
                   );
                 })()}
-                {/* Nested Modifiers button */}
+                Nested Modifiers button
                 {(() => {
                   const isActive = effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested');
                   const willClear = effectiveMode === 'flat';
@@ -1554,6 +1624,35 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     </button>
                   );
                 })()}
+              </div>
+              */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+                  <span>
+                    <span className="block text-xs font-medium">Is Nested</span>
+                    <span className="block text-[10px] text-muted-foreground">Is this modifier nested?</span>
+                  </span>
+                  <Switch
+                    checked={draft.isNested}
+                    disabled={draft.addNested}
+                    onCheckedChange={(checked) =>
+                      setDraft((d) => ({ ...d, isNested: checked, addNested: checked ? false : d.addNested }))
+                    }
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+                  <span>
+                    <span className="block text-xs font-medium">Add Nested</span>
+                    <span className="block text-[10px] text-muted-foreground">Add nested modifiers?</span>
+                  </span>
+                  <Switch
+                    checked={draft.addNested}
+                    disabled={draft.isNested}
+                    onCheckedChange={(checked) =>
+                      setDraft((d) => ({ ...d, addNested: checked, isNested: checked ? false : d.isNested }))
+                    }
+                  />
+                </label>
               </div>
             </div>
 
@@ -1588,383 +1687,383 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             })()}
           </div>
 
-          {/* Nested Modifiers — nested mode only */}
-          {(effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested')) &&
-          <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-between">
-              <Label className="section-header">
-                Nested Modifiers ({childModifiers.length})
-              </Label>
-              {availableNestedModifiers.length > 0 && (
-                <Select onValueChange={handleAddNestedModifier}>
-                  <SelectTrigger className="w-40">
-                    <span className="text-xs flex items-center gap-1">
-                      <Plus className="w-3 h-3" />
-                      Add Nested
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="max-w-[min(100vw-2rem,28rem)]">
-                    {availableNestedModifiers.map((mod) => (
-                      <SelectItem key={mod.id} value={mod.id.toString()}>
-                        <span className="line-clamp-2 text-left whitespace-normal">
-                          {formatModifierForSelect(mod)}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Sub-modifiers that follow this modifier when it's selected by a guest.
-            </p>
-            <div className="space-y-2">
-              {childModifiers.map((child) => {
-                const nestedOpts = getOptionAssignmentsForModifier(child.id);
-                const optCount = nestedOpts.length;
-                const isExpanded = expandedNestedChildIds.includes(child.id);
-                return (
-                  <div
-                    key={child.id}
-                    className="rounded-lg border border-border bg-background overflow-hidden group"
-                  >
-                    <div className="flex items-center gap-2 p-2.5">
-                      <button
-                        type="button"
-                        onClick={() => toggleNestedChildExpanded(child.id)}
-                        className="p-0.5 rounded hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground"
-                        aria-expanded={isExpanded}
-                        title={isExpanded ? 'Collapse options' : 'Expand options'}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4" />
+          {/* Only parent modifiers assign nested child modifiers. */}
+          {draft.addNested &&
+            <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between">
+                <Label className="section-header">
+                  Nested Modifiers ({childModifiers.length})
+                </Label>
+                {availableNestedModifiers.length > 0 && (
+                  <Select onValueChange={handleAddNestedModifier}>
+                    <SelectTrigger className="w-40">
+                      <span className="text-xs flex items-center gap-1">
+                        <Plus className="w-3 h-3" />
+                        Add Nested
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="max-w-[min(100vw-2rem,28rem)]">
+                      {availableNestedModifiers.map((mod) => (
+                        <SelectItem key={mod.id} value={mod.id.toString()}>
+                          <span className="line-clamp-2 text-left whitespace-normal">
+                            {formatModifierForSelect(mod)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sub-modifiers that follow this modifier when it's selected by a guest.
+              </p>
+              <div className="space-y-2">
+                {childModifiers.map((child) => {
+                  const nestedOpts = getOptionAssignmentsForModifier(child.id);
+                  const optCount = nestedOpts.length;
+                  const isExpanded = expandedNestedChildIds.includes(child.id);
+                  return (
+                    <div
+                      key={child.id}
+                      className="rounded-lg border border-border bg-background overflow-hidden group"
+                    >
+                      <div className="flex items-center gap-2 p-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleNestedChildExpanded(child.id)}
+                          className="p-0.5 rounded hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground"
+                          aria-expanded={isExpanded}
+                          title={isExpanded ? 'Collapse options' : 'Expand options'}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">
+                            {child.posDisplayName || child.modifierName}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span>{optCount} options</span>
+                            {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
+                              <span className="bg-amber-500/10 text-amber-600 px-1 rounded">
+                                {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveNestedModifier(child.id)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                          title="Remove nested modifier"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div className="border-t border-border bg-muted/25 px-3 py-2 pl-11 space-y-1.5">
+                          {nestedOpts.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-1">No options defined</p>
+                          ) : (
+                            nestedOpts.map((a) => (
+                              <div
+                                key={a.modifierOptionId}
+                                className="flex items-center justify-between gap-2 text-xs py-1 border-b border-border/50 last:border-0"
+                              >
+                                <span className="text-foreground font-medium truncate">
+                                  {a.option?.posDisplayName || a.option?.optionName || a.optionDisplayName}
+                                </span>
+                                {a.isDefaultSelected && (
+                                  <span className="shrink-0 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {childModifiers.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No nested modifiers. Use the dropdown above to add one.
+                  </p>
+                )}
+              </div>
+            </div>}
+
+          {/* Flat and child modifiers both use regular options. */}
+          {!draft.addNested &&
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Label className="section-header">{draft.isSizeModifier ? 'Sizes' : 'Options'} ({modifierOptionAssignments.length})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {availableOptions.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-xs"
+                      onClick={() => setBulkFromLibraryOpen(true)}
+                    >
+                      Add from library…
+                    </Button>
+                  )}
+                  <button type="button" className="btn-add" onClick={() => draft.isSizeModifier ? handleAddSize() : setShowCreateOption(true)}>
+                    <Plus className="w-3.5 h-3.5" />
+                    {draft.isSizeModifier ? 'New Size' : 'New Option'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-4 items-start">
+                {/* Options list — single column so drag-to-reorder stays readable */}
+                <div className="space-y-2 min-w-0">
+                  {/* Search + sort options */}
+                  {(modifierOptionAssignments.length > 3 || modifierOptionAssignments.length > 1) && (
+                    <div className="flex items-center gap-2">
+                      {modifierOptionAssignments.length > 3 && (
+                        <div className="relative flex-1">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <input
+                            type="text"
+                            placeholder="Search options..."
+                            value={optionSearch}
+                            onChange={(e) => setOptionSearch(e.target.value)}
+                            className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          {optionSearch && (
+                            <button
+                              onClick={() => setOptionSearch('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {modifierOptionAssignments.length > 1 && (
+                        <div className="relative shrink-0 ml-auto" ref={optionSortMenuRef}>
+                          <button
+                            type="button"
+                            onClick={() => setOptionSortMenuOpen((o) => !o)}
+                            className="flex items-center justify-center w-9 h-9 rounded-md border border-input hover:bg-muted/50 transition-colors"
+                            title="Sort options"
+                          >
+                            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                          {optionSortMenuOpen && (
+                            <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSortOptions('name-asc')}
+                              >
+                                Name (A → Z)
+                              </button>
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSortOptions('name-desc')}
+                              >
+                                Name (Z → A)
+                              </button>
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSortOptions('price-asc')}
+                              >
+                                Price (Low → High)
+                              </button>
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSortOptions('price-desc')}
+                              >
+                                Price (High → Low)
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {filteredOptionAssignments.length === 0 && optionSearch ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No options match "{optionSearch}"
+                    </p>
+                  ) : null}
+                  {filteredOptionAssignments.map((assignment, index) => (
+                    <div
+                      key={assignment.modifierOptionId}
+                      draggable={!isDragDisabled}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                        dragIndex === index && "opacity-40",
+                        dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
+                      )}
+                    >
+                      <GripVertical
+                        className={cn(
+                          "w-4 h-4 text-muted-foreground shrink-0",
+                          isDragDisabled
+                            ? "opacity-30 cursor-not-allowed"
+                            : "cursor-grab active:cursor-grabbing",
                         )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium">
-                          {child.posDisplayName || child.modifierName}
-                        </span>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                          <span>{optCount} options</span>
-                          {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
-                            <span className="bg-amber-500/10 text-amber-600 px-1 rounded">
-                              {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div>
+                          {draft.isSizeModifier ? (
+                            <input
+                              type="text"
+                              value={assignment.option?.optionName ?? ''}
+                              onChange={(e) => handleSizeNameChange(
+                                assignment.modifierOptionId,
+                                e.target.value,
+                              )}
+                              placeholder='Size name (e.g. Small, 10")'
+                              className="input-field text-sm h-8 w-full font-medium"
+                              aria-label="Size name"
+                              autoFocus={!assignment.option?.optionName}
+                            />
+                          ) : (
+                            <>
+                              <span className="text-sm font-medium">
+                                {assignment.option?.optionName || assignment.optionDisplayName}
+                              </span>
+                              <input
+                                type="text"
+                                value={assignment.optionDisplayName}
+                                onChange={(e) => handleOptionDisplayNameChange(
+                                  assignment.modifierOptionId,
+                                  e.target.value,
+                                )}
+                                placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
+                                className="input-field text-xs h-7 w-full mt-0.5"
+                                aria-label="Option display name"
+                              />
+                            </>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {assignment.isDefaultSelected && (
+                            <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                              Default
+                            </span>
+                          )}
+                          {assignment.option && !assignment.option.isStockAvailable && (
+                            <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
+                              Out of Stock
                             </span>
                           )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveNestedModifier(child.id)}
-                        className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                        title="Remove nested modifier"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {isExpanded && (
-                      <div className="border-t border-border bg-muted/25 px-3 py-2 pl-11 space-y-1.5">
-                        {nestedOpts.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-1">No options defined</p>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {isNoCharge ? (
+                          <span className="text-xs text-muted-foreground italic">Free</span>
                         ) : (
-                          nestedOpts.map((a) => (
-                            <div
-                              key={a.modifierOptionId}
-                              className="flex items-center justify-between gap-2 text-xs py-1 border-b border-border/50 last:border-0"
-                            >
-                              <span className="text-foreground font-medium truncate">
-                                {a.option?.posDisplayName || a.option?.optionName || a.optionDisplayName}
-                              </span>
-                              {a.isDefaultSelected && (
-                                <span className="shrink-0 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                                  Default
-                                </span>
-                              )}
-                            </div>
-                          ))
+                          <PriceStepperInput
+                            value={assignment.maxLimit}
+                            onFocus={(e) => e.target.select()}
+                            onCommit={(v) => handleOptionPriceChange(assignment.modifierOptionId, v)}
+                            prefix={<span className="text-muted-foreground text-xs">$</span>}
+                            wrapperClassName="w-20"
+                          />
                         )}
+                        <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
+                          <span className="text-muted-foreground text-xs">Qty</span>
+                          <NumberStepperInput
+                            inputMode="numeric"
+                            value={assignment.maxQtyPerOption ?? 1}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleOptionQtyChange(
+                              assignment.modifierOptionId,
+                              Math.max(0, parseInt(e.target.value, 10) || 0)
+                            )}
+                            onStep={(delta) => handleOptionQtyChange(
+                              assignment.modifierOptionId,
+                              Math.max(0, (assignment.maxQtyPerOption ?? 1) + delta)
+                            )}
+                            wrapperClassName="w-14"
+                          />
+                          {(assignment.maxQtyPerOption ?? 1) === 0 && (
+                            <span className="text-[10px] text-primary font-semibold">∞</span>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-              {childModifiers.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  No nested modifiers. Use the dropdown above to add one.
-                </p>
-              )}
-            </div>
-          </div>}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted shrink-0"
+                            aria-label="Option actions"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem
+                            onClick={() => handleRemoveOption(assignment.modifierOptionId)}
+                          >
+                            Remove from this modifier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() =>
+                              handleDeleteOptionGlobally(
+                                assignment.modifierOptionId,
+                                assignment.option?.optionName || assignment.optionDisplayName,
+                              )
+                            }
+                          >
+                            Delete from library everywhere…
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
 
-          {/* Options — flat mode only */}
-          {(effectiveMode === 'flat' || (effectiveMode === null && chosenMode === 'flat')) &&
-          <div className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Label className="section-header">{draft.isSizeModifier ? 'Sizes' : 'Options'} ({modifierOptionAssignments.length})</Label>
-              <div className="flex flex-wrap gap-2">
-                {availableOptions.length > 0 && (
+                  {modifierOptionAssignments.length === 0 && !optionSearch && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {draft.isSizeModifier
+                        ? 'No sizes added yet. Click "New Size" (or use bulk create) to add sizes and their prices.'
+                        : 'No options added yet. Click "New Option" to create one.'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Bulk create — to the right of the options list */}
+                <div className="rounded-md border border-border bg-muted/20 p-2.5 space-y-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Bulk create (one name per line, or comma / semicolon separated)</Label>
+                  <textarea
+                    value={bulkCreateText}
+                    onChange={(e) => setBulkCreateText(e.target.value)}
+                    rows={3}
+                    placeholder={'e.g.\nSmall\nMedium\nLarge'}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-y min-h-[4.5rem] focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
                   <Button
                     type="button"
-                    variant="outline"
                     size="sm"
-                    className="h-9 text-xs"
-                    onClick={() => setBulkFromLibraryOpen(true)}
+                    variant="secondary"
+                    disabled={!parseBulkOptionNames(bulkCreateText).length}
+                    onClick={handleBulkCreateFromLines}
                   >
-                    Add from library…
+                    Add as options
                   </Button>
-                )}
-                <button type="button" className="btn-add" onClick={() => draft.isSizeModifier ? handleAddSize() : setShowCreateOption(true)}>
-                  <Plus className="w-3.5 h-3.5" />
-                  {draft.isSizeModifier ? 'New Size' : 'New Option'}
-                </button>
+                </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-4 items-start">
-              {/* Options list — single column so drag-to-reorder stays readable */}
-              <div className="space-y-2 min-w-0">
-                {/* Search + sort options */}
-                {(modifierOptionAssignments.length > 3 || modifierOptionAssignments.length > 1) && (
-                  <div className="flex items-center gap-2">
-                    {modifierOptionAssignments.length > 3 && (
-                      <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Search options..."
-                          value={optionSearch}
-                          onChange={(e) => setOptionSearch(e.target.value)}
-                          className="w-full pl-8 pr-8 py-1.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        {optionSearch && (
-                          <button
-                            onClick={() => setOptionSearch('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {modifierOptionAssignments.length > 1 && (
-                      <div className="relative shrink-0 ml-auto" ref={optionSortMenuRef}>
-                        <button
-                          type="button"
-                          onClick={() => setOptionSortMenuOpen((o) => !o)}
-                          className="flex items-center justify-center w-9 h-9 rounded-md border border-input hover:bg-muted/50 transition-colors"
-                          title="Sort options"
-                        >
-                          <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                        {optionSortMenuOpen && (
-                          <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                              onClick={() => handleSortOptions('name-asc')}
-                            >
-                              Name (A → Z)
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                              onClick={() => handleSortOptions('name-desc')}
-                            >
-                              Name (Z → A)
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                              onClick={() => handleSortOptions('price-asc')}
-                            >
-                              Price (Low → High)
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
-                              onClick={() => handleSortOptions('price-desc')}
-                            >
-                              Price (High → Low)
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {filteredOptionAssignments.length === 0 && optionSearch ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No options match "{optionSearch}"
-                  </p>
-                ) : null}
-                {filteredOptionAssignments.map((assignment, index) => (
-                  <div
-                    key={assignment.modifierOptionId}
-                    draggable={!isDragDisabled}
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={(e) => handleDrop(e, index)}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
-                      dragIndex === index && "opacity-40",
-                      dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
-                    )}
-                  >
-                    <GripVertical
-                      className={cn(
-                        "w-4 h-4 text-muted-foreground shrink-0",
-                        isDragDisabled
-                          ? "opacity-30 cursor-not-allowed"
-                          : "cursor-grab active:cursor-grabbing",
-                      )}
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div>
-                        {draft.isSizeModifier ? (
-                          <input
-                            type="text"
-                            value={assignment.option?.optionName ?? ''}
-                            onChange={(e) => handleSizeNameChange(
-                              assignment.modifierOptionId,
-                              e.target.value,
-                            )}
-                            placeholder='Size name (e.g. Small, 10")'
-                            className="input-field text-sm h-8 w-full font-medium"
-                            aria-label="Size name"
-                            autoFocus={!assignment.option?.optionName}
-                          />
-                        ) : (
-                          <>
-                            <span className="text-sm font-medium">
-                              {assignment.option?.optionName || assignment.optionDisplayName}
-                            </span>
-                            <input
-                              type="text"
-                              value={assignment.optionDisplayName}
-                              onChange={(e) => handleOptionDisplayNameChange(
-                                assignment.modifierOptionId,
-                                e.target.value,
-                              )}
-                              placeholder={`Display name (default: ${assignment.option?.optionName ?? ''})`}
-                              className="input-field text-xs h-7 w-full mt-0.5"
-                              aria-label="Option display name"
-                            />
-                          </>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {assignment.isDefaultSelected && (
-                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                            Default
-                          </span>
-                        )}
-                        {assignment.option && !assignment.option.isStockAvailable && (
-                          <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
-                            Out of Stock
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      {isNoCharge ? (
-                        <span className="text-xs text-muted-foreground italic">Free</span>
-                      ) : (
-                        <PriceStepperInput
-                          value={assignment.maxLimit}
-                          onFocus={(e) => e.target.select()}
-                          onCommit={(v) => handleOptionPriceChange(assignment.modifierOptionId, v)}
-                          prefix={<span className="text-muted-foreground text-xs">$</span>}
-                          wrapperClassName="w-20"
-                        />
-                      )}
-                      <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
-                        <span className="text-muted-foreground text-xs">Qty</span>
-                        <NumberStepperInput
-                          inputMode="numeric"
-                          value={assignment.maxQtyPerOption ?? 1}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleOptionQtyChange(
-                            assignment.modifierOptionId,
-                            Math.max(0, parseInt(e.target.value, 10) || 0)
-                          )}
-                          onStep={(delta) => handleOptionQtyChange(
-                            assignment.modifierOptionId,
-                            Math.max(0, (assignment.maxQtyPerOption ?? 1) + delta)
-                          )}
-                          wrapperClassName="w-14"
-                        />
-                        {(assignment.maxQtyPerOption ?? 1) === 0 && (
-                          <span className="text-[10px] text-primary font-semibold">∞</span>
-                        )}
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-md text-muted-foreground hover:bg-muted shrink-0"
-                          aria-label="Option actions"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem
-                          onClick={() => handleRemoveOption(assignment.modifierOptionId)}
-                        >
-                          Remove from this modifier
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() =>
-                            handleDeleteOptionGlobally(
-                              assignment.modifierOptionId,
-                              assignment.option?.optionName || assignment.optionDisplayName,
-                            )
-                          }
-                        >
-                          Delete from library everywhere…
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                ))}
-
-                {modifierOptionAssignments.length === 0 && !optionSearch && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    {draft.isSizeModifier
-                      ? 'No sizes added yet. Click "New Size" (or use bulk create) to add sizes and their prices.'
-                      : 'No options added yet. Click "New Option" to create one.'}
-                  </p>
-                )}
-              </div>
-
-              {/* Bulk create — to the right of the options list */}
-              <div className="rounded-md border border-border bg-muted/20 p-2.5 space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Bulk create (one name per line, or comma / semicolon separated)</Label>
-                <textarea
-                  value={bulkCreateText}
-                  onChange={(e) => setBulkCreateText(e.target.value)}
-                  rows={3}
-                  placeholder={'e.g.\nSmall\nMedium\nLarge'}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-y min-h-[4.5rem] focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={!parseBulkOptionNames(bulkCreateText).length}
-                  onClick={handleBulkCreateFromLines}
-                >
-                  Add as options
-                </Button>
-              </div>
-            </div>
-          </div>}
+            </div>}
 
           {/* Channel Visibility — On-Prem / Off-Prem split into two columns */}
           <div className="space-y-2 p-4 bg-muted/30 rounded-lg">
@@ -1975,8 +2074,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 const active = channels.filter(c => draft[c.key as VisibilityChannelKey]);
                 const triggerLabel =
                   active.length === 0 ? 'None' :
-                  active.length === channels.length ? 'All' :
-                  active.map(c => c.label).join(', ');
+                    active.length === channels.length ? 'All' :
+                      active.map(c => c.label).join(', ');
                 return (
                   <div key={group}>
                     <button
@@ -2305,6 +2404,144 @@ interface ModifierGroupDetailProps {
   onDelete: () => void;
 }
 
+interface CreateModifierGroupFormProps {
+  modifiers: Modifier[];
+  onCancel: () => void;
+  onSave: (data: { groupName: string; posDisplayName: string; modifierIds: number[] }) => void;
+}
+
+function CreateModifierGroupForm({ modifiers, onCancel, onSave }: CreateModifierGroupFormProps) {
+  const [groupName, setGroupName] = useState('');
+  const [posDisplayName, setPosDisplayName] = useState('');
+  const [selectedModifierIds, setSelectedModifierIds] = useState<number[]>([]);
+  const [search, setSearch] = useState('');
+  const [modifierPickerOpen, setModifierPickerOpen] = useState(false);
+  const modifierPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!modifierPickerOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (modifierPickerRef.current && !modifierPickerRef.current.contains(event.target as Node)) {
+        setModifierPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [modifierPickerOpen]);
+
+  const availableModifiers = modifiers.filter(
+    (modifier) =>
+      !modifier.isNested &&
+      !selectedModifierIds.includes(modifier.id) &&
+      (!search || modifier.modifierName.toLowerCase().includes(search.toLowerCase())),
+  );
+  const selectedModifiers = selectedModifierIds
+    .map((id) => modifiers.find((modifier) => modifier.id === id))
+    .filter((modifier): modifier is Modifier => modifier !== undefined);
+  const nameError = getGroupNameError(groupName);
+  const canSave = !nameError && selectedModifierIds.length > 0;
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto scrollbar-thin">
+      <div className="flex items-center justify-between border-b border-panel-border p-4">
+        <h3 className="text-sm font-semibold">Create Modifier Group</h3>
+        <button type="button" onClick={onCancel} className="p-1.5 text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex-1 space-y-4 p-4">
+        <div className="space-y-1.5">
+          <Label className="section-header">Group Name *</Label>
+          <input value={groupName} onChange={(event) => setGroupName(event.target.value)} className="input-field w-full" autoFocus />
+          {groupName.length > 0 && nameError && <p className="text-[10px] text-destructive">{nameError}</p>}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="section-header">POS Display Name</Label>
+          <input value={posDisplayName} onChange={(event) => setPosDisplayName(event.target.value)} className="input-field w-full" placeholder={groupName || 'POS display name'} />
+        </div>
+        <div className="space-y-2">
+          <Label className="section-header">Modifiers ({selectedModifierIds.length}) *</Label>
+          {selectedModifiers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedModifiers.map((modifier) => (
+                <span key={modifier.id} className="inline-flex items-center gap-1 rounded border border-border bg-muted px-2 py-1 text-xs">
+                  {modifier.modifierName}
+                  <button type="button" onClick={() => setSelectedModifierIds((ids) => ids.filter((id) => id !== modifier.id))} className="text-muted-foreground hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="relative" ref={modifierPickerRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setModifierPickerOpen((open) => !open);
+                setSearch('');
+              }}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors',
+                modifierPickerOpen
+                  ? 'border-primary/40 bg-primary/5'
+                  : 'border-border bg-muted/30 hover:bg-muted/50',
+              )}
+            >
+              <span className="text-muted-foreground">Add modifier…</span>
+              <ChevronRight
+                className={cn(
+                  'w-3.5 h-3.5 text-muted-foreground transition-transform',
+                  modifierPickerOpen && 'rotate-90',
+                )}
+              />
+            </button>
+            {modifierPickerOpen && (
+              <div className="absolute left-0 top-full z-10 mt-1 w-full rounded-md border border-border bg-background shadow-md">
+                <div className="border-b border-border p-1.5">
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} className="input-field h-7 w-full text-xs" placeholder="Search modifiers…" autoFocus />
+                </div>
+                sad
+                <div className="max-h-48 overflow-y-auto">
+                  {availableModifiers.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">{search ? 'No matches' : 'All modifiers assigned'}</p>
+                  ) : availableModifiers.map((modifier) => (
+                    <button
+                      key={modifier.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedModifierIds((ids) => [...ids, modifier.id]);
+                        setSearch('');
+                      }}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50"
+                    >
+                      <span>{modifier.modifierName}</span>
+                      <span className="text-muted-foreground/60">#{modifier.id}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 border-t border-panel-border p-4">
+        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button
+          type="button"
+          disabled={!canSave}
+          onClick={() => onSave({
+            groupName: groupName.trim(),
+            posDisplayName: posDisplayName.trim() || groupName.trim(),
+            modifierIds: selectedModifierIds,
+          })}
+        >
+          Save Group
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }: ModifierGroupDetailProps) {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(group.groupName);
@@ -2345,9 +2582,11 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
 
   const availableModifiers = modifiers.filter(
     (m) =>
+      !m.isNested &&
       !groupModifierIds.includes(m.id) &&
       (!modPickerSearch || m.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())),
   );
+
 
   const addModifierToGroup = (modId: number) => {
     const newIds = [...groupModifierIds, modId].join(',');

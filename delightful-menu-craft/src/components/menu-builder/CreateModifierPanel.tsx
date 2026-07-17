@@ -41,9 +41,12 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CreateOptionPanel } from '@/components/menu-builder/CreateOptionPanel';
 
 interface CreateModifierPanelProps {
-  itemId: number;
+  itemId?: number;
+  onSaved?: (modifierId: number) => void;
+  onCancel?: () => void;
 }
 
 type OptionDraft = {
@@ -55,9 +58,9 @@ type OptionDraft = {
   isDefaultSelected: boolean;
   maxQtyPerOption: number; // 1 = once, 0 = unlimited, N = up to N
 } & (
-  | { type: 'existing'; existingOptionId: number }
-  | { type: 'new'; isStockAvailable: boolean; isSizeModifier: boolean }
-);
+    | { type: 'existing'; existingOptionId: number }
+    | { type: 'new'; isStockAvailable: boolean; isSizeModifier: boolean }
+  );
 
 function getModifierNameError(value: string): string | null {
   const trimmed = value.trim();
@@ -76,9 +79,10 @@ function getModifierPosNameError(value: string): string | null {
   return null;
 }
 
-export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
+export function CreateModifierPanel({ itemId, onSaved, onCancel }: CreateModifierPanelProps) {
   const {
     setIsCreatingModifier,
+    isCreatingOption,
     setIsCreatingOption,
     pendingOption,
     setPendingOption,
@@ -114,6 +118,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [multiSelect, setMultiSelect] = useState(false);
   // Default true to preserve the prior export value (was hardcoded true); repeat is opt-out.
   const [canGuestSelectMoreModifiers, setCanGuestSelectMoreModifiers] = useState(true);
+  const [isNested, setIsNested] = useState(false);
+  const [addNested, setAddNested] = useState(false);
 
   // Modifier type mode — mutually exclusive
   type ModifierMode = 'flat' | 'nested';
@@ -144,11 +150,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     { id: `co-${Date.now()}`, name: '', price: 0 },
   ]);
 
-  // Modifiers available to nest (not already parented elsewhere)
+  // Only modifiers explicitly marked as nested can be assigned as children.
   const availableNestedModifiers = useMemo(() => {
     return modifiers.filter(m =>
       !nestedModifierIds.includes(m.id) &&
-      (m.parentModifierId === 0)
+      m.isNested &&
+      m.parentModifierId === 0
     );
   }, [modifiers, nestedModifierIds]);
 
@@ -242,6 +249,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
   // Get existing item modifiers count for sort order
   const itemModifiersCount = useMemo(() => {
+    if (itemId === undefined) return 0;
     return itemModifiers.filter(im => im.itemId === itemId).length;
   }, [itemModifiers, itemId]);
 
@@ -420,13 +428,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       isOptional,
       modType:
         isOptional === 'Required' || isOptional === 'Select one' ? 'Required' :
-        isOptional === 'Push Optional' ? 'Push Optional' :
-        'Optional',
+          isOptional === 'Push Optional' ? 'Push Optional' :
+            'Optional',
       onPrem,
       offPrem,
       // Default values for other required fields
-      isNested: false,
-      addNested: false,
+      isNested,
+      addNested,
       modifierOptionPriceType,
       canGuestSelectMoreModifiers,
       multiSelect,
@@ -490,18 +498,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     }
 
     // 4. Add modifier to the item
-    addItemModifier({
-      modifierId: newModifierId,
-      itemId: itemId,
-      sortOrder: itemModifiersCount,
-    });
+    if (itemId !== undefined) {
+      addItemModifier({
+        modifierId: newModifierId,
+        itemId,
+        sortOrder: itemModifiersCount,
+      });
+    }
 
     // 5. Show save notification
     setShowSaveNotification(true);
     setTimeout(() => {
       setShowSaveNotification(false);
       // Close and reset after notification
-      setIsCreatingModifier(false);
+      if (onSaved) onSaved(newModifierId);
+      else setIsCreatingModifier(false);
       resetForm();
     }, 2000);
   };
@@ -577,7 +588,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   };
 
   const handleCancel = () => {
-    setIsCreatingModifier(false);
+    if (onCancel) onCancel();
+    else setIsCreatingModifier(false);
     resetForm();
   };
 
@@ -597,6 +609,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setModifierOptionPriceType('NoCharge');
     setMultiSelect(false);
     setCanGuestSelectMoreModifiers(true);
+    setIsNested(false);
+    setAddNested(false);
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
@@ -647,6 +661,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setMaxSelector(Math.min(maxSelectorCeiling, Math.max(parsed, minSelector)));
   });
 
+  if (itemId === undefined && isCreatingOption) {
+    return <CreateOptionPanel />;
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -685,10 +703,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         {/* Flat vs nested — compact toggle buttons */}
         <div className="space-y-1.5">
           <Label className="section-header">Structure</Label>
-          <div className="grid grid-cols-2 gap-2">
+          {/* Flat options remain the default through modifierMode = 'flat'.
+          <div>
             <button
               type="button"
               onClick={() => {
+                setIsNested(false);
+                setAddNested(false);
                 setModifierMode('flat');
                 setNestedModifierIds([]);
                 resetChildForm();
@@ -708,27 +729,51 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                 </div>
               </div>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setModifierMode('nested');
-                setOptions([]);
-              }}
-              className={cn(
-                'flex items-start gap-2 px-2 py-2 rounded-lg border text-left transition-colors',
-                modifierMode === 'nested'
-                  ? 'bg-primary/10 border-primary text-primary'
-                  : 'border-border text-muted-foreground hover:bg-muted/50',
-              )}
-            >
-              <GitBranch className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="font-semibold text-[11px] leading-tight">Nested</div>
-                <div className="text-[9px] font-normal opacity-80 leading-snug mt-0.5">
-                  Sub-modifiers
-                </div>
-              </div>
-            </button>
+          </div>
+          */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+              <span>
+                <span className="block text-xs font-medium">Is Nested</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  Is the mod nested?
+                </span>
+              </span>
+              <Switch
+                checked={isNested}
+                disabled={addNested}
+                onCheckedChange={(checked) => {
+                  setIsNested(checked);
+                  setModifierMode('flat');
+                  if (checked) setAddNested(false);
+                  setNestedModifierIds([]);
+                  resetChildForm();
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+              <span>
+                <span className="block text-xs font-medium">Add Nested</span>
+                <span className="block text-[10px] text-muted-foreground">
+                  Add nested mods?
+                </span>
+              </span>
+              <Switch
+                checked={addNested}
+                disabled={isNested}
+                onCheckedChange={(checked) => {
+                  setAddNested(checked);
+                  setModifierMode(checked ? 'nested' : 'flat');
+                  if (checked) {
+                    setIsNested(false);
+                    setOptions([]);
+                  } else {
+                    setNestedModifierIds([]);
+                    resetChildForm();
+                  }
+                }}
+              />
+            </label>
           </div>
         </div>
 
@@ -813,8 +858,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     const active = channels.filter(c => channelVisibility[c.key as VisibilityChannelKey]);
                     const triggerLabel =
                       active.length === 0 ? 'None' :
-                      active.length === channels.length ? 'All' :
-                      active.map(c => c.label).join(', ');
+                        active.length === channels.length ? 'All' :
+                          active.map(c => c.label).join(', ');
                     return (
                       <div key={group}>
                         <button
@@ -990,8 +1035,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
         </Accordion>
 
-        {/* Options — flat mode only */}
-        {modifierMode === 'flat' && <div className="space-y-2.5">
+        {/* Flat and child modifiers both use regular modifier options. */}
+        {(modifierMode === 'flat' || isNested) && <div className="space-y-2.5">
           {/* Header row: label + action buttons inline */}
           <div className="flex items-center justify-between gap-2">
             <Label className="section-header">Options ({options.length}) *</Label>
@@ -1191,163 +1236,163 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           )}
         </div>}
 
-        {/* Nested Modifiers — nested mode only */}
-        {modifierMode === 'nested' && (
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <Label className="section-header flex items-center gap-1.5 shrink-0">
-              <GitBranch className="w-3.5 h-3.5" />
-              Nested Modifiers ({nestedModifierIds.length})
-            </Label>
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {availableNestedModifiers.length > 0 && (
-                <Select onValueChange={(val) => {
-                  const id = parseInt(val);
-                  if (!isNaN(id) && !nestedModifierIds.includes(id)) {
-                    setNestedModifierIds([...nestedModifierIds, id]);
-                  }
-                }}>
-                  <SelectTrigger className="w-[min(100%,11rem)] min-w-[8rem]">
-                    <span className="text-xs flex items-center gap-1 truncate">
-                      <Plus className="w-3 h-3 shrink-0" />
-                      Add Existing
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="max-w-[min(100vw-2rem,26rem)]">
-                    {availableNestedModifiers.map((mod) => (
-                      <SelectItem key={mod.id} value={mod.id.toString()}>
-                        <span className="line-clamp-2 text-left whitespace-normal">
-                          {formatModifierForSelect(mod)}
-                        </span>
-                      </SelectItem>
+        {/* Only parent modifiers assign nested child modifiers. */}
+        {addNested && modifierMode === 'nested' && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="section-header flex items-center gap-1.5 shrink-0">
+                <GitBranch className="w-3.5 h-3.5" />
+                Nested Modifiers ({nestedModifierIds.length})
+              </Label>
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                {availableNestedModifiers.length > 0 && (
+                  <Select onValueChange={(val) => {
+                    const id = parseInt(val);
+                    if (!isNaN(id) && !nestedModifierIds.includes(id)) {
+                      setNestedModifierIds([...nestedModifierIds, id]);
+                    }
+                  }}>
+                    <SelectTrigger className="w-[min(100%,11rem)] min-w-[8rem]">
+                      <span className="text-xs flex items-center gap-1 truncate">
+                        <Plus className="w-3 h-3 shrink-0" />
+                        Add Existing
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="max-w-[min(100vw-2rem,26rem)]">
+                      {availableNestedModifiers.map((mod) => (
+                        <SelectItem key={mod.id} value={mod.id.toString()}>
+                          <span className="line-clamp-2 text-left whitespace-normal">
+                            {formatModifierForSelect(mod)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {!isCreatingChild && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingChild(true)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-border hover:bg-muted transition-colors whitespace-nowrap"
+                  >
+                    <Plus className="w-3 h-3 shrink-0" />
+                    New
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sub-modifiers that follow this one when a guest makes a selection.
+            </p>
+
+            {/* Inline child modifier creation form */}
+            {isCreatingChild && (
+              <div className="border-l-2 border-primary/40 pl-3 space-y-2.5 py-1">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Child modifier name *</Label>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={childName}
+                    onChange={e => setChildName(e.target.value)}
+                    placeholder="e.g. Sauce, Crust"
+                    className="input-field w-full text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Options</Label>
+                  <div className="space-y-1.5">
+                    {childOptions.map((opt, i) => (
+                      <div key={opt.id} className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={opt.name}
+                          onChange={e => setChildOptions(prev =>
+                            prev.map((o, j) => j === i ? { ...o, name: e.target.value } : o)
+                          )}
+                          placeholder="Option name"
+                          className="input-field flex-1 text-sm"
+                        />
+                        {/* Inline-created child modifiers are always No Charge — no per-option pricing. */}
+                        <button
+                          type="button"
+                          onClick={() => setChildOptions(prev => prev.filter((_, j) => j !== i))}
+                          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {!isCreatingChild && (
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingChild(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md border border-border hover:bg-muted transition-colors whitespace-nowrap"
-                >
-                  <Plus className="w-3 h-3 shrink-0" />
-                  New
-                </button>
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Sub-modifiers that follow this one when a guest makes a selection.
-          </p>
-
-          {/* Inline child modifier creation form */}
-          {isCreatingChild && (
-            <div className="border-l-2 border-primary/40 pl-3 space-y-2.5 py-1">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Child modifier name *</Label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={childName}
-                  onChange={e => setChildName(e.target.value)}
-                  placeholder="e.g. Sauce, Crust"
-                  className="input-field w-full text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Options</Label>
-                <div className="space-y-1.5">
-                  {childOptions.map((opt, i) => (
-                    <div key={opt.id} className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={opt.name}
-                        onChange={e => setChildOptions(prev =>
-                          prev.map((o, j) => j === i ? { ...o, name: e.target.value } : o)
-                        )}
-                        placeholder="Option name"
-                        className="input-field flex-1 text-sm"
-                      />
-                      {/* Inline-created child modifiers are always No Charge — no per-option pricing. */}
-                      <button
-                        type="button"
-                        onClick={() => setChildOptions(prev => prev.filter((_, j) => j !== i))}
-                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChildOptions(prev => [
-                    ...prev,
-                    { id: `co-${Date.now()}`, name: '', price: 0 },
-                  ])}
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
-                >
-                  <Plus className="w-3 h-3" /> Add option
-                </button>
-              </div>
-              <div className="flex gap-2 pt-0.5">
-                <button
-                  type="button"
-                  onClick={resetChildForm}
-                  className="flex-1 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveChild}
-                  disabled={!childName.trim() || childOptions.every(o => !o.name.trim())}
-                  className="flex-1 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {nestedModifiersList.map((child) => (
-              <div
-                key={child.id}
-                className="flex items-center gap-3 p-2.5 bg-muted/50 rounded-lg group"
-              >
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">
-                    {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName
-                      ? child.posDisplayName
-                      : child.modifierName}
-                  </span>
-                  {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      {child.modifierName}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    <span>
-                      {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
-                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setChildOptions(prev => [
+                      ...prev,
+                      { id: `co-${Date.now()}`, name: '', price: 0 },
+                    ])}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Add option
+                  </button>
                 </div>
-                <button
-                  onClick={() => setNestedModifierIds(nestedModifierIds.filter(id => id !== child.id))}
-                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={resetChildForm}
+                    className="flex-1 px-3 py-1.5 text-xs rounded-md border border-border hover:bg-muted transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveChild}
+                    disabled={!childName.trim() || childOptions.every(o => !o.name.trim())}
+                    className="flex-1 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Create
+                  </button>
+                </div>
               </div>
-            ))}
-            {nestedModifiersList.length === 0 && !isCreatingChild && (
-              <p className="text-sm text-muted-foreground text-center py-4 border border-dashed border-border rounded-lg">
-                No nested modifiers added.
-              </p>
             )}
+
+            <div className="space-y-2">
+              {nestedModifiersList.map((child) => (
+                <div
+                  key={child.id}
+                  className="flex items-center gap-3 p-2.5 bg-muted/50 rounded-lg group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">
+                      {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName
+                        ? child.posDisplayName
+                        : child.modifierName}
+                    </span>
+                    {child.posDisplayName?.trim() && child.posDisplayName !== child.modifierName && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                        {child.modifierName}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span>
+                        {modifierModifierOptions.filter(mmo => mmo.modifierId === child.id).length} options
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setNestedModifierIds(nestedModifierIds.filter(id => id !== child.id))}
+                    className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {nestedModifiersList.length === 0 && !isCreatingChild && (
+                <p className="text-sm text-muted-foreground text-center py-4 border border-dashed border-border rounded-lg">
+                  No nested modifiers added.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
         )}
       </div>
 
