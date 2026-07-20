@@ -146,11 +146,13 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     { id: `co-${Date.now()}`, name: '', price: 0 },
   ]);
 
-  // Modifiers available to nest (not already parented elsewhere)
+  // Modifiers available to nest: not already parented elsewhere, and not
+  // themselves a parent of nested modifiers — nesting is one level only.
   const availableNestedModifiers = useMemo(() => {
     return modifiers.filter(m =>
       !nestedModifierIds.includes(m.id) &&
-      (m.parentModifierId === 0)
+      (m.parentModifierId === 0) &&
+      !m.addNested
     );
   }, [modifiers, nestedModifierIds]);
 
