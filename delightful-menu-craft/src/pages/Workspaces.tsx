@@ -27,9 +27,9 @@ import {
   type WorkspaceMeta,
 } from '@/lib/workspaceSync';
 import { runMigrations, WORKSPACE_DATA_KEYS, type WorkspaceData } from '@/store/menuStore';
+import { useUserPreferencesStore } from '@/store/userPreferencesStore';
 
 type OwnerFilter = 'all' | 'me' | 'others';
-type SortOrder = 'updated' | 'name';
 
 /** Read any pre-Supabase work left in localStorage so it isn't lost on upgrade. */
 function readLegacyData(): WorkspaceData | null {
@@ -63,7 +63,8 @@ export default function Workspaces() {
   const [legacy] = useState(() => readLegacyData());
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('updated');
+  const sortOrder = useUserPreferencesStore((s) => s.workspaceSort);
+  const setSortOrder = useUserPreferencesStore((s) => s.setWorkspaceSort);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
@@ -240,7 +241,7 @@ export default function Workspaces() {
                   className="pl-8"
                 />
               </div>
-              <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as SortOrder)}>
+              <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as typeof sortOrder)}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>

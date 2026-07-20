@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
+import { useUserPreferencesStore } from '@/store/userPreferencesStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
 import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil, Copy, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -64,9 +65,10 @@ export function CategoryColumn({
   const [tempName, setTempName] = useState(category.categoryName);
   const [searchQuery, setSearchQuery] = useState('');
   // View-only sort for the item list. Purely cosmetic — never writes to the
-  // store, so the saved/exported item order is unaffected. Drag-reorder is
-  // disabled while this is anything but 'manual'.
-  const [sortMode, setSortMode] = useState<'manual' | 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc'>('manual');
+  // menu store, so the saved/exported item order is unaffected. Drag-reorder is
+  // disabled while this is anything but 'manual'. Persisted as a user preference.
+  const sortMode = useUserPreferencesStore((s) => s.categoryItemSort);
+  const setSortMode = useUserPreferencesStore((s) => s.setCategoryItemSort);
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number; categoryId: number } | null>(null);

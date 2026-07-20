@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
+import { useUserPreferencesStore } from '@/store/userPreferencesStore';
 import {
   Plus,
   GripVertical,
@@ -137,7 +138,7 @@ export function ModifierLibraryContent() {
   const [groupSearch, setGroupSearch] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [modifierSearch, setModifierSearch] = useState('');
-  const [modifierSort, setModifierSort] = useState<'default' | 'name-asc' | 'name-desc' | 'options-desc' | 'options-asc'>('default');
+  const { modifierSort, setModifierSort } = useUserPreferencesStore();
   const [showOptionsLibrary, setShowOptionsLibrary] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
@@ -156,7 +157,9 @@ export function ModifierLibraryContent() {
       );
     });
 
-    if (modifierSort === 'name-asc') {
+    if (modifierSort === 'new-old') {
+      result = [...result].reverse();
+    } else if (modifierSort === 'name-asc') {
       result = [...result].sort((a, b) => a.modifierName.localeCompare(b.modifierName));
     } else if (modifierSort === 'name-desc') {
       result = [...result].sort((a, b) => b.modifierName.localeCompare(a.modifierName));
@@ -199,9 +202,9 @@ export function ModifierLibraryContent() {
       posDisplayName: 'New Modifier',
       isNested: false,
       addNested: false,
-      modifierOptionPriceType: 'NoCharge',
-      isOptional: '',
-      canGuestSelectMoreModifiers: true,
+      modifierOptionPriceType: 'Individual',
+      isOptional: 'Select any',
+      canGuestSelectMoreModifiers: false,
       multiSelect: false,
       limitIndividualModifierSelection: false,
       minSelector: 0,
@@ -339,6 +342,7 @@ export function ModifierLibraryContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="default">Default order</SelectItem>
+                <SelectItem value="new-old">New → Old</SelectItem>
                 <SelectItem value="name-asc">Name A → Z</SelectItem>
                 <SelectItem value="name-desc">Name Z → A</SelectItem>
                 <SelectItem value="options-desc">Most options first</SelectItem>

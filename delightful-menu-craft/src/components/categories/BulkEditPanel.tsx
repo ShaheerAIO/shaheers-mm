@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMenuStore } from '@/store/menuStore';
@@ -75,37 +75,71 @@ const priceModeLabel = (mode: PriceMode) => PRICE_MODES.find((m) => m.value === 
 // Small reusable pieces
 // ---------------------------------------------------------------------------
 
-/** Tri-state chip row: click once = add (green), twice = remove (red), third = clear. */
+/**
+ * Tri-state chip row. Chips are annotated with how many of the selected
+ * targets already have each entry (`coverage`), so operators can see existing
+ * assignments and deselect them:
+ *   - attached to ALL targets → check + "attached" tint; click stages removal.
+ *   - attached to SOME (mixed) → "N/total" badge; click cycles add → remove.
+ *   - attached to NONE → plain; click stages an add.
+ */
 function ChipPicker({
   title,
   entries,
   addIds,
   removeIds: removeSet,
   onChange,
+  coverage,
+  total = 0,
 }: {
   title: string;
   entries: { id: number; label: string }[];
   addIds: Set<number>;
   removeIds: Set<number>;
   onChange: (add: Set<number>, remove: Set<number>) => void;
+  /** entry id → number of selected targets that already have it. */
+  coverage?: Map<number, number>;
+  /** number of selected targets (denominator for coverage). */
+  total?: number;
 }) {
   if (entries.length === 0) return null;
+  const stateOf = (id: number): 'all' | 'some' | 'none' => {
+    const have = coverage?.get(id) ?? 0;
+    if (have <= 0) return 'none';
+    return total > 0 && have >= total ? 'all' : 'some';
+  };
   const cycle = (id: number) => {
+    const st = stateOf(id);
     const a = new Set(addIds);
     const r = new Set(removeSet);
-    if (a.has(id)) { a.delete(id); r.add(id); }
-    else if (r.has(id)) { r.delete(id); }
-    else { a.add(id); }
+    if (a.has(id)) {
+      // leaving "add"; offer removal next only where something exists to remove
+      a.delete(id);
+      if (st !== 'none') r.add(id);
+    } else if (r.has(id)) {
+      r.delete(id);
+    } else if (st === 'all') {
+      r.add(id); // fully attached → the only meaningful action is removal
+    } else {
+      a.add(id);
+    }
     onChange(a, r);
   };
+  const anyCoverage = entries.some((e) => (coverage?.get(e.id) ?? 0) > 0);
   return (
     <section>
       <p className="section-header mb-1">{title}</p>
-      <p className="text-[10px] text-muted-foreground mb-2">Click once to add, twice to remove, third to clear</p>
+      <p className="text-[10px] text-muted-foreground mb-2">
+        {anyCoverage
+          ? 'Checked = already attached. Click to add, remove, or clear.'
+          : 'Click once to add, twice to remove, third to clear'}
+      </p>
       <div className="flex flex-wrap gap-1.5">
         {entries.map((e) => {
           const isAdd = addIds.has(e.id);
           const isRemove = removeSet.has(e.id);
+          const have = coverage?.get(e.id) ?? 0;
+          const st = stateOf(e.id);
           return (
             <button
               key={e.id}
@@ -115,12 +149,18 @@ function ChipPicker({
                 'inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors',
                 isAdd ? 'bg-green-500/10 border-green-500/40 text-green-600 dark:text-green-400'
                   : isRemove ? 'bg-destructive/10 border-destructive/40 text-destructive'
+                  : st === 'all' ? 'bg-primary/10 border-primary/40 text-primary'
+                  : st === 'some' ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400'
                   : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30',
               )}
             >
               {isAdd && <span className="font-bold">+</span>}
               {isRemove && <span className="font-bold">−</span>}
+              {!isAdd && !isRemove && st === 'all' && <Check className="w-3 h-3" />}
               {e.label}
+              {!isAdd && !isRemove && st === 'some' && (
+                <span className="opacity-70 tabular-nums">{have}/{total}</span>
+              )}
             </button>
           );
         })}
@@ -339,6 +379,46 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const presentLevels = LEVEL_PRIORITY.filter((l) => countOf[l] > 0);
   const presentKey = presentLevels.join(',');
   const deepest = presentLevels[0] ?? null; // LEVEL_PRIORITY is deepest-first
+
+  // ---- Current assignment coverage across the DIRECTLY-checked targets ----
+  // Each map is entry-id → how many selected targets already have it, so the
+  // chip pickers can surface existing assignments for review/removal.
+  const { itemModifiers, modifierModifierOptions, items } = selection.data;
+  const itemIdsKey = itemIds.join(',');
+  const modifierIdsKey = modifierIds.join(',');
+  const countByCsv = (field: 'stationIds' | 'tagIds' | 'allergenIds'): Map<number, number> => {
+    const m = new Map<number, number>();
+    const wanted = new Set(itemIds);
+    for (const it of items) {
+      if (!wanted.has(it.id)) continue;
+      for (const id of parseIdsCsv(it[field])) m.set(id, (m.get(id) ?? 0) + 1);
+    }
+    return m;
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stationCoverage = useMemo(() => countByCsv('stationIds'), [itemIdsKey, items]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tagCoverage = useMemo(() => countByCsv('tagIds'), [itemIdsKey, items]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allergenCoverage = useMemo(() => countByCsv('allergenIds'), [itemIdsKey, items]);
+  const modifierCoverage = useMemo(() => {
+    const m = new Map<number, number>();
+    const wanted = new Set(itemIds);
+    for (const im of itemModifiers) {
+      if (wanted.has(im.itemId)) m.set(im.modifierId, (m.get(im.modifierId) ?? 0) + 1);
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIdsKey, itemModifiers]);
+  const optionCoverage = useMemo(() => {
+    const m = new Map<number, number>();
+    const wanted = new Set(modifierIds);
+    for (const mmo of modifierModifierOptions) {
+      if (wanted.has(mmo.modifierId)) m.set(mmo.modifierOptionId, (m.get(mmo.modifierOptionId) ?? 0) + 1);
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modifierIdsKey, modifierModifierOptions]);
 
   const [activeLevel, setActiveLevel] = useState<BulkLevel | null>(deepest);
   const prevDeepest = useRef<BulkLevel | null>(deepest);
@@ -770,6 +850,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 addIds={tagAddIds}
                 removeIds={tagRemoveIds}
                 onChange={(a, r) => { setTagAddIds(a); setTagRemoveIds(r); }}
+                coverage={tagCoverage}
+                total={itemIds.length}
               />
               <ChipPicker
                 title="Allergens"
@@ -777,6 +859,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 addIds={allergenAddIds}
                 removeIds={allergenRemoveIds}
                 onChange={(a, r) => { setAllergenAddIds(a); setAllergenRemoveIds(r); }}
+                coverage={allergenCoverage}
+                total={itemIds.length}
               />
               <ChipPicker
                 title="Stations"
@@ -784,6 +868,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 addIds={stationAddIds}
                 removeIds={stationRemoveIds}
                 onChange={(a, r) => { setStationAddIds(a); setStationRemoveIds(r); }}
+                coverage={stationCoverage}
+                total={itemIds.length}
               />
               <ChipPicker
                 title="Attached modifiers"
@@ -791,6 +877,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 addIds={modifierAddIds}
                 removeIds={modifierRemoveIds}
                 onChange={(a, r) => { setModifierAddIds(a); setModifierRemoveIds(r); }}
+                coverage={modifierCoverage}
+                total={itemIds.length}
               />
 
               {/* Sale category */}
@@ -876,6 +964,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 addIds={optionAddIds}
                 removeIds={optionRemoveIds}
                 onChange={(a, r) => { setOptionAddIds(a); setOptionRemoveIds(r); }}
+                coverage={optionCoverage}
+                total={modifierIds.length}
               />
             </>
           )}
