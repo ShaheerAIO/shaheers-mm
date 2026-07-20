@@ -105,17 +105,16 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const [minSelector, setMinSelector] = useState(0);
   const [maxSelector, setMaxSelector] = useState(1);
   const [noMaxSelection, setNoMaxSelection] = useState(false);
-  const [isOptional, setIsOptional] = useState('');
+  const [isOptional, setIsOptional] = useState('Select any');
   const [onPrem, setOnPrem] = useState(true);
   const [offPrem, setOffPrem] = useState(true);
   const [channelVisibility, setChannelVisibility] = useState<Record<VisibilityChannelKey, boolean>>(defaultVisibility());
   const [openChannelGroup, setOpenChannelGroup] = useState<string | null>(null);
   const [pizzaSelection, setPizzaSelection] = useState(false);
   const [isSizeModifier, setIsSizeModifier] = useState(false);
-  const [modifierOptionPriceType, setModifierOptionPriceType] = useState('NoCharge');
+  const [modifierOptionPriceType, setModifierOptionPriceType] = useState('Individual');
   const [multiSelect, setMultiSelect] = useState(false);
-  // Default true to preserve the prior export value (was hardcoded true); repeat is opt-out.
-  const [canGuestSelectMoreModifiers, setCanGuestSelectMoreModifiers] = useState(true);
+  const [canGuestSelectMoreModifiers, setCanGuestSelectMoreModifiers] = useState(false);
 
   // Modifier type mode — mutually exclusive
   type ModifierMode = 'flat' | 'nested';
@@ -533,10 +532,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       posDisplayName: name,
       isNested: false,
       addNested: false,
-      modifierOptionPriceType: 'NoCharge',
-      isOptional: '',
+      modifierOptionPriceType: 'Individual',
+      isOptional: 'Select any',
       modType: 'Optional',
-      canGuestSelectMoreModifiers: true,
+      canGuestSelectMoreModifiers: false,
       multiSelect: false,
       limitIndividualModifierSelection: false,
       minSelector: 0,
@@ -593,14 +592,14 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setMinSelector(0);
     setMaxSelector(1);
     setNoMaxSelection(false);
-    setIsOptional('');
+    setIsOptional('Select any');
     setOnPrem(true);
     setOffPrem(true);
     setPizzaSelection(false);
     setIsSizeModifier(false);
-    setModifierOptionPriceType('NoCharge');
+    setModifierOptionPriceType('Individual');
     setMultiSelect(false);
-    setCanGuestSelectMoreModifiers(true);
+    setCanGuestSelectMoreModifiers(false);
     setOptions([]);
     setNestedModifierIds([]);
     setModifierMode('flat');
