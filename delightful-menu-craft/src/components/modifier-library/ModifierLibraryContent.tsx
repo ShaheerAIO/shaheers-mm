@@ -1376,11 +1376,14 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   // - not self
   // - not already a child
   // - not already a parent (parentModifierId > 0), unless it's THIS modifier's child
+  // - not itself a parent of nested modifiers — nesting is one level only, so a
+  //   modifier that already contains nested modifiers can't also be nested.
   const availableNestedModifiers = useMemo(() => {
     return modifiers.filter(m =>
       m.id !== modifier.id &&
       !childModifierIds.includes(m.id) &&
-      (m.parentModifierId === 0 || m.parentModifierId === modifier.id)
+      (m.parentModifierId === 0 || m.parentModifierId === modifier.id) &&
+      !m.addNested
     );
   }, [modifiers, modifier.id, childModifierIds]);
 
@@ -1534,22 +1537,30 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                 {(() => {
                   const isActive = effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested');
                   const willClear = effectiveMode === 'flat';
+                  // One level of nesting only: a modifier already nested under a
+                  // parent can't also become a container for its own nested modifiers.
+                  const isChild = modifier.isNested && modifier.parentModifierId > 0;
                   return (
                     <button
                       type="button"
-                      onClick={() => handleSwitchMode('nested')}
+                      disabled={isChild}
+                      onClick={() => { if (!isChild) handleSwitchMode('nested'); }}
                       className={cn(
                         'flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left',
-                        isActive
-                          ? 'bg-primary/10 border-primary text-primary'
-                          : 'border-border text-muted-foreground hover:bg-muted/50',
+                        isChild
+                          ? 'border-border text-muted-foreground opacity-50 cursor-not-allowed'
+                          : isActive
+                            ? 'bg-primary/10 border-primary text-primary'
+                            : 'border-border text-muted-foreground hover:bg-muted/50',
                       )}
                     >
                       <GitBranch className="w-4 h-4 shrink-0" />
                       <div>
                         <div className="font-semibold text-xs">Nested Modifiers</div>
                         <div className="text-[10px] font-normal opacity-70 leading-tight">
-                          {willClear ? 'Switch — will clear options' : 'Container for sub-modifiers'}
+                          {isChild
+                            ? "Can't nest — already nested under a parent"
+                            : willClear ? 'Switch — will clear options' : 'Container for sub-modifiers'}
                         </div>
                       </div>
                     </button>
