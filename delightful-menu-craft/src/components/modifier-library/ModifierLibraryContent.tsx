@@ -21,6 +21,7 @@ import {
   Pencil,
   Copy,
   Table as TableIcon,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
@@ -2359,9 +2360,13 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
     .map((id) => modifiers.find((m) => m.id === id))
     .filter(Boolean) as Modifier[];
 
+  // A group may contain only simple or parent modifiers — never a modifier that
+  // is itself nested under a parent. Exclude children so they can't be picked.
   const availableModifiers = modifiers.filter(
     (m) =>
       !groupModifierIds.includes(m.id) &&
+      !m.isNested &&
+      m.parentModifierId === 0 &&
       (!modPickerSearch || m.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())),
   );
 
@@ -2487,6 +2492,14 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
             Modifiers ({groupModifiers.length})
           </p>
+          {groupModifiers.length === 0 && (
+            <div className="flex items-start gap-1.5 mb-2 px-2 py-1.5 rounded border border-destructive/40 bg-destructive/10 text-destructive">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+              <span className="text-[11px] leading-tight">
+                A group must contain at least one modifier before it can be used or exported.
+              </span>
+            </div>
+          )}
           {groupModifiers.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
               {groupModifiers.map((mod) => (
