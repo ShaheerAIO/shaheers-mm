@@ -75,7 +75,7 @@ export function CategoryColumn({
   const [subcatToDelete, setSubcatToDelete] = useState<Category | null>(null);
   const [editingSubcatId, setEditingSubcatId] = useState<number | null>(null);
   const [subcatDraftName, setSubcatDraftName] = useState('');
-  const [cannotAddSubcatReason, setCannotAddSubcatReason] = useState<{ categoryName: string; itemCount: number } | null>(null);
+  const [confirmAddSubcatWithItems, setConfirmAddSubcatWithItems] = useState<{ parentId: number; categoryName: string; itemCount: number } | null>(null);
   const [cannotAddItemReason, setCannotAddItemReason] = useState<string | null>(null);
   // Native DnD state for reordering items in the focused category.
   const [itemDragIndex, setItemDragIndex] = useState<number | null>(null);
@@ -366,22 +366,9 @@ export function CategoryColumn({
     setShowDeleteConfirm(false);
   };
 
-  const handleAddSubcategory = () => {
-    // Nest under the currently-focused subcategory (or the root when none is drilled)
-    const parentId = activeSubcat ?? category.id;
-
-    // Enforce rule: a category cannot have both items AND subcategories
-    // Check applies to root category AND nested categories
-    const parentCategoryItems = categoryItems.filter(ci => ci.categoryId === parentId);
-    if (parentCategoryItems.length > 0) {
-      const parentCategory = categories.find(c => c.id === parentId);
-      setCannotAddSubcatReason({
-        categoryName: parentCategory?.categoryName || 'This category',
-        itemCount: parentCategoryItems.length,
-      });
-      return;
-    }
-
+  // Creates a new subcategory under `parentId`. Assumes the caller has already
+  // handled the items-in-parent check (see handleAddSubcategory).
+  const createSubcategory = (parentId: number) => {
     const siblings = childrenOf(parentId);
     const siblingColors = siblings.map((s) => s.color).filter(Boolean) as string[];
     const newSubcat: Category = {
@@ -406,7 +393,43 @@ export function CategoryColumn({
       daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
     addCategory(newSubcat);
-    setActiveSubcat(newSubcat.id);
+    // Keep the focus on the parent (don't drill into the new subcategory) so a
+    // subsequent "Add subcategory" creates a sibling next to this one rather
+    // than nesting it underneath. To nest deeper the user first selects a chip.
+    setActiveSubcat(parentId === category.id ? null : parentId);
+  };
+
+  const handleAddSubcategory = () => {
+    // Nest under the currently-focused subcategory (or the root when none is drilled)
+    const parentId = activeSubcat ?? category.id;
+
+    // Enforce rule: a category cannot have both items AND subcategories.
+    // If the parent already holds items, ask the user to confirm before we
+    // detach those items and proceed (rather than silently blocking).
+    const parentCategoryItems = categoryItems.filter(ci => ci.categoryId === parentId);
+    if (parentCategoryItems.length > 0) {
+      const parentCategory = categories.find(c => c.id === parentId);
+      setConfirmAddSubcatWithItems({
+        parentId,
+        categoryName: parentCategory?.categoryName || 'This category',
+        itemCount: parentCategoryItems.length,
+      });
+      return;
+    }
+
+    createSubcategory(parentId);
+  };
+
+  const confirmAddSubcategoryAndClearItems = () => {
+    if (!confirmAddSubcatWithItems) return;
+    const { parentId } = confirmAddSubcatWithItems;
+    // Detach every item currently in the parent (items themselves are kept,
+    // just no longer assigned to this now-parent category) then create it.
+    categoryItems
+      .filter((ci) => ci.categoryId === parentId)
+      .forEach((ci) => removeCategoryItem(ci.categoryId, ci.itemId));
+    createSubcategory(parentId);
+    setConfirmAddSubcatWithItems(null);
   };
 
   const handleDeleteSubcategory = (subcat: Category, e: React.MouseEvent) => {
@@ -1030,18 +1053,22 @@ export function CategoryColumn({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Cannot add subcategory - category has items */}
-      <AlertDialog open={cannotAddSubcatReason !== null} onOpenChange={(open) => { if (!open) setCannotAddSubcatReason(null); }}>
+      {/* Add subcategory to a category that has items — confirm the items will be removed */}
+      <AlertDialog open={confirmAddSubcatWithItems !== null} onOpenChange={(open) => { if (!open) setConfirmAddSubcatWithItems(null); }}>
         <AlertDialogContent className="max-w-sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Cannot Add Subcategory</AlertDialogTitle>
+            <AlertDialogTitle>Remove Items from "{confirmAddSubcatWithItems?.categoryName}"?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{cannotAddSubcatReason?.categoryName}" has {cannotAddSubcatReason?.itemCount} item{cannotAddSubcatReason?.itemCount !== 1 ? 's' : ''}. Remove all items from this category before creating a subcategory, as items can only exist in parent categories (leaf categories cannot have both items and subcategories).
+              A category can hold either items or subcategories, not both. "{confirmAddSubcatWithItems?.categoryName}" currently has {confirmAddSubcatWithItems?.itemCount} item{confirmAddSubcatWithItems?.itemCount !== 1 ? 's' : ''}. Adding a subcategory will remove all {confirmAddSubcatWithItems?.itemCount !== 1 ? 'of those items' : 'of that item'} from this category (the item{confirmAddSubcatWithItems?.itemCount !== 1 ? 's' : ''} will not be deleted, just unassigned). Do you want to continue?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setCannotAddSubcatReason(null)}>
-              OK
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmAddSubcategoryAndClearItems}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Items & Add Subcategory
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
