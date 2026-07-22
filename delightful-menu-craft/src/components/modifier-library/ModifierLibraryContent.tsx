@@ -145,7 +145,31 @@ export function ModifierLibraryContent() {
 
   const selectedModifier = modifiers.find(m => m.id === selectedModifierId);
   const selectedGroup = modifierGroups.find(g => g.id === selectedGroupId);
-  
+
+  // A group must contain at least one modifier. Keep the create-then-fill flow,
+  // but discard any group left empty once the user navigates away from it (picks
+  // another group, leaves the Groups view, or unmounts) so empty groups never
+  // persist into the saved/exported data.
+  const modifierGroupsRef = useRef(modifierGroups);
+  modifierGroupsRef.current = modifierGroups;
+  const discardIfEmpty = (id: number | null) => {
+    if (id === null) return;
+    const g = modifierGroupsRef.current.find((x) => x.id === id);
+    if (g && !(g.modifierIds || '').split(',').some((s) => s.trim())) {
+      deleteModifierGroup(id);
+    }
+  };
+  const activeGroupIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prevId = activeGroupIdRef.current;
+    if (prevId !== null && (prevId !== selectedGroupId || libView !== 'groups')) {
+      discardIfEmpty(prevId);
+    }
+    activeGroupIdRef.current = libView === 'groups' ? selectedGroupId : null;
+  }, [selectedGroupId, libView]);
+  useEffect(() => () => discardIfEmpty(activeGroupIdRef.current), []);
+
+
   // Filter and sort modifiers
   const filteredModifiers = useMemo(() => {
     let result = modifiers.filter(m => {
