@@ -728,6 +728,11 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const [optionSearch, setOptionSearch] = useState('');
   const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
+  const [nestedModSortMenuOpen, setNestedModSortMenuOpen] = useState(false);
+  const nestedModSortMenuRef = useRef<HTMLDivElement>(null);
+  // Which nested child modifier's "sort options" dropdown is currently open (null = none)
+  const [nestedOptionSortMenuChildId, setNestedOptionSortMenuChildId] = useState<number | null>(null);
+  const nestedOptionSortMenuRef = useRef<HTMLDivElement>(null);
   const [showCreateOption, setShowCreateOption] = useState(false);
   const [bulkCreateText, setBulkCreateText] = useState('');
   const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
@@ -1232,6 +1237,28 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [optionSortMenuOpen]);
 
+  useEffect(() => {
+    if (!nestedModSortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (nestedModSortMenuRef.current && !nestedModSortMenuRef.current.contains(e.target as Node)) {
+        setNestedModSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [nestedModSortMenuOpen]);
+
+  useEffect(() => {
+    if (nestedOptionSortMenuChildId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (nestedOptionSortMenuRef.current && !nestedOptionSortMenuRef.current.contains(e.target as Node)) {
+        setNestedOptionSortMenuChildId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [nestedOptionSortMenuChildId]);
+
   /** (Re)sort this modifier's options by name or price and persist the new sortOrder. */
   const handleSortOptions = (key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc') => {
     const sorted = [...modifierOptionAssignments].sort((a, b) => {
@@ -1247,6 +1274,35 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
     setModifierOptionOrder(modifier.id, sorted.map((o) => o.modifierOptionId));
     setOptionSortMenuOpen(false);
+  };
+
+  /** (Re)sort this modifier's nested child modifiers by name and persist to modifierIds. */
+  const handleSortNestedModifiers = (dir: 'asc' | 'desc') => {
+    const sorted = [...childModifiers].sort((a, b) =>
+      (a.posDisplayName || a.modifierName).localeCompare(b.posDisplayName || b.modifierName, undefined, { sensitivity: 'base' })
+    );
+    if (dir === 'desc') sorted.reverse();
+    updateModifier(modifier.id, { modifierIds: sorted.map((m) => m.id).join(',') });
+    setNestedModSortMenuOpen(false);
+  };
+
+  /** (Re)sort one nested child modifier's options by name or price and persist the new sortOrder. */
+  const handleSortNestedOptions = (
+    childId: number,
+    key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc',
+  ) => {
+    const opts = getOptionAssignmentsForModifier(childId);
+    const sorted = [...opts].sort((a, b) => {
+      if (key === 'price-asc' || key === 'price-desc') return a.maxLimit - b.maxLimit;
+      return (a.option?.optionName || a.optionDisplayName).localeCompare(
+        b.option?.optionName || b.optionDisplayName,
+        undefined,
+        { sensitivity: 'base' },
+      );
+    });
+    if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
+    setModifierOptionOrder(childId, sorted.map((o) => o.modifierOptionId));
+    setNestedOptionSortMenuChildId(null);
   };
 
   /** Options for any modifier id (join table first, then parentModifierId fallback) */
@@ -1632,10 +1688,41 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
           {/* Nested Modifiers — nested mode only */}
           {(effectiveMode === 'nested' || (effectiveMode === null && chosenMode === 'nested')) &&
           <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label className="section-header">
                 Nested Modifiers ({childModifiers.length})
               </Label>
+              <div className="flex items-center gap-2">
+              {childModifiers.length > 1 && (
+                <div className="relative" ref={nestedModSortMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNestedModSortMenuOpen((o) => !o)}
+                    className="flex items-center justify-center w-9 h-9 rounded-md border border-input hover:bg-muted/50 transition-colors"
+                    title="Sort nested modifiers"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                  {nestedModSortMenuOpen && (
+                    <div className="absolute z-20 right-0 top-full mt-1 w-36 rounded-md border border-border bg-background shadow-md py-1">
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortNestedModifiers('asc')}
+                      >
+                        Name (A → Z)
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSortNestedModifiers('desc')}
+                      >
+                        Name (Z → A)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {availableNestedModifiers.length > 0 && (
                 <Select onValueChange={handleAddNestedModifier}>
                   <SelectTrigger className="w-40">
@@ -1655,6 +1742,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                   </SelectContent>
                 </Select>
               )}
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
               Sub-modifiers that follow this modifier when it's selected by a guest.
@@ -1707,6 +1795,57 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     </div>
                     {isExpanded && (
                       <div className="border-t border-border bg-muted/25 px-3 py-2 pl-11 space-y-1.5">
+                        {nestedOpts.length > 1 && (
+                          <div className="flex items-center justify-end mb-1">
+                            <div
+                              className="relative"
+                              ref={nestedOptionSortMenuChildId === child.id ? nestedOptionSortMenuRef : undefined}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNestedOptionSortMenuChildId((id) => (id === child.id ? null : child.id))
+                                }
+                                className="flex items-center justify-center w-6 h-6 rounded-md border border-border hover:bg-muted/50 transition-colors shrink-0"
+                                title="Sort options"
+                              >
+                                <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+                              </button>
+                              {nestedOptionSortMenuChildId === child.id && (
+                                <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortNestedOptions(child.id, 'name-asc')}
+                                  >
+                                    Name (A → Z)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortNestedOptions(child.id, 'name-desc')}
+                                  >
+                                    Name (Z → A)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortNestedOptions(child.id, 'price-asc')}
+                                  >
+                                    Price (Low → High)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                    onClick={() => handleSortNestedOptions(child.id, 'price-desc')}
+                                  >
+                                    Price (High → Low)
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {nestedOpts.length === 0 ? (
                           <p className="text-xs text-muted-foreground py-1">No options defined</p>
                         ) : (

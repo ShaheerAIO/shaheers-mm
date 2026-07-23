@@ -154,6 +154,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     updateItem,
     items,
     modifiers,
+    updateModifier,
     modifierGroups,
     modifierOptions,
     modifierModifierOptions,
@@ -309,6 +310,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   // Which modifier's "sort options" dropdown is currently open (null = none)
   const [optionSortMenuModifierId, setOptionSortMenuModifierId] = useState<number | null>(null);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
+  // Which parent modifier's "sort nested modifiers" dropdown is currently open (null = none)
+  const [nestedModSortMenuParentId, setNestedModSortMenuParentId] = useState<number | null>(null);
+  const nestedModSortMenuRef = useRef<HTMLDivElement>(null);
+  // Which nested child modifier's "sort options" dropdown is currently open (null = none)
+  const [nestedOptionSortMenuChildId, setNestedOptionSortMenuChildId] = useState<number | null>(null);
+  const nestedOptionSortMenuRef = useRef<HTMLDivElement>(null);
   const [namesExpanded, setNamesExpanded] = useState(false);
   const [imageModalTarget, setImageModalTarget] = useState<ItemUploadField | null>(null);
   const [imagesOpen, setImagesOpen] = useState(false);
@@ -421,6 +428,28 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [optionSortMenuModifierId]);
+
+  useEffect(() => {
+    if (nestedModSortMenuParentId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (nestedModSortMenuRef.current && !nestedModSortMenuRef.current.contains(e.target as Node)) {
+        setNestedModSortMenuParentId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [nestedModSortMenuParentId]);
+
+  useEffect(() => {
+    if (nestedOptionSortMenuChildId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (nestedOptionSortMenuRef.current && !nestedOptionSortMenuRef.current.contains(e.target as Node)) {
+        setNestedOptionSortMenuChildId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [nestedOptionSortMenuChildId]);
 
   const originalStationIds = useMemo(
     () =>
@@ -784,6 +813,36 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
     setModifierOptionOrder(modifierId, sorted.map((o) => o.modifierOptionId));
     setOptionSortMenuModifierId(null);
+  };
+
+  /** (Re)sort a parent modifier's nested child modifiers by name and persist to modifierIds. */
+  const handleSortNestedModifiers = (parentId: number, dir: 'asc' | 'desc') => {
+    const nested = getNestedModifiers(parentId);
+    const sorted = [...nested].sort((a, b) =>
+      (a.posDisplayName || a.modifierName).localeCompare(b.posDisplayName || b.modifierName, undefined, { sensitivity: 'base' })
+    );
+    if (dir === 'desc') sorted.reverse();
+    updateModifier(parentId, { modifierIds: sorted.map((m) => m.id).join(',') });
+    setNestedModSortMenuParentId(null);
+  };
+
+  /** (Re)sort one nested child modifier's flat options by name or price and persist the new sortOrder. */
+  const handleSortNestedModifierOptions = (
+    childId: number,
+    key: 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc',
+  ) => {
+    const opts = getChildModifierOptions(childId);
+    const sorted = [...opts].sort((a, b) => {
+      if (key === 'price-asc' || key === 'price-desc') return a.maxLimit - b.maxLimit;
+      return (a.option?.optionName || a.optionDisplayName).localeCompare(
+        b.option?.optionName || b.optionDisplayName,
+        undefined,
+        { sensitivity: 'base' },
+      );
+    });
+    if (key === 'name-desc' || key === 'price-desc') sorted.reverse();
+    setModifierOptionOrder(childId, sorted.map((o) => o.modifierOptionId));
+    setNestedOptionSortMenuChildId(null);
   };
 
   const handleOptionDragStart = (e: React.DragEvent<HTMLDivElement>, modifierId: number, index: number) => {
@@ -1713,9 +1772,46 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                           if (nested.length === 0) return null;
                           return (
                             <div className="mt-3 pt-2 border-t border-border/50 space-y-1.5">
-                              <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                                Nested modifiers:
-                              </p>
+                              <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Nested modifiers:
+                                </p>
+                                {nested.length > 1 && (
+                                  <div
+                                    className="relative"
+                                    ref={nestedModSortMenuParentId === modifier.id ? nestedModSortMenuRef : undefined}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setNestedModSortMenuParentId((id) => (id === modifier.id ? null : modifier.id))
+                                      }
+                                      className="flex items-center justify-center w-6 h-6 rounded-md border border-border hover:bg-muted/50 transition-colors shrink-0"
+                                      title="Sort nested modifiers"
+                                    >
+                                      <ArrowDownUp className="w-3 h-3" />
+                                    </button>
+                                    {nestedModSortMenuParentId === modifier.id && (
+                                      <div className="absolute z-20 right-0 top-full mt-1 w-36 rounded-md border border-border bg-background shadow-md py-1">
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                          onClick={() => handleSortNestedModifiers(modifier.id, 'asc')}
+                                        >
+                                          Name (A → Z)
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                          onClick={() => handleSortNestedModifiers(modifier.id, 'desc')}
+                                        >
+                                          Name (Z → A)
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                               {nested.map(child => {
                                 const childOpts = getChildModifierOptions(child.id);
                                 const isExpanded = expandedNestedChildIds.includes(child.id);
@@ -1746,6 +1842,57 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                     </button>
                                     {isExpanded && (
                                       <div className="border-t border-border/50 bg-muted/25 px-3 py-2 pl-6 space-y-1">
+                                        {childOpts.length > 1 && (
+                                          <div className="flex items-center justify-end mb-1">
+                                            <div
+                                              className="relative"
+                                              ref={nestedOptionSortMenuChildId === child.id ? nestedOptionSortMenuRef : undefined}
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setNestedOptionSortMenuChildId((id) => (id === child.id ? null : child.id))
+                                                }
+                                                className="flex items-center justify-center w-6 h-6 rounded-md border border-border hover:bg-muted/50 transition-colors shrink-0"
+                                                title="Sort options"
+                                              >
+                                                <ArrowDownUp className="w-3 h-3" />
+                                              </button>
+                                              {nestedOptionSortMenuChildId === child.id && (
+                                                <div className="absolute z-20 right-0 top-full mt-1 w-40 rounded-md border border-border bg-background shadow-md py-1">
+                                                  <button
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                                    onClick={() => handleSortNestedModifierOptions(child.id, 'name-asc')}
+                                                  >
+                                                    Name (A → Z)
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                                    onClick={() => handleSortNestedModifierOptions(child.id, 'name-desc')}
+                                                  >
+                                                    Name (Z → A)
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                                    onClick={() => handleSortNestedModifierOptions(child.id, 'price-asc')}
+                                                  >
+                                                    Price (Low → High)
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                                                    onClick={() => handleSortNestedModifierOptions(child.id, 'price-desc')}
+                                                  >
+                                                    Price (High → Low)
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
                                         {childOpts.length === 0 ? (
                                           <p className="text-xs text-muted-foreground py-0.5">No options defined</p>
                                         ) : (

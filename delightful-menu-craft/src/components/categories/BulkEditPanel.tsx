@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { toggleVisibilityChannel } from '@/lib/visibility';
 import type { Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
+import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
+import { LoadingImage } from '@/components/ui/loading-image';
 import { LEVEL_COLORS, type BulkLevel, type useBulkSelection } from './useBulkSelection';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -450,6 +452,9 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [saleCategoryValue, setSaleCategoryValue] = useState('Food Sales');
   const [applyQtyLimit, setApplyQtyLimit] = useState(false);
   const [qtyLimitValue, setQtyLimitValue] = useState('');
+  const [applyImage, setApplyImage] = useState(false);
+  const [bulkImageUrl, setBulkImageUrl] = useState('');
+  const [imageModalOpen, setImageModalOpen] = useState(false);
   const [taxAction, setTaxAction] = useState<string>('none'); // 'none' | 'noTax' | 'standard' | String(tax.id)
   const [tagAddIds, setTagAddIds] = useState<Set<number>>(new Set());
   const [tagRemoveIds, setTagRemoveIds] = useState<Set<number>>(new Set());
@@ -478,6 +483,9 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   // ---- Category drafts ----
   const [applyCatVisibility, setApplyCatVisibility] = useState(false);
   const [catVis, setCatVis] = useState<VisDraft>(defaultVisDraft());
+  const [applyCatImage, setApplyCatImage] = useState(false);
+  const [bulkCatImageUrl, setBulkCatImageUrl] = useState('');
+  const [catImageModalOpen, setCatImageModalOpen] = useState(false);
 
   // ---- Menu drafts ----
   const [applyMenuVisibility, setApplyMenuVisibility] = useState(false);
@@ -508,6 +516,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setTpoMode('none'); setTpoValue('');
     setApplySaleCategory(false); setSaleCategoryValue('Food Sales');
     setApplyQtyLimit(false); setQtyLimitValue('');
+    setApplyImage(false); setBulkImageUrl('');
     setTaxAction('none');
     setTagAddIds(new Set()); setTagRemoveIds(new Set());
     setAllergenAddIds(new Set()); setAllergenRemoveIds(new Set());
@@ -519,6 +528,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setApplyOptPrice(false); setOptPriceMode('set'); setOptPriceValue('');
     setApplyOptVisibility(false); setOptVis(defaultVisDraft());
     setApplyCatVisibility(false); setCatVis(defaultVisDraft());
+    setApplyCatImage(false); setBulkCatImageUrl('');
     setApplyMenuVisibility(false); setMenuVis(defaultVisDraft());
   };
 
@@ -534,6 +544,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (tpoMode === 'reset') t('3PO prices → reset to base');
     if (applySaleCategory && saleCategoryValue.trim()) t(`sale category → ${saleCategoryValue.trim()}`);
     if (applyQtyLimit && qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
+    if (applyImage && bulkImageUrl) t('set item image');
     if (taxAction !== 'none') t(`tax → ${taxActionLabel()}`);
     if (tagAddIds.size) t(`+${tagAddIds.size} tag(s)`);
     if (tagRemoveIds.size) t(`−${tagRemoveIds.size} tag(s)`);
@@ -558,6 +569,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   } else if (activeLevel === 'category') {
     const scope = `${categoryIds.length} categor${categoryIds.length !== 1 ? 'ies' : 'y'}`;
     if (applyCatVisibility) ops.push({ scope, label: 'visibility channels', color: LEVEL_COLORS.category });
+    if (applyCatImage && bulkCatImageUrl) ops.push({ scope, label: 'set category image', color: LEVEL_COLORS.category });
     if (taxAction !== 'none') ops.push({ scope: `items in ${scope}`, label: `tax → ${taxActionLabel()}`, color: LEVEL_COLORS.category });
   } else if (activeLevel === 'menu' && applyMenuVisibility) {
     ops.push({ scope: `${menuIds.length} menu${menuIds.length !== 1 ? 's' : ''}`, label: 'visibility channels', color: LEVEL_COLORS.menu });
@@ -594,7 +606,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       const hasItemFieldEdits =
         applyVisibility || inheritVisAction !== 'none' || (applyPriceSection && priceValue) || stockAction !== 'none' ||
         tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
-        (applyQtyLimit && qtyLimitValue) || taxAction !== 'none' ||
+        (applyQtyLimit && qtyLimitValue) || (applyImage && bulkImageUrl) || taxAction !== 'none' ||
         tagAddIds.size || tagRemoveIds.size || allergenAddIds.size || allergenRemoveIds.size ||
         stationAddIds.size || stationRemoveIds.size;
 
@@ -626,6 +638,13 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
             updates.orderQuantityLimit = true;
             updates.maxLimit = parseInt(qtyLimitValue, 10);
             updates.noMaxLimit = false;
+          }
+          if (applyImage && bulkImageUrl) {
+            // Mirror the single-item panel: one image seeds every channel slot.
+            updates.itemPicture = bulkImageUrl;
+            updates.kioskItemImage = bulkImageUrl;
+            updates.onlineImage = bulkImageUrl;
+            updates.thirdPartyImage = bulkImageUrl;
           }
           if (taxAction !== 'none') Object.assign(updates, taxPatch());
           if (tagAddIds.size || tagRemoveIds.size) {
@@ -694,6 +713,10 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (activeLevel === 'category') {
       if (applyCatVisibility) {
         bulkUpdateCategories(categoryIds, () => ({ ...catVis }));
+      }
+      if (applyCatImage && bulkCatImageUrl) {
+        // Mirror the single-category panel: one image seeds both POS and Kiosk slots.
+        bulkUpdateCategories(categoryIds, () => ({ image: bulkCatImageUrl, kioskImage: bulkCatImageUrl }));
       }
       if (taxAction !== 'none') {
         const catIdSet = new Set(categoryIds);
@@ -919,6 +942,38 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 )}
               </section>
 
+              {/* Image */}
+              <section>
+                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                  <input type="checkbox" checked={applyImage} onChange={(e) => setApplyImage(e.target.checked)} className="accent-primary cursor-pointer" />
+                  <span className="section-header">Image</span>
+                </label>
+                {applyImage && (
+                  <div className="pl-5 space-y-2">
+                    <p className="text-[10px] text-muted-foreground">Applies one image to every slot (POS, Kiosk, Online &amp; 3rd Party) on the selected items.</p>
+                    {bulkImageUrl ? (
+                      <div className="flex items-center gap-2">
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
+                          <LoadingImage src={bulkImageUrl} alt="Selected" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button type="button" onClick={() => setImageModalOpen(true)} className="text-xs text-primary hover:underline text-left">Change image</button>
+                          <button type="button" onClick={() => setBulkImageUrl('')} className="text-xs text-destructive hover:underline text-left">Clear</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setImageModalOpen(true)}
+                        className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Choose image
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+
               <TaxSection value={taxAction} onChange={setTaxAction} customTaxes={customTaxes} taxRate={taxRate} />
             </>
           )}
@@ -1010,6 +1065,39 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 vis={catVis}
                 setVis={setCatVis}
               />
+
+              {/* Image */}
+              <section>
+                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                  <input type="checkbox" checked={applyCatImage} onChange={(e) => setApplyCatImage(e.target.checked)} className="accent-primary cursor-pointer" />
+                  <span className="section-header">Image</span>
+                </label>
+                {applyCatImage && (
+                  <div className="pl-5 space-y-2">
+                    <p className="text-[10px] text-muted-foreground">Applies one image to both the POS and Kiosk slots on the selected categories.</p>
+                    {bulkCatImageUrl ? (
+                      <div className="flex items-center gap-2">
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
+                          <LoadingImage src={bulkCatImageUrl} alt="Selected" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button type="button" onClick={() => setCatImageModalOpen(true)} className="text-xs text-primary hover:underline text-left">Change image</button>
+                          <button type="button" onClick={() => setBulkCatImageUrl('')} className="text-xs text-destructive hover:underline text-left">Clear</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setCatImageModalOpen(true)}
+                        className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Choose image
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+
               <TaxSection value={taxAction} onChange={setTaxAction} customTaxes={customTaxes} taxRate={taxRate} />
             </>
           )}
@@ -1055,6 +1143,20 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
         reachSummary={reachSummary}
         warnings={warnings}
         onConfirm={handleConfirm}
+      />
+
+      <CategoryImageLibraryModal
+        open={imageModalOpen}
+        title="Item image"
+        onOpenChange={setImageModalOpen}
+        onSelect={(url) => setBulkImageUrl(url)}
+      />
+
+      <CategoryImageLibraryModal
+        open={catImageModalOpen}
+        title="Category image"
+        onOpenChange={setCatImageModalOpen}
+        onSelect={(url) => setBulkCatImageUrl(url)}
       />
     </div>
   );
