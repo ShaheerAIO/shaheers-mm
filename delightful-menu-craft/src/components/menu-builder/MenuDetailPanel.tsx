@@ -58,7 +58,7 @@ const ON_PREM: { key: VisibilityChannelKey; label: string }[] = [
 const OFF_PREM: { key: VisibilityChannelKey; label: string }[] = [
   { key: 'visibilityQr', label: 'QR Code' },
   { key: 'visibilityWebsite', label: 'Website' },
-  { key: 'visibilityMobileApp', label: 'Mobile App' },
+  { key: 'visibilityMobileApp', label: 'MPOS' },
   { key: 'visibilityDoordash', label: 'DoorDash' },
 ];
 const CHANNEL_GROUPS = [
@@ -99,6 +99,7 @@ export function MenuDetailPanel({ menu }: Props) {
       picture: menu.picture || '',
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
+      visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
       visibilityQr: menu.visibilityQr ?? true,
       visibilityWebsite: menu.visibilityWebsite ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,
@@ -142,6 +143,7 @@ export function MenuDetailPanel({ menu }: Props) {
       picture: menu.picture || '',
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
+      visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
       visibilityQr: menu.visibilityQr ?? true,
       visibilityWebsite: menu.visibilityWebsite ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,

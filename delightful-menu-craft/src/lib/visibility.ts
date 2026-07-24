@@ -19,7 +19,7 @@ export const VISIBILITY_CHANNELS = [
   { key: 'visibilityMenuBoard',  label: 'Menu Board', group: 'On-Prem',  token: 'MenuBoard' },
   { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem', token: 'QR'        },
   { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem', token: 'Website'  },
-  { key: 'visibilityMobileApp',  label: 'Mobile App', group: 'Off-Prem', token: 'Mpos'     },
+  { key: 'visibilityMobileApp',  label: 'MPOS',       group: 'Off-Prem', token: 'Mpos'     },
   { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Off-Prem', token: 'Doordash' },
 ] as const;
 
@@ -293,7 +293,7 @@ const PLATFORM_TO_KEY: Record<string, VisibilityChannelKey> = {
   pos: 'visibilityPos',
   kiosk: 'visibilityKiosk',
   menuboard: 'visibilityMenuBoard',
-  mpos: 'visibilityMobileApp', // POS "Mpos" (mobile POS) ≈ our Mobile App
+  mpos: 'visibilityMobileApp', // POS "Mpos" (mobile POS) — our MPOS channel
   qr: 'visibilityQr',
   qrcode: 'visibilityQr',
   website: 'visibilityWebsite',
