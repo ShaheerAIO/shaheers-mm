@@ -26,33 +26,10 @@ import {
   ABANDONED_MS,
   type WorkspaceMeta,
 } from '@/lib/workspaceSync';
-import { runMigrations, WORKSPACE_DATA_KEYS, type WorkspaceData } from '@/store/menuStore';
+import { type WorkspaceData } from '@/store/menuStore';
 import { useUserPreferencesStore } from '@/store/userPreferencesStore';
 
 type OwnerFilter = 'all' | 'me' | 'others';
-
-/** Read any pre-Supabase work left in localStorage so it isn't lost on upgrade. */
-function readLegacyData(): WorkspaceData | null {
-  try {
-    const raw = localStorage.getItem('menu-manager-storage');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { state?: Record<string, unknown>; version?: number };
-    const state = parsed?.state;
-    if (!state || !Array.isArray(state.menus)) return null;
-    const hasContent =
-      (state.menus as unknown[]).length > 0 ||
-      (Array.isArray(state.items) && state.items.length > 0);
-    if (!hasContent) return null;
-    const migrated = runMigrations({ ...state }, parsed.version ?? 0) as unknown as Record<string, unknown>;
-    const data = {} as WorkspaceData;
-    for (const key of WORKSPACE_DATA_KEYS) {
-      (data as Record<string, unknown>)[key] = migrated[key];
-    }
-    return data;
-  } catch {
-    return null;
-  }
-}
 
 export default function Workspaces() {
   const navigate = useNavigate();
@@ -60,7 +37,6 @@ export default function Workspaces() {
   const [workspaces, setWorkspaces] = useState<WorkspaceMeta[] | null>(null);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
-  const [legacy] = useState(() => readLegacyData());
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const sortOrder = useUserPreferencesStore((s) => s.workspaceSort);
@@ -190,23 +166,6 @@ export default function Workspaces() {
             </Button>
           </div>
         </div>
-
-        {legacy && (
-          <Card className="mb-4 border-amber-500/40 bg-amber-500/5 p-4">
-            <p className="text-sm">
-              We found menu work saved locally in this browser. Import it into a new cloud
-              project so it isn't lost.
-            </p>
-            <Button
-              size="sm"
-              className="mt-3"
-              disabled={busy}
-              onClick={() => void handleCreate(legacy)}
-            >
-              Import previous local work
-            </Button>
-          </Card>
-        )}
 
         <Card className="mb-6 p-4">
           <div className="flex gap-2">
