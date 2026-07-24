@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Upload } from 'lucide-react';
+import { Check, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { toggleVisibilityChannel } from '@/lib/visibility';
-import type { Item, Modifier, ModifierOption } from '@/types/menu';
+import type { Category, Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
 import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
 import { LoadingImage } from '@/components/ui/loading-image';
@@ -18,7 +18,7 @@ const VIS_CHANNELS = [
   { key: 'visibilityMenuBoard' as const, label: 'Menu Board' },
   { key: 'visibilityQr' as const, label: 'QR' },
   { key: 'visibilityWebsite' as const, label: 'Website' },
-  { key: 'visibilityMobileApp' as const, label: 'Mobile App' },
+  { key: 'visibilityMobileApp' as const, label: 'MPOS' },
   { key: 'visibilityDoordash' as const, label: 'DoorDash' },
 ];
 
@@ -32,6 +32,128 @@ const defaultVisDraft = (): VisDraft => ({
   visibilityMobileApp: true,
   visibilityDoordash: true,
 });
+
+// Image dimension slots, mirroring the single-entity detail panels.
+const ITEM_IMAGE_SLOTS = [
+  { field: 'itemPicture' as const, label: 'POS & MPOS' },
+  { field: 'onlineImage' as const, label: 'Online & QR' },
+  { field: 'kioskItemImage' as const, label: 'Kiosk' },
+  { field: 'thirdPartyImage' as const, label: '3rd Party' },
+  { field: 'landscapeImage' as const, label: '16:9' },
+];
+type ItemImageField = (typeof ITEM_IMAGE_SLOTS)[number]['field'];
+const emptyItemSlots = (): Record<ItemImageField, string> => ({
+  itemPicture: '', onlineImage: '', kioskItemImage: '', thirdPartyImage: '', landscapeImage: '',
+});
+
+const CAT_IMAGE_SLOTS = [
+  { field: 'image' as const, label: 'POS / MPOS' },
+  { field: 'kioskImage' as const, label: 'Kiosk' },
+];
+type CatImageField = (typeof CAT_IMAGE_SLOTS)[number]['field'];
+const emptyCatSlots = (): Record<CatImageField, string> => ({ image: '', kioskImage: '' });
+
+type ImageMode = 'all' | 'perSlot';
+
+/** Bulk image editor: "one image for all slots" or a per-slot grid. */
+function BulkImageEditor<F extends string>({
+  mode, setMode, entityLabel,
+  allUrl, onChooseAll, onClearAll,
+  slots, slotValues, onChooseSlot, onClearSlot,
+}: {
+  mode: ImageMode;
+  setMode: (m: ImageMode) => void;
+  entityLabel: string;
+  allUrl: string;
+  onChooseAll: () => void;
+  onClearAll: () => void;
+  slots: { field: F; label: string }[];
+  slotValues: Record<F, string>;
+  onChooseSlot: (field: F) => void;
+  onClearSlot: (field: F) => void;
+}) {
+  return (
+    <div className="pl-5 space-y-2">
+      <div className="flex gap-1.5">
+        {(['all', 'perSlot'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cn(
+              'flex-1 rounded-md border px-2 py-1 text-[11px] transition-colors',
+              mode === m ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted/50',
+            )}
+          >
+            {m === 'all' ? 'One for all slots' : 'Per slot'}
+          </button>
+        ))}
+      </div>
+      {mode === 'all' ? (
+        <>
+          <p className="text-[10px] text-muted-foreground">Applies one image to every slot on the selected {entityLabel}.</p>
+          {allUrl ? (
+            <div className="flex items-center gap-2">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
+                <LoadingImage src={allUrl} alt="Selected" className="h-full w-full object-cover" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <button type="button" onClick={onChooseAll} className="text-xs text-primary hover:underline text-left">Change image</button>
+                <button type="button" onClick={onClearAll} className="text-xs text-destructive hover:underline text-left">Clear</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onChooseAll}
+              className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
+            >
+              <Upload className="w-3.5 h-3.5" /> Choose image
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="text-[10px] text-muted-foreground">Set an image per slot. Slots left blank are not changed on the selected {entityLabel}.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {slots.map(({ field, label }) => {
+              const url = slotValues[field];
+              return (
+                <div key={field} className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                  <div className="relative aspect-square bg-muted/40">
+                    {url ? (
+                      <LoadingImage src={url} alt={label} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>
+                    )}
+                    <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1 py-0.5 text-[9px] font-semibold shadow-sm">{label}</span>
+                    {url && (
+                      <button
+                        type="button"
+                        aria-label={`Clear ${label}`}
+                        onClick={() => onClearSlot(field)}
+                        className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-background/90 text-muted-foreground shadow-sm hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onChooseSlot(field)}
+                    className="inline-flex w-full items-center justify-center gap-1 border-t border-border py-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Upload className="h-3 w-3" /> {url ? 'Replace' : 'Upload'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 type PriceMode = 'set' | 'add' | 'subtract' | 'percent-add' | 'percent-subtract';
 
@@ -452,9 +574,12 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [saleCategoryValue, setSaleCategoryValue] = useState('Food Sales');
   const [applyQtyLimit, setApplyQtyLimit] = useState(false);
   const [qtyLimitValue, setQtyLimitValue] = useState('');
+  const [qtyLimitNoMax, setQtyLimitNoMax] = useState(false);
   const [applyImage, setApplyImage] = useState(false);
+  const [imageMode, setImageMode] = useState<ImageMode>('all');
   const [bulkImageUrl, setBulkImageUrl] = useState('');
-  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [itemSlotImages, setItemSlotImages] = useState<Record<ItemImageField, string>>(emptyItemSlots());
+  const [imageModalTarget, setImageModalTarget] = useState<'all' | ItemImageField | null>(null);
   const [taxAction, setTaxAction] = useState<string>('none'); // 'none' | 'noTax' | 'standard' | String(tax.id)
   const [tagAddIds, setTagAddIds] = useState<Set<number>>(new Set());
   const [tagRemoveIds, setTagRemoveIds] = useState<Set<number>>(new Set());
@@ -484,8 +609,10 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [applyCatVisibility, setApplyCatVisibility] = useState(false);
   const [catVis, setCatVis] = useState<VisDraft>(defaultVisDraft());
   const [applyCatImage, setApplyCatImage] = useState(false);
+  const [catImageMode, setCatImageMode] = useState<ImageMode>('all');
   const [bulkCatImageUrl, setBulkCatImageUrl] = useState('');
-  const [catImageModalOpen, setCatImageModalOpen] = useState(false);
+  const [catSlotImages, setCatSlotImages] = useState<Record<CatImageField, string>>(emptyCatSlots());
+  const [catImageModalTarget, setCatImageModalTarget] = useState<'all' | CatImageField | null>(null);
 
   // ---- Menu drafts ----
   const [applyMenuVisibility, setApplyMenuVisibility] = useState(false);
@@ -515,8 +642,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setStockAction('none');
     setTpoMode('none'); setTpoValue('');
     setApplySaleCategory(false); setSaleCategoryValue('Food Sales');
-    setApplyQtyLimit(false); setQtyLimitValue('');
-    setApplyImage(false); setBulkImageUrl('');
+    setApplyQtyLimit(false); setQtyLimitValue(''); setQtyLimitNoMax(false);
+    setApplyImage(false); setImageMode('all'); setBulkImageUrl(''); setItemSlotImages(emptyItemSlots());
     setTaxAction('none');
     setTagAddIds(new Set()); setTagRemoveIds(new Set());
     setAllergenAddIds(new Set()); setAllergenRemoveIds(new Set());
@@ -528,7 +655,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setApplyOptPrice(false); setOptPriceMode('set'); setOptPriceValue('');
     setApplyOptVisibility(false); setOptVis(defaultVisDraft());
     setApplyCatVisibility(false); setCatVis(defaultVisDraft());
-    setApplyCatImage(false); setBulkCatImageUrl('');
+    setApplyCatImage(false); setCatImageMode('all'); setBulkCatImageUrl(''); setCatSlotImages(emptyCatSlots());
     setApplyMenuVisibility(false); setMenuVis(defaultVisDraft());
   };
 
@@ -543,8 +670,17 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (tpoMode === 'markup' && tpoValue) t(`3PO prices → base +${tpoValue}%`);
     if (tpoMode === 'reset') t('3PO prices → reset to base');
     if (applySaleCategory && saleCategoryValue.trim()) t(`sale category → ${saleCategoryValue.trim()}`);
-    if (applyQtyLimit && qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
-    if (applyImage && bulkImageUrl) t('set item image');
+    if (applyQtyLimit) {
+      if (qtyLimitNoMax) t('order qty limit → no maximum');
+      else if (qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
+    }
+    if (applyImage) {
+      if (imageMode === 'all' && bulkImageUrl) t('set item image (all slots)');
+      else if (imageMode === 'perSlot') {
+        const n = Object.values(itemSlotImages).filter(Boolean).length;
+        if (n) t(`set ${n} item image slot${n !== 1 ? 's' : ''}`);
+      }
+    }
     if (taxAction !== 'none') t(`tax → ${taxActionLabel()}`);
     if (tagAddIds.size) t(`+${tagAddIds.size} tag(s)`);
     if (tagRemoveIds.size) t(`−${tagRemoveIds.size} tag(s)`);
@@ -569,7 +705,13 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   } else if (activeLevel === 'category') {
     const scope = `${categoryIds.length} categor${categoryIds.length !== 1 ? 'ies' : 'y'}`;
     if (applyCatVisibility) ops.push({ scope, label: 'visibility channels', color: LEVEL_COLORS.category });
-    if (applyCatImage && bulkCatImageUrl) ops.push({ scope, label: 'set category image', color: LEVEL_COLORS.category });
+    if (applyCatImage) {
+      if (catImageMode === 'all' && bulkCatImageUrl) ops.push({ scope, label: 'set category image (all slots)', color: LEVEL_COLORS.category });
+      else if (catImageMode === 'perSlot') {
+        const n = Object.values(catSlotImages).filter(Boolean).length;
+        if (n) ops.push({ scope, label: `set ${n} category image slot${n !== 1 ? 's' : ''}`, color: LEVEL_COLORS.category });
+      }
+    }
     if (taxAction !== 'none') ops.push({ scope: `items in ${scope}`, label: `tax → ${taxActionLabel()}`, color: LEVEL_COLORS.category });
   } else if (activeLevel === 'menu' && applyMenuVisibility) {
     ops.push({ scope: `${menuIds.length} menu${menuIds.length !== 1 ? 's' : ''}`, label: 'visibility channels', color: LEVEL_COLORS.menu });
@@ -606,7 +748,9 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       const hasItemFieldEdits =
         applyVisibility || inheritVisAction !== 'none' || (applyPriceSection && priceValue) || stockAction !== 'none' ||
         tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
-        (applyQtyLimit && qtyLimitValue) || (applyImage && bulkImageUrl) || taxAction !== 'none' ||
+        (applyQtyLimit && (qtyLimitValue || qtyLimitNoMax)) ||
+        (applyImage && (imageMode === 'all' ? !!bulkImageUrl : Object.values(itemSlotImages).some(Boolean))) ||
+        taxAction !== 'none' ||
         tagAddIds.size || tagRemoveIds.size || allergenAddIds.size || allergenRemoveIds.size ||
         stationAddIds.size || stationRemoveIds.size;
 
@@ -634,17 +778,26 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
             updates.grubHubPrice = 0;
           }
           if (applySaleCategory && saleCategoryValue.trim()) updates.saleCategory = saleCategoryValue.trim();
-          if (applyQtyLimit && qtyLimitValue) {
-            updates.orderQuantityLimit = true;
-            updates.maxLimit = parseInt(qtyLimitValue, 10);
-            updates.noMaxLimit = false;
+          if (applyQtyLimit) {
+            if (qtyLimitNoMax) {
+              updates.orderQuantityLimit = true;
+              updates.noMaxLimit = true;
+            } else if (qtyLimitValue) {
+              updates.orderQuantityLimit = true;
+              updates.maxLimit = parseInt(qtyLimitValue, 10);
+              updates.noMaxLimit = false;
+            }
           }
-          if (applyImage && bulkImageUrl) {
-            // Mirror the single-item panel: one image seeds every channel slot.
-            updates.itemPicture = bulkImageUrl;
-            updates.kioskItemImage = bulkImageUrl;
-            updates.onlineImage = bulkImageUrl;
-            updates.thirdPartyImage = bulkImageUrl;
+          if (applyImage) {
+            if (imageMode === 'all' && bulkImageUrl) {
+              // One image seeds every slot (mirrors the single-item panel).
+              for (const { field } of ITEM_IMAGE_SLOTS) updates[field] = bulkImageUrl;
+            } else if (imageMode === 'perSlot') {
+              // Only write slots the user actually set; blank slots are left untouched.
+              for (const { field } of ITEM_IMAGE_SLOTS) {
+                if (itemSlotImages[field]) updates[field] = itemSlotImages[field];
+              }
+            }
           }
           if (taxAction !== 'none') Object.assign(updates, taxPatch());
           if (tagAddIds.size || tagRemoveIds.size) {
@@ -714,9 +867,17 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       if (applyCatVisibility) {
         bulkUpdateCategories(categoryIds, () => ({ ...catVis }));
       }
-      if (applyCatImage && bulkCatImageUrl) {
-        // Mirror the single-category panel: one image seeds both POS and Kiosk slots.
-        bulkUpdateCategories(categoryIds, () => ({ image: bulkCatImageUrl, kioskImage: bulkCatImageUrl }));
+      if (applyCatImage) {
+        if (catImageMode === 'all' && bulkCatImageUrl) {
+          // One image seeds both POS and Kiosk slots (mirrors the single-category panel).
+          bulkUpdateCategories(categoryIds, () => ({ image: bulkCatImageUrl, kioskImage: bulkCatImageUrl }));
+        } else if (catImageMode === 'perSlot') {
+          const patch: Partial<Category> = {};
+          for (const { field } of CAT_IMAGE_SLOTS) {
+            if (catSlotImages[field]) patch[field] = catSlotImages[field];
+          }
+          if (Object.keys(patch).length) bulkUpdateCategories(categoryIds, () => patch);
+        }
       }
       if (taxAction !== 'none') {
         const catIdSet = new Set(categoryIds);
@@ -928,7 +1089,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                   <span className="section-header">Order qty limit</span>
                 </label>
                 {applyQtyLimit && (
-                  <div className="pl-5">
+                  <div className="pl-5 space-y-2">
                     <input
                       type="number"
                       min={1}
@@ -936,8 +1097,13 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                       value={qtyLimitValue}
                       onChange={(e) => setQtyLimitValue(e.target.value)}
                       placeholder="Max per order"
-                      className="input-field w-full text-xs h-8"
+                      disabled={qtyLimitNoMax}
+                      className="input-field w-full text-xs h-8 disabled:opacity-50"
                     />
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={qtyLimitNoMax} onChange={(e) => setQtyLimitNoMax(e.target.checked)} className="accent-primary cursor-pointer" />
+                      <span className="text-xs text-muted-foreground">No maximum (unlimited quantity per order)</span>
+                    </label>
                   </div>
                 )}
               </section>
@@ -949,28 +1115,18 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                   <span className="section-header">Image</span>
                 </label>
                 {applyImage && (
-                  <div className="pl-5 space-y-2">
-                    <p className="text-[10px] text-muted-foreground">Applies one image to every slot (POS, Kiosk, Online &amp; 3rd Party) on the selected items.</p>
-                    {bulkImageUrl ? (
-                      <div className="flex items-center gap-2">
-                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
-                          <LoadingImage src={bulkImageUrl} alt="Selected" className="h-full w-full object-cover" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <button type="button" onClick={() => setImageModalOpen(true)} className="text-xs text-primary hover:underline text-left">Change image</button>
-                          <button type="button" onClick={() => setBulkImageUrl('')} className="text-xs text-destructive hover:underline text-left">Clear</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setImageModalOpen(true)}
-                        className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
-                      >
-                        <Upload className="w-3.5 h-3.5" /> Choose image
-                      </button>
-                    )}
-                  </div>
+                  <BulkImageEditor
+                    mode={imageMode}
+                    setMode={setImageMode}
+                    entityLabel="items"
+                    allUrl={bulkImageUrl}
+                    onChooseAll={() => setImageModalTarget('all')}
+                    onClearAll={() => setBulkImageUrl('')}
+                    slots={ITEM_IMAGE_SLOTS}
+                    slotValues={itemSlotImages}
+                    onChooseSlot={(field) => setImageModalTarget(field)}
+                    onClearSlot={(field) => setItemSlotImages((prev) => ({ ...prev, [field]: '' }))}
+                  />
                 )}
               </section>
 
@@ -1073,28 +1229,18 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                   <span className="section-header">Image</span>
                 </label>
                 {applyCatImage && (
-                  <div className="pl-5 space-y-2">
-                    <p className="text-[10px] text-muted-foreground">Applies one image to both the POS and Kiosk slots on the selected categories.</p>
-                    {bulkCatImageUrl ? (
-                      <div className="flex items-center gap-2">
-                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
-                          <LoadingImage src={bulkCatImageUrl} alt="Selected" className="h-full w-full object-cover" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <button type="button" onClick={() => setCatImageModalOpen(true)} className="text-xs text-primary hover:underline text-left">Change image</button>
-                          <button type="button" onClick={() => setBulkCatImageUrl('')} className="text-xs text-destructive hover:underline text-left">Clear</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setCatImageModalOpen(true)}
-                        className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
-                      >
-                        <Upload className="w-3.5 h-3.5" /> Choose image
-                      </button>
-                    )}
-                  </div>
+                  <BulkImageEditor
+                    mode={catImageMode}
+                    setMode={setCatImageMode}
+                    entityLabel="categories"
+                    allUrl={bulkCatImageUrl}
+                    onChooseAll={() => setCatImageModalTarget('all')}
+                    onClearAll={() => setBulkCatImageUrl('')}
+                    slots={CAT_IMAGE_SLOTS}
+                    slotValues={catSlotImages}
+                    onChooseSlot={(field) => setCatImageModalTarget(field)}
+                    onClearSlot={(field) => setCatSlotImages((prev) => ({ ...prev, [field]: '' }))}
+                  />
                 )}
               </section>
 
@@ -1146,17 +1292,31 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       />
 
       <CategoryImageLibraryModal
-        open={imageModalOpen}
-        title="Item image"
-        onOpenChange={setImageModalOpen}
-        onSelect={(url) => setBulkImageUrl(url)}
+        open={imageModalTarget !== null}
+        title={
+          imageModalTarget === 'all' || imageModalTarget === null
+            ? 'Item image (all slots)'
+            : `Item image — ${ITEM_IMAGE_SLOTS.find((s) => s.field === imageModalTarget)?.label ?? ''}`
+        }
+        onOpenChange={(open) => { if (!open) setImageModalTarget(null); }}
+        onSelect={(url) => {
+          if (imageModalTarget === 'all') setBulkImageUrl(url);
+          else if (imageModalTarget) setItemSlotImages((prev) => ({ ...prev, [imageModalTarget]: url }));
+        }}
       />
 
       <CategoryImageLibraryModal
-        open={catImageModalOpen}
-        title="Category image"
-        onOpenChange={setCatImageModalOpen}
-        onSelect={(url) => setBulkCatImageUrl(url)}
+        open={catImageModalTarget !== null}
+        title={
+          catImageModalTarget === 'all' || catImageModalTarget === null
+            ? 'Category image (all slots)'
+            : `Category image — ${CAT_IMAGE_SLOTS.find((s) => s.field === catImageModalTarget)?.label ?? ''}`
+        }
+        onOpenChange={(open) => { if (!open) setCatImageModalTarget(null); }}
+        onSelect={(url) => {
+          if (catImageModalTarget === 'all') setBulkCatImageUrl(url);
+          else if (catImageModalTarget) setCatSlotImages((prev) => ({ ...prev, [catImageModalTarget]: url }));
+        }}
       />
     </div>
   );

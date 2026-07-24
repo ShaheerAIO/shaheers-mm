@@ -803,7 +803,7 @@ export function CategoryDetailPanel({ category }: Props) {
                 { id: 'offPrem' as const, label: 'Off-Prem' as VisibilityGroup, channels: [
                   { key: 'visibilityQr' as VisibilityChannelKey, label: 'QR Code' },
                   { key: 'visibilityWebsite' as VisibilityChannelKey, label: 'Website' },
-                  { key: 'visibilityMobileApp' as VisibilityChannelKey, label: 'Mobile App' },
+                  { key: 'visibilityMobileApp' as VisibilityChannelKey, label: 'MPOS' },
                   { key: 'visibilityDoordash' as VisibilityChannelKey, label: 'DoorDash' },
                 ]},
               ];

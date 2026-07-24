@@ -25,7 +25,7 @@ const CHANNELS = [
   { key: 'visibilityMenuBoard' as keyof Item, label: 'Menu Board' },
   { key: 'visibilityQr' as keyof Item,        label: 'QR' },
   { key: 'visibilityWebsite' as keyof Item,   label: 'Website' },
-  { key: 'visibilityMobileApp' as keyof Item, label: 'Mobile App' },
+  { key: 'visibilityMobileApp' as keyof Item, label: 'MPOS' },
   { key: 'visibilityDoordash' as keyof Item,  label: 'DoorDash' },
 ];
 
@@ -143,7 +143,7 @@ export function SettingsContent() {
   const imageGapGroups = [
     { channel: 'DoorDash', items: items.filter(i => i.visibilityDoordash && !i.thirdPartyImage) },
     { channel: 'Kiosk', items: items.filter(i => i.visibilityKiosk && !i.kioskItemImage) },
-    { channel: 'Website / Mobile App', items: items.filter(i => (i.visibilityWebsite || i.visibilityMobileApp) && !i.onlineImage) },
+    { channel: 'Website / MPOS', items: items.filter(i => (i.visibilityWebsite || i.visibilityMobileApp) && !i.onlineImage) },
   ].filter(g => g.items.length > 0);
   const totalImageGaps = imageGapGroups.reduce((s, g) => s + g.items.length, 0);
 
