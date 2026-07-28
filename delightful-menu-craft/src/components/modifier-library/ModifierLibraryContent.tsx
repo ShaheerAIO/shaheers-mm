@@ -1389,6 +1389,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
 
   const effectiveMode = detectedMode ?? chosenMode;
 
+  // A nested-mode container orchestrates its sub-modifiers only: selection is
+  // driven by Min/Max and pricing lives on the child modifiers' options, so the
+  // standalone Selection Type and Pricing controls are redundant here. This is
+  // scoped to the container — the nested children are ordinary flat modifiers
+  // (often reused standalone elsewhere) and must keep those controls.
+  const isNestedContainer = effectiveMode === 'nested';
+
   // Total number of choices a guest could pick from (flat options or nested
   // sub-modifiers). The Max SELECTION field must never exceed this, regardless
   // of the (separately displayed) combination limit.
@@ -2293,48 +2300,55 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <p className="text-xs text-muted-foreground">This modifier controls item size (e.g., 10", 14", 20")</p>
             </div>
 
-            {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
-            <div className="space-y-2">
-              <Label className="section-header">Selection Type</Label>
-              <Select
-                value={draft.isOptional === '' ? '__empty__' : draft.isOptional}
-                onValueChange={(value) =>
-                  setDraft((d) => ({ ...d, isOptional: value === '__empty__' ? '' : value }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder=" " />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__empty__" className="text-muted-foreground/70">
-                    &nbsp;
-                  </SelectItem>
-                  <SelectItem value="Select any">Optional (Select any)</SelectItem>
-                  <SelectItem value="Required">Required</SelectItem>
-                  <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Selection Type & Pricing — hidden for a nested-mode container: its
+                selection is driven by Min/Max and pricing lives on the child
+                modifiers' options. */}
+            {!isNestedContainer && (
+              <>
+                {/* Optional / Required — empty = unset; same as create flow (not prefilled "Select any") */}
+                <div className="space-y-2">
+                  <Label className="section-header">Selection Type</Label>
+                  <Select
+                    value={draft.isOptional === '' ? '__empty__' : draft.isOptional}
+                    onValueChange={(value) =>
+                      setDraft((d) => ({ ...d, isOptional: value === '__empty__' ? '' : value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder=" " />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__empty__" className="text-muted-foreground/70">
+                        &nbsp;
+                      </SelectItem>
+                      <SelectItem value="Select any">Optional (Select any)</SelectItem>
+                      <SelectItem value="Required">Required</SelectItem>
+                      <SelectItem value="Push Optional">Push (optional, popup)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Pricing — how option prices are charged */}
-            <div className="space-y-2">
-              <Label className="section-header">Pricing</Label>
-              <Select
-                value={draft.modifierOptionPriceType || 'NoCharge'}
-                onValueChange={(value) =>
-                  setDraft((d) => ({ ...d, modifierOptionPriceType: value }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="No charge" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NoCharge">No charge</SelectItem>
-                  <SelectItem value="Individual">Individual pricing</SelectItem>
-                  <SelectItem value="Group">Group pricing</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Pricing — how option prices are charged */}
+                <div className="space-y-2">
+                  <Label className="section-header">Pricing</Label>
+                  <Select
+                    value={draft.modifierOptionPriceType || 'NoCharge'}
+                    onValueChange={(value) =>
+                      setDraft((d) => ({ ...d, modifierOptionPriceType: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="No charge" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NoCharge">No charge</SelectItem>
+                      <SelectItem value="Individual">Individual pricing</SelectItem>
+                      <SelectItem value="Group">Group pricing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
 
         </div>
