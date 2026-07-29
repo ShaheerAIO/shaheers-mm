@@ -33,18 +33,11 @@ const defaultVisDraft = (): VisDraft => ({
   visibilityDoordash: true,
 });
 
-// Image dimension slots, mirroring the single-entity detail panels.
-const ITEM_IMAGE_SLOTS = [
-  { field: 'itemPicture' as const, label: 'POS & MPOS' },
-  { field: 'onlineImage' as const, label: 'Online & QR' },
-  { field: 'kioskItemImage' as const, label: 'Kiosk' },
-  { field: 'thirdPartyImage' as const, label: '3rd Party' },
-  { field: 'landscapeImage' as const, label: '16:9' },
-];
-type ItemImageField = (typeof ITEM_IMAGE_SLOTS)[number]['field'];
-const emptyItemSlots = (): Record<ItemImageField, string> => ({
-  itemPicture: '', onlineImage: '', kioskItemImage: '', thirdPartyImage: '', landscapeImage: '',
-});
+// Items expose two image *dimensions* — a 1:1 image that seeds every
+// square/platform field, and a single 16:9 landscape field. Bulk-editing
+// mirrors this: uploading a 1:1 image only touches the square fields, and
+// uploading a 16:9 image only touches the landscape field.
+const ITEM_SQUARE_FIELDS = ['itemPicture', 'kioskItemImage', 'onlineImage', 'thirdPartyImage'] as const;
 
 const CAT_IMAGE_SLOTS = [
   { field: 'image' as const, label: 'POS / MPOS' },
@@ -54,6 +47,78 @@ type CatImageField = (typeof CAT_IMAGE_SLOTS)[number]['field'];
 const emptyCatSlots = (): Record<CatImageField, string> => ({ image: '', kioskImage: '' });
 
 type ImageMode = 'all' | 'perSlot';
+
+/** A single choose/preview/clear image control, reused across bulk image editors. */
+function SingleImagePicker({
+  url,
+  onChoose,
+  onClear,
+}: {
+  url: string;
+  onChoose: () => void;
+  onClear: () => void;
+}) {
+  return url ? (
+    <div className="flex items-center gap-2">
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
+        <LoadingImage src={url} alt="Selected" className="h-full w-full object-cover" />
+      </div>
+      <div className="flex flex-col gap-1">
+        <button type="button" onClick={onChoose} className="text-xs text-primary hover:underline text-left">Change image</button>
+        <button type="button" onClick={onClear} className="text-xs text-destructive hover:underline text-left">Clear</button>
+      </div>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={onChoose}
+      className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
+    >
+      <Upload className="w-3.5 h-3.5" /> Choose image
+    </button>
+  );
+}
+
+/**
+ * Bulk image editor for items: two independent, dimension-based uploads.
+ * A 1:1 image seeds every square/platform field (POS, MPOS, Online, QR,
+ * Kiosk, 3rd Party); a 16:9 image only sets the landscape field. Each is
+ * optional and independent — uploading one never touches the other.
+ */
+function ItemBulkImageEditor({
+  squareUrl,
+  onChooseSquare,
+  onClearSquare,
+  landscapeUrl,
+  onChooseLandscape,
+  onClearLandscape,
+}: {
+  squareUrl: string;
+  onChooseSquare: () => void;
+  onClearSquare: () => void;
+  landscapeUrl: string;
+  onChooseLandscape: () => void;
+  onClearLandscape: () => void;
+}) {
+  return (
+    <div className="pl-5 space-y-3">
+      <div>
+        <p className="text-xs font-medium mb-1">Image 1:1</p>
+        <p className="text-[10px] text-muted-foreground mb-1.5">
+          Applies to POS, MPOS, Online, QR &amp; Kiosk for the selected items.
+        </p>
+        <SingleImagePicker url={squareUrl} onChoose={onChooseSquare} onClear={onClearSquare} />
+      </div>
+      <div>
+        <p className="text-xs font-medium mb-1">Image 16:9</p>
+        <p className="text-[10px] text-muted-foreground mb-1.5">
+          Applies to the landscape image for the selected items.
+        </p>
+        <SingleImagePicker url={landscapeUrl} onChoose={onChooseLandscape} onClear={onClearLandscape} />
+      </div>
+    </div>
+  );
+}
 
 /** Bulk image editor: "one image for all slots" or a per-slot grid. */
 function BulkImageEditor<F extends string>({
@@ -92,25 +157,7 @@ function BulkImageEditor<F extends string>({
       {mode === 'all' ? (
         <>
           <p className="text-[10px] text-muted-foreground">Applies one image to every slot on the selected {entityLabel}.</p>
-          {allUrl ? (
-            <div className="flex items-center gap-2">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-border">
-                <LoadingImage src={allUrl} alt="Selected" className="h-full w-full object-cover" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <button type="button" onClick={onChooseAll} className="text-xs text-primary hover:underline text-left">Change image</button>
-                <button type="button" onClick={onClearAll} className="text-xs text-destructive hover:underline text-left">Clear</button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onChooseAll}
-              className="input-field w-full text-xs h-8 flex items-center justify-center gap-1.5 hover:border-primary/40"
-            >
-              <Upload className="w-3.5 h-3.5" /> Choose image
-            </button>
-          )}
+          <SingleImagePicker url={allUrl} onChoose={onChooseAll} onClear={onClearAll} />
         </>
       ) : (
         <>
@@ -576,10 +623,9 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [qtyLimitValue, setQtyLimitValue] = useState('');
   const [qtyLimitNoMax, setQtyLimitNoMax] = useState(false);
   const [applyImage, setApplyImage] = useState(false);
-  const [imageMode, setImageMode] = useState<ImageMode>('all');
-  const [bulkImageUrl, setBulkImageUrl] = useState('');
-  const [itemSlotImages, setItemSlotImages] = useState<Record<ItemImageField, string>>(emptyItemSlots());
-  const [imageModalTarget, setImageModalTarget] = useState<'all' | ItemImageField | null>(null);
+  const [bulkSquareImageUrl, setBulkSquareImageUrl] = useState('');
+  const [bulkLandscapeImageUrl, setBulkLandscapeImageUrl] = useState('');
+  const [imageModalTarget, setImageModalTarget] = useState<'square' | 'landscape' | null>(null);
   const [taxAction, setTaxAction] = useState<string>('none'); // 'none' | 'noTax' | 'standard' | String(tax.id)
   const [tagAddIds, setTagAddIds] = useState<Set<number>>(new Set());
   const [tagRemoveIds, setTagRemoveIds] = useState<Set<number>>(new Set());
@@ -643,7 +689,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setTpoMode('none'); setTpoValue('');
     setApplySaleCategory(false); setSaleCategoryValue('Food Sales');
     setApplyQtyLimit(false); setQtyLimitValue(''); setQtyLimitNoMax(false);
-    setApplyImage(false); setImageMode('all'); setBulkImageUrl(''); setItemSlotImages(emptyItemSlots());
+    setApplyImage(false); setBulkSquareImageUrl(''); setBulkLandscapeImageUrl('');
     setTaxAction('none');
     setTagAddIds(new Set()); setTagRemoveIds(new Set());
     setAllergenAddIds(new Set()); setAllergenRemoveIds(new Set());
@@ -675,11 +721,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
       else if (qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
     }
     if (applyImage) {
-      if (imageMode === 'all' && bulkImageUrl) t('set item image (all slots)');
-      else if (imageMode === 'perSlot') {
-        const n = Object.values(itemSlotImages).filter(Boolean).length;
-        if (n) t(`set ${n} item image slot${n !== 1 ? 's' : ''}`);
-      }
+      if (bulkSquareImageUrl) t('set 1:1 image');
+      if (bulkLandscapeImageUrl) t('set 16:9 image');
     }
     if (taxAction !== 'none') t(`tax → ${taxActionLabel()}`);
     if (tagAddIds.size) t(`+${tagAddIds.size} tag(s)`);
@@ -749,7 +792,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
         applyVisibility || inheritVisAction !== 'none' || (applyPriceSection && priceValue) || stockAction !== 'none' ||
         tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
         (applyQtyLimit && (qtyLimitValue || qtyLimitNoMax)) ||
-        (applyImage && (imageMode === 'all' ? !!bulkImageUrl : Object.values(itemSlotImages).some(Boolean))) ||
+        (applyImage && (!!bulkSquareImageUrl || !!bulkLandscapeImageUrl)) ||
         taxAction !== 'none' ||
         tagAddIds.size || tagRemoveIds.size || allergenAddIds.size || allergenRemoveIds.size ||
         stationAddIds.size || stationRemoveIds.size;
@@ -789,14 +832,12 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
             }
           }
           if (applyImage) {
-            if (imageMode === 'all' && bulkImageUrl) {
-              // One image seeds every slot (mirrors the single-item panel).
-              for (const { field } of ITEM_IMAGE_SLOTS) updates[field] = bulkImageUrl;
-            } else if (imageMode === 'perSlot') {
-              // Only write slots the user actually set; blank slots are left untouched.
-              for (const { field } of ITEM_IMAGE_SLOTS) {
-                if (itemSlotImages[field]) updates[field] = itemSlotImages[field];
-              }
+            // 1:1 and 16:9 are independent — setting one never touches the other.
+            if (bulkSquareImageUrl) {
+              for (const field of ITEM_SQUARE_FIELDS) updates[field] = bulkSquareImageUrl;
+            }
+            if (bulkLandscapeImageUrl) {
+              updates.landscapeImage = bulkLandscapeImageUrl;
             }
           }
           if (taxAction !== 'none') Object.assign(updates, taxPatch());
@@ -1115,17 +1156,13 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                   <span className="section-header">Image</span>
                 </label>
                 {applyImage && (
-                  <BulkImageEditor
-                    mode={imageMode}
-                    setMode={setImageMode}
-                    entityLabel="items"
-                    allUrl={bulkImageUrl}
-                    onChooseAll={() => setImageModalTarget('all')}
-                    onClearAll={() => setBulkImageUrl('')}
-                    slots={ITEM_IMAGE_SLOTS}
-                    slotValues={itemSlotImages}
-                    onChooseSlot={(field) => setImageModalTarget(field)}
-                    onClearSlot={(field) => setItemSlotImages((prev) => ({ ...prev, [field]: '' }))}
+                  <ItemBulkImageEditor
+                    squareUrl={bulkSquareImageUrl}
+                    onChooseSquare={() => setImageModalTarget('square')}
+                    onClearSquare={() => setBulkSquareImageUrl('')}
+                    landscapeUrl={bulkLandscapeImageUrl}
+                    onChooseLandscape={() => setImageModalTarget('landscape')}
+                    onClearLandscape={() => setBulkLandscapeImageUrl('')}
                   />
                 )}
               </section>
@@ -1293,15 +1330,11 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
       <CategoryImageLibraryModal
         open={imageModalTarget !== null}
-        title={
-          imageModalTarget === 'all' || imageModalTarget === null
-            ? 'Item image (all slots)'
-            : `Item image — ${ITEM_IMAGE_SLOTS.find((s) => s.field === imageModalTarget)?.label ?? ''}`
-        }
+        title={imageModalTarget === 'landscape' ? 'Item image — 16:9' : 'Item image — 1:1'}
         onOpenChange={(open) => { if (!open) setImageModalTarget(null); }}
         onSelect={(url) => {
-          if (imageModalTarget === 'all') setBulkImageUrl(url);
-          else if (imageModalTarget) setItemSlotImages((prev) => ({ ...prev, [imageModalTarget]: url }));
+          if (imageModalTarget === 'square') setBulkSquareImageUrl(url);
+          else if (imageModalTarget === 'landscape') setBulkLandscapeImageUrl(url);
         }}
       />
 
