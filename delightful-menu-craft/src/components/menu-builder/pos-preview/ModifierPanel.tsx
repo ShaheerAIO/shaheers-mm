@@ -18,6 +18,22 @@ export function getEffectiveModType(mod: Modifier): 'Required' | 'Push Optional'
   return 'Optional';
 }
 
+/** Small colored badge showing a modifier's Required / Push / Optional behavior. */
+export function ModTypeBadge({ mod, className }: { mod: Modifier; className?: string }) {
+  const t = getEffectiveModType(mod);
+  const styles: Record<typeof t, string> = {
+    Required: 'bg-destructive/10 text-destructive',
+    'Push Optional': 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    Optional: 'bg-muted text-muted-foreground',
+  };
+  const label = t === 'Push Optional' ? 'Push' : t;
+  return (
+    <span className={cn('shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium', styles[t], className)}>
+      {label}
+    </span>
+  );
+}
+
 /**
  * True if the item has any attached modifier that — itself or via its nested
  * descendant modifiers — exposes at least one selectable option. This is the

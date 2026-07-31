@@ -28,6 +28,7 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
+import { ModTypeBadge, getEffectiveModType } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
@@ -411,6 +412,7 @@ export function ModifierLibraryContent() {
                   <div className="font-medium text-sm flex items-center gap-1.5">
                     {modifier.modifierName}
                     <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
+                    <ModTypeBadge mod={modifier} />
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     {directOptionCount > 0 ? (
@@ -698,8 +700,10 @@ interface ModifierDraft {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
 }
@@ -769,8 +773,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     visibilityPos: modifier.visibilityPos ?? true,
     visibilityKiosk: modifier.visibilityKiosk ?? true,
     visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
+    visibilityNugget: modifier.visibilityNugget ?? true,
     visibilityQr: modifier.visibilityQr ?? true,
     visibilityWebsite: modifier.visibilityWebsite ?? true,
+    visibilityOnline: modifier.visibilityOnline ?? true,
     visibilityMobileApp: modifier.visibilityMobileApp ?? true,
     visibilityDoordash: modifier.visibilityDoordash ?? true,
   });
@@ -796,8 +802,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
       visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
+      visibilityNugget: modifier.visibilityNugget ?? true,
       visibilityQr: modifier.visibilityQr ?? true,
       visibilityWebsite: modifier.visibilityWebsite ?? true,
+      visibilityOnline: modifier.visibilityOnline ?? true,
       visibilityMobileApp: modifier.visibilityMobileApp ?? true,
       visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
@@ -920,8 +928,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         visibilityPos: draft.visibilityPos,
         visibilityKiosk: draft.visibilityKiosk,
         visibilityMenuBoard: draft.visibilityMenuBoard,
+        visibilityNugget: draft.visibilityNugget,
         visibilityQr: draft.visibilityQr,
         visibilityWebsite: draft.visibilityWebsite,
+        visibilityOnline: draft.visibilityOnline,
         visibilityMobileApp: draft.visibilityMobileApp,
         visibilityDoordash: draft.visibilityDoordash,
       });
@@ -949,8 +959,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       visibilityPos: modifier.visibilityPos ?? true,
       visibilityKiosk: modifier.visibilityKiosk ?? true,
       visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
+      visibilityNugget: modifier.visibilityNugget ?? true,
       visibilityQr: modifier.visibilityQr ?? true,
       visibilityWebsite: modifier.visibilityWebsite ?? true,
+      visibilityOnline: modifier.visibilityOnline ?? true,
       visibilityMobileApp: modifier.visibilityMobileApp ?? true,
       visibilityDoordash: modifier.visibilityDoordash ?? true,
     });
@@ -978,19 +990,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       }));
   }, [modifierModifierOptions, modifier.id, modifierOptions]);
   
-  // Dynamic Max SELECTION ceiling from the three toggles (see modifierSelectionCeiling)
-  const selectionCeiling = useMemo(
-    () =>
-      modifierSelectionCeiling({
-        multiSelect: draft.multiSelect,
-        allowRepeat: draft.canGuestSelectMoreModifiers,
-        limitPerOption: modifierOptionAssignments.some(a => (a.maxQtyPerOption ?? 1) !== 1),
-        optionCount: modifierOptionAssignments.length,
-        perOptionLimits: modifierOptionAssignments.map(a => a.maxQtyPerOption ?? 1),
-      }),
-    [draft.multiSelect, draft.canGuestSelectMoreModifiers, modifierOptionAssignments],
-  );
-
   // No-charge modifiers can't carry per-option prices — zero any that were
   // entered before switching pricing type.
   const isNoCharge = draft.modifierOptionPriceType === 'NoCharge';
@@ -1397,19 +1396,30 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const isNestedContainer = effectiveMode === 'nested';
 
   // Total number of choices a guest could pick from (flat options or nested
-  // sub-modifiers). The Max SELECTION field must never exceed this, regardless
-  // of the (separately displayed) combination limit.
+  // sub-modifiers).
   const availableOptionCount =
     effectiveMode === 'nested' ? childModifiers.length : modifierOptionAssignments.length;
-  const maxSelectorCeiling =
-    Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, availableOptionCount || Infinity);
 
-  // Keep Max SELECTION from silently exceeding the option/sub-modifier count
-  // as options or nested modifiers are added or removed.
+  // Dynamic Max SELECTION ceiling from the selection toggles. When guests may
+  // repeat the same option the cap is the sum of per-option limits (or ∞), so it
+  // can legitimately exceed the number of distinct options — do NOT clamp to the
+  // option/sub-modifier count. Nested sub-modifiers carry no per-option limit, so
+  // their ceiling is driven purely by multiSelect/repeat.
+  const selectionCeiling = modifierSelectionCeiling({
+    multiSelect: draft.multiSelect,
+    allowRepeat: draft.canGuestSelectMoreModifiers,
+    limitPerOption: effectiveMode !== 'nested' && modifierOptionAssignments.some(a => (a.maxQtyPerOption ?? 1) !== 1),
+    optionCount: availableOptionCount,
+    perOptionLimits: effectiveMode === 'nested' ? [] : modifierOptionAssignments.map(a => a.maxQtyPerOption ?? 1),
+  });
+  const maxSelectorCeiling = isFinite(selectionCeiling) ? selectionCeiling : Infinity;
+
+  // Keep Max SELECTION from silently exceeding the computed ceiling as options
+  // or nested modifiers are added or removed.
   useEffect(() => {
-    if (draft.noMaxSelection || availableOptionCount === 0) return;
-    setDraft((d) => (d.maxSelector > availableOptionCount ? { ...d, maxSelector: availableOptionCount } : d));
-  }, [availableOptionCount, draft.noMaxSelection]);
+    if (draft.noMaxSelection || !isFinite(selectionCeiling) || availableOptionCount === 0) return;
+    setDraft((d) => (d.maxSelector > selectionCeiling ? { ...d, maxSelector: selectionCeiling } : d));
+  }, [selectionCeiling, availableOptionCount, draft.noMaxSelection]);
 
   const minSelectorField = useClearableIntInput(draft.minSelector, (parsed) => {
     setDraft((d) => {
@@ -1793,6 +1803,24 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       </div>
                       <button
                         type="button"
+                        onClick={() => {
+                          const makeRequired = getEffectiveModType(child) !== 'Required';
+                          updateModifier(child.id, makeRequired
+                            ? { minSelector: Math.max(1, child.minSelector || 1), modType: 'Required', isOptional: 'Required' }
+                            : { minSelector: 0, modType: 'Optional', isOptional: 'Select any' });
+                        }}
+                        className={cn(
+                          "shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors",
+                          getEffectiveModType(child) === 'Required'
+                            ? "bg-destructive/10 text-destructive hover:bg-destructive/20"
+                            : "bg-muted text-muted-foreground hover:bg-muted/70",
+                        )}
+                        title="Required = guest must choose (min 1); Optional = min 0"
+                      >
+                        {getEffectiveModType(child) === 'Required' ? 'Required' : 'Optional'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRemoveNestedModifier(child.id)}
                         className="p-1.5 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
                         title="Remove nested modifier"
@@ -2044,11 +2072,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {assignment.isDefaultSelected && (
-                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                            Default
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => updateModifierModifierOption(modifier.id, assignment.modifierOptionId, { isDefaultSelected: !assignment.isDefaultSelected })}
+                          className={cn(
+                            "text-xs px-1.5 py-0.5 rounded transition-colors",
+                            assignment.isDefaultSelected
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground hover:bg-muted/70",
+                          )}
+                          title={assignment.isDefaultSelected ? "Default selected — click to clear" : "Set as default selected option"}
+                        >
+                          {assignment.isDefaultSelected ? 'Default' : 'Set default'}
+                        </button>
                         {assignment.option && !assignment.option.isStockAvailable && (
                           <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
                             Out of Stock

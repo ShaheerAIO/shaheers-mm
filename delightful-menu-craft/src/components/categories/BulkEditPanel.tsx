@@ -16,9 +16,11 @@ const VIS_CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
   { key: 'visibilityKiosk' as const, label: 'Kiosk' },
   { key: 'visibilityMenuBoard' as const, label: 'Menu Board' },
+  { key: 'visibilityMobileApp' as const, label: 'MPOS' },
+  { key: 'visibilityNugget' as const, label: 'Nugget' },
   { key: 'visibilityQr' as const, label: 'QR' },
   { key: 'visibilityWebsite' as const, label: 'Website' },
-  { key: 'visibilityMobileApp' as const, label: 'MPOS' },
+  { key: 'visibilityOnline' as const, label: 'Online' },
   { key: 'visibilityDoordash' as const, label: 'DoorDash' },
 ];
 
@@ -27,9 +29,11 @@ const defaultVisDraft = (): VisDraft => ({
   visibilityPos: true,
   visibilityKiosk: true,
   visibilityMenuBoard: true,
+  visibilityMobileApp: true,
+  visibilityNugget: true,
   visibilityQr: true,
   visibilityWebsite: true,
-  visibilityMobileApp: true,
+  visibilityOnline: true,
   visibilityDoordash: true,
 });
 

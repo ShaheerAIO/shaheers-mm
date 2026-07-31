@@ -14,8 +14,10 @@ export interface Menu {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
   // Scheduling — JSON-encoded DayScheduleMap
@@ -42,8 +44,10 @@ export interface Category {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
   // Scheduling — JSON-encoded DayScheduleMap (same format as Item)
@@ -94,8 +98,10 @@ export interface Item {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;       // QR code ordering
   visibilityWebsite: boolean;  // Web ordering
+  visibilityOnline: boolean;   // Online ordering channel (distinct from Website)
   visibilityMobileApp: boolean;// First-party mobile app
   visibilityDoordash: boolean; // DoorDash / 3rd-party delivery
   // When true, channels + schedule are inherited from the item's category
@@ -181,8 +187,10 @@ export interface Modifier {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
   modType?: string; // 'Optional' | 'Required' | 'Push Optional'
@@ -203,8 +211,10 @@ export interface ModifierOption {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
 }

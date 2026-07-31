@@ -78,8 +78,10 @@ const parseMenus = (sheet: XLSX.WorkSheet): Menu[] => {
     visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
     visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
     visibilityMenuBoard: row['visibilityMenuBoard'] !== undefined ? parseBoolean(row['visibilityMenuBoard']) : true,
+    visibilityNugget:    row['visibilityNugget']    !== undefined ? parseBoolean(row['visibilityNugget'])    : true,
     visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
     visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
+    visibilityOnline:    row['visibilityOnline']    !== undefined ? parseBoolean(row['visibilityOnline'])    : true,
     visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
     visibilityDoordash:  row['visibilityDoordash']  !== undefined ? parseBoolean(row['visibilityDoordash'])  : true,
     daySchedules: serializeDaySchedules(
@@ -110,8 +112,10 @@ const parseCategories = (sheet: XLSX.WorkSheet): Category[] => {
     visibilityPos:       row['visibilityPos']       !== undefined ? parseBoolean(row['visibilityPos'])       : true,
     visibilityKiosk:     row['visibilityKiosk']     !== undefined ? parseBoolean(row['visibilityKiosk'])     : true,
     visibilityMenuBoard: row['visibilityMenuBoard'] !== undefined ? parseBoolean(row['visibilityMenuBoard']) : true,
+    visibilityNugget:    row['visibilityNugget']    !== undefined ? parseBoolean(row['visibilityNugget'])    : true,
     visibilityQr:        row['visibilityQr']        !== undefined ? parseBoolean(row['visibilityQr'])        : true,
     visibilityWebsite:   row['visibilityWebsite']   !== undefined ? parseBoolean(row['visibilityWebsite'])   : true,
+    visibilityOnline:    row['visibilityOnline']    !== undefined ? parseBoolean(row['visibilityOnline'])    : true,
     visibilityMobileApp: row['visibilityMobileApp'] !== undefined ? parseBoolean(row['visibilityMobileApp']) : true,
     visibilityDoordash:  row['visibilityDoordash']  !== undefined ? parseBoolean(row['visibilityDoordash'])  : true,
     daySchedules: serializeDaySchedules(

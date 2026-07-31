@@ -14,6 +14,7 @@ import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
+import { ModTypeBadge } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Item } from '@/types/menu';
 import {
@@ -86,8 +87,10 @@ interface DraftState {
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
+  visibilityNugget: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
+  visibilityOnline: boolean;
   visibilityMobileApp: boolean;
   visibilityDoordash: boolean;
   daySchedulesByGroup: ChannelGroupSchedules;
@@ -257,8 +260,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     visibilityPos: item.visibilityPos ?? true,
     visibilityKiosk: item.visibilityKiosk ?? true,
     visibilityMenuBoard: item.visibilityMenuBoard ?? true,
+    visibilityNugget: item.visibilityNugget ?? true,
     visibilityQr: item.visibilityQr ?? true,
     visibilityWebsite: item.visibilityWebsite ?? true,
+    visibilityOnline: item.visibilityOnline ?? true,
     visibilityMobileApp: item.visibilityMobileApp ?? true,
     visibilityDoordash: item.visibilityDoordash ?? true,
     daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
@@ -305,6 +310,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerSearch, setGroupPickerSearch] = useState('');
   const groupPickerRef = useRef<HTMLDivElement>(null);
+  const [modPickerOpen, setModPickerOpen] = useState(false);
+  const [modPickerSearch, setModPickerSearch] = useState('');
+  const modPickerRef = useRef<HTMLDivElement>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   // Which modifier's "sort options" dropdown is currently open (null = none)
@@ -355,8 +363,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
       visibilityMenuBoard: item.visibilityMenuBoard ?? true,
+      visibilityNugget: item.visibilityNugget ?? true,
       visibilityQr: item.visibilityQr ?? true,
       visibilityWebsite: item.visibilityWebsite ?? true,
+      visibilityOnline: item.visibilityOnline ?? true,
       visibilityMobileApp: item.visibilityMobileApp ?? true,
       visibilityDoordash: item.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
@@ -406,6 +416,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [groupPickerOpen]);
+
+  useEffect(() => {
+    if (!modPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modPickerRef.current && !modPickerRef.current.contains(e.target as Node)) {
+        setModPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [modPickerOpen]);
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -502,8 +523,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.visibilityPos !== (item.visibilityPos ?? true) ||
       draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
       draft.visibilityMenuBoard !== (item.visibilityMenuBoard ?? true) ||
+      draft.visibilityNugget !== (item.visibilityNugget ?? true) ||
       draft.visibilityQr !== (item.visibilityQr ?? true) ||
       draft.visibilityWebsite !== (item.visibilityWebsite ?? true) ||
+      draft.visibilityOnline !== (item.visibilityOnline ?? true) ||
       draft.visibilityMobileApp !== (item.visibilityMobileApp ?? true) ||
       draft.visibilityDoordash !== (item.visibilityDoordash ?? true) ||
       serializeGroupSchedules(draft.daySchedulesByGroup) !== (item.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
@@ -574,8 +597,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       visibilityPos: draft.visibilityPos,
       visibilityKiosk: draft.visibilityKiosk,
       visibilityMenuBoard: draft.visibilityMenuBoard,
+      visibilityNugget: draft.visibilityNugget,
       visibilityQr: draft.visibilityQr,
       visibilityWebsite: draft.visibilityWebsite,
+      visibilityOnline: draft.visibilityOnline,
       visibilityMobileApp: draft.visibilityMobileApp,
       visibilityDoordash: draft.visibilityDoordash,
       daySchedulesByGroup: serializeGroupSchedules(draft.daySchedulesByGroup),
@@ -644,8 +669,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
       visibilityMenuBoard: item.visibilityMenuBoard ?? true,
+      visibilityNugget: item.visibilityNugget ?? true,
       visibilityQr: item.visibilityQr ?? true,
       visibilityWebsite: item.visibilityWebsite ?? true,
+      visibilityOnline: item.visibilityOnline ?? true,
       visibilityMobileApp: item.visibilityMobileApp ?? true,
       visibilityDoordash: item.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
@@ -1361,7 +1388,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             <AccordionContent>
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Optional per-platform prices. Leave blank to use the base price.
+                  Optional per-platform prices. Leave blank to inherit the base price
+                  {draft.itemPrice > 0 ? ` ($${draft.itemPrice.toFixed(2)})` : ''}.
                 </p>
                 <div className="grid grid-cols-3 gap-3">
                   {([
@@ -1373,7 +1401,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                       <Label className="text-xs text-muted-foreground">{label}</Label>
                       <NumberStepperInput
                         inputMode="decimal"
-                        placeholder="0.00"
+                        placeholder={draft.itemPrice > 0 ? draft.itemPrice.toFixed(2) : '0.00'}
                         value={value}
                         onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
                         onStep={(delta) =>
@@ -1557,19 +1585,48 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     </div>
                   )}
                   {availableModifiers.length > 0 && (
-                    <Select onValueChange={handleAddModifier}>
-                      <SelectTrigger className="btn-add w-auto h-auto border-0 shadow-none focus:ring-0 focus:ring-offset-0 [&>svg]:size-3">
+                    <div className="relative" ref={modPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => { setModPickerOpen((o) => !o); setModPickerSearch(''); }}
+                        className="btn-add"
+                      >
                         <Plus className="w-3.5 h-3.5" />
                         Add
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModifiers.map((mod) => (
-                          <SelectOption key={mod.id} value={mod.id.toString()}>
-                            {mod.modifierName} <span className="text-muted-foreground/60">#{mod.id}</span>
-                          </SelectOption>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      </button>
+                      {modPickerOpen && (
+                        <div className="absolute z-20 right-0 top-full mt-1 w-56 rounded-md border border-border bg-background shadow-md">
+                          <div className="p-1.5 border-b border-border">
+                            <input
+                              type="text"
+                              value={modPickerSearch}
+                              onChange={(e) => setModPickerSearch(e.target.value)}
+                              placeholder="Search modifiers…"
+                              className="input-field h-7 text-xs w-full"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {availableModifiers
+                              .filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase()))
+                              .map((mod) => (
+                                <button
+                                  key={mod.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                                  onClick={() => { handleAddModifier(mod.id.toString()); setModPickerOpen(false); }}
+                                >
+                                  <span className="truncate">{mod.modifierName}</span>
+                                  <span className="text-muted-foreground/60 text-[10px] shrink-0">#{mod.id}</span>
+                                </button>
+                              ))}
+                            {availableModifiers.filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())).length === 0 && (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <button
                     className="btn-add"
@@ -1636,6 +1693,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               New
                             </span>
                           )}
+                          <ModTypeBadge mod={modifier} />
                         </div>
                         <div className="flex items-center gap-0.5">
                           <button

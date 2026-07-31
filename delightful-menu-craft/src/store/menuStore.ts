@@ -259,7 +259,7 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 18;
+export const STORE_VERSION = 19;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
@@ -335,13 +335,16 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
               typeof item.availableTimeEnd   === 'string' ? item.availableTimeEnd   : undefined,
             ));
 
-        const migrated = { ...item, ...vis, daySchedules };
-        delete migrated.visibilityOnline;
-        delete migrated.visibilityThirdParty;
-        delete migrated.availableDays;
-        delete migrated.availableTimeStart;
-        delete migrated.availableTimeEnd;
-        return migrated;
+        // Strip the legacy combined fields off the source row first, then spread
+        // the resolved `vis` last so the current channel set (incl. the standalone
+        // visibilityOnline channel) is never removed by these deletes.
+        const cleaned: Record<string, unknown> = { ...item, daySchedules };
+        delete cleaned.visibilityOnline;
+        delete cleaned.visibilityThirdParty;
+        delete cleaned.availableDays;
+        delete cleaned.availableTimeStart;
+        delete cleaned.availableTimeEnd;
+        return { ...cleaned, ...vis };
       });
     }
 
@@ -623,13 +626,34 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     }
   }
 
+  if (fromVersion < 19) {
+    // Backfill the Online (Off-Prem) and Nugget (On-Prem) channels — both default
+    // visible — on every entity that carries visibility. MPOS also moved Off-Prem →
+    // On-Prem, but group membership is resolved at runtime from VISIBILITY_CHANNELS
+    // (no field rename needed).
+    const backfillChannels = (arr: unknown) =>
+      Array.isArray(arr)
+        ? (arr as Record<string, unknown>[]).map((e) => {
+            const next = { ...e };
+            if (typeof next.visibilityOnline !== 'boolean') next.visibilityOnline = true;
+            if (typeof next.visibilityNugget !== 'boolean') next.visibilityNugget = true;
+            return next;
+          })
+        : arr;
+    state.menus = backfillChannels(state.menus);
+    state.categories = backfillChannels(state.categories);
+    state.items = backfillChannels(state.items);
+    state.modifiers = backfillChannels(state.modifiers);
+    state.modifierOptions = backfillChannels(state.modifierOptions);
+  }
+
   return persisted as MenuState;
 }
 
 /** Visibility channel + schedule fields copied when an item inherits from its category. */
 const VISIBILITY_FIELDS = [
   'visibilityPos', 'visibilityKiosk', 'visibilityMenuBoard', 'visibilityQr',
-  'visibilityWebsite', 'visibilityMobileApp', 'visibilityDoordash',
+  'visibilityWebsite', 'visibilityOnline', 'visibilityMobileApp', 'visibilityNugget', 'visibilityDoordash',
   'daySchedules', 'daySchedulesByGroup',
 ] as const;
 

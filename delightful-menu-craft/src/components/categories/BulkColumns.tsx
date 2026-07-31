@@ -255,11 +255,17 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
         categoryEntries.push(entry);
       }
     }
-    // Keep directly-selected categories visible even if their menu was unchecked
-    for (const id of selectedIdsAt('category')) {
-      if (seen.has(id)) continue;
-      const category = data.categories.find((c) => c.id === id);
-      if (category) { seen.add(id); categoryEntries.push({ category, depth: 0 }); }
+    // Keep directly-selected categories visible only when no menu is active —
+    // i.e. their parent menu was closed/unchecked — so a dangling selection isn't
+    // lost. While a menu IS open, show only that menu's categories so selections
+    // from other menus don't leak into the current scope (checkbox state is
+    // preserved in `selected` regardless of visibility).
+    if (activeMenuIds.length === 0) {
+      for (const id of selectedIdsAt('category')) {
+        if (seen.has(id)) continue;
+        const category = data.categories.find((c) => c.id === id);
+        if (category) { seen.add(id); categoryEntries.push({ category, depth: 0 }); }
+      }
     }
   }
   const categoryRows: BulkRowData[] = categoryEntries
@@ -288,10 +294,15 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
         itemEntries.push(item);
       }
     }
-    for (const id of selectedIdsAt('item')) {
-      if (seen.has(id)) continue;
-      const item = data.items.find((i) => i.id === id);
-      if (item) { seen.add(id); itemEntries.push(item); }
+    // Keep directly-selected items visible only when no category is active, so a
+    // dangling selection isn't lost — but while a category IS open, show only its
+    // items so selections from other categories don't leak into the current scope.
+    if (activeCategoryIds.length === 0) {
+      for (const id of selectedIdsAt('item')) {
+        if (seen.has(id)) continue;
+        const item = data.items.find((i) => i.id === id);
+        if (item) { seen.add(id); itemEntries.push(item); }
+      }
     }
   }
   const itemRows: BulkRowData[] = itemEntries

@@ -21,10 +21,7 @@ import type { Menu } from '@/types/menu';
 import { ColorPalettePicker } from '@/components/ColorPalettePicker';
 import { MENU_COLOR_PALETTE, DEFAULT_MENU_COLOR } from '@/lib/posColors';
 
-type VisDraft = Pick<Menu,
-  'visibilityPos' | 'visibilityKiosk' | 'visibilityMenuBoard' | 'visibilityQr' |
-  'visibilityWebsite' | 'visibilityMobileApp' | 'visibilityDoordash'
->;
+type VisDraft = Pick<Menu, VisibilityChannelKey>;
 
 type Draft = {
   menuName: string;
@@ -50,20 +47,11 @@ interface Props {
   menu: Menu;
 }
 
-const ON_PREM: { key: VisibilityChannelKey; label: string }[] = [
-  { key: 'visibilityPos', label: 'POS' },
-  { key: 'visibilityKiosk', label: 'Kiosk' },
-  { key: 'visibilityMenuBoard', label: 'Menu Board' },
-];
-const OFF_PREM: { key: VisibilityChannelKey; label: string }[] = [
-  { key: 'visibilityQr', label: 'QR Code' },
-  { key: 'visibilityWebsite', label: 'Website' },
-  { key: 'visibilityMobileApp', label: 'MPOS' },
-  { key: 'visibilityDoordash', label: 'DoorDash' },
-];
+// Channel lists derive from VISIBILITY_CHANNELS (single source of truth) so group
+// membership — e.g. MPOS in On-Prem, the Online channel in Off-Prem — stays in sync.
 const CHANNEL_GROUPS = [
-  { id: 'onPrem' as const, label: 'On-Prem', channels: ON_PREM },
-  { id: 'offPrem' as const, label: 'Off-Prem', channels: OFF_PREM },
+  { id: 'onPrem' as const, label: 'On-Prem', channels: VISIBILITY_CHANNELS.filter((c) => c.group === 'On-Prem') },
+  { id: 'offPrem' as const, label: 'Off-Prem', channels: VISIBILITY_CHANNELS.filter((c) => c.group === 'Off-Prem') },
 ];
 
 export function MenuDetailPanel({ menu }: Props) {
@@ -77,8 +65,10 @@ export function MenuDetailPanel({ menu }: Props) {
     visibilityPos: menu.visibilityPos ?? true,
     visibilityKiosk: menu.visibilityKiosk ?? true,
     visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
+    visibilityNugget: menu.visibilityNugget ?? true,
     visibilityQr: menu.visibilityQr ?? true,
     visibilityWebsite: menu.visibilityWebsite ?? true,
+    visibilityOnline: menu.visibilityOnline ?? true,
     visibilityMobileApp: menu.visibilityMobileApp ?? true,
     visibilityDoordash: menu.visibilityDoordash ?? true,
     daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
@@ -100,8 +90,10 @@ export function MenuDetailPanel({ menu }: Props) {
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
+      visibilityNugget: menu.visibilityNugget ?? true,
       visibilityQr: menu.visibilityQr ?? true,
       visibilityWebsite: menu.visibilityWebsite ?? true,
+      visibilityOnline: menu.visibilityOnline ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,
       visibilityDoordash: menu.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
@@ -122,8 +114,10 @@ export function MenuDetailPanel({ menu }: Props) {
     draft.visibilityPos !== (menu.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (menu.visibilityKiosk ?? true) ||
     draft.visibilityMenuBoard !== (menu.visibilityMenuBoard ?? true) ||
+    draft.visibilityNugget !== (menu.visibilityNugget ?? true) ||
     draft.visibilityQr !== (menu.visibilityQr ?? true) ||
     draft.visibilityWebsite !== (menu.visibilityWebsite ?? true) ||
+    draft.visibilityOnline !== (menu.visibilityOnline ?? true) ||
     draft.visibilityMobileApp !== (menu.visibilityMobileApp ?? true) ||
     draft.visibilityDoordash !== (menu.visibilityDoordash ?? true) ||
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (menu.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules()));
@@ -144,8 +138,10 @@ export function MenuDetailPanel({ menu }: Props) {
       visibilityPos: menu.visibilityPos ?? true,
       visibilityKiosk: menu.visibilityKiosk ?? true,
       visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
+      visibilityNugget: menu.visibilityNugget ?? true,
       visibilityQr: menu.visibilityQr ?? true,
       visibilityWebsite: menu.visibilityWebsite ?? true,
+      visibilityOnline: menu.visibilityOnline ?? true,
       visibilityMobileApp: menu.visibilityMobileApp ?? true,
       visibilityDoordash: menu.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),

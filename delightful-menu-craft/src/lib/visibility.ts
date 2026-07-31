@@ -17,9 +17,11 @@ export const VISIBILITY_CHANNELS = [
   { key: 'visibilityPos',        label: 'POS',        group: 'On-Prem',  token: 'Pos'       },
   { key: 'visibilityKiosk',      label: 'Kiosk',      group: 'On-Prem',  token: 'Kiosk'     },
   { key: 'visibilityMenuBoard',  label: 'Menu Board', group: 'On-Prem',  token: 'MenuBoard' },
+  { key: 'visibilityMobileApp',  label: 'MPOS',       group: 'On-Prem',  token: 'Mpos'     },
+  { key: 'visibilityNugget',     label: 'Nugget',     group: 'On-Prem',  token: 'Nugget'   },
   { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem', token: 'QR'        },
   { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem', token: 'Website'  },
-  { key: 'visibilityMobileApp',  label: 'MPOS',       group: 'Off-Prem', token: 'Mpos'     },
+  { key: 'visibilityOnline',     label: 'Online',     group: 'Off-Prem', token: 'Online'   },
   { key: 'visibilityDoordash',   label: 'DoorDash',   group: 'Off-Prem', token: 'Doordash' },
 ] as const;
 
@@ -165,9 +167,11 @@ export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {
     visibilityPos:        true,
     visibilityKiosk:      true,
     visibilityMenuBoard:  true,
+    visibilityMobileApp:  true,
+    visibilityNugget:     true,
     visibilityQr:         true,
     visibilityWebsite:    true,
-    visibilityMobileApp:  true,
+    visibilityOnline:     true,
     visibilityDoordash:   true,
   };
 }
@@ -301,10 +305,10 @@ const PLATFORM_TO_KEY: Record<string, VisibilityChannelKey> = {
   mobile: 'visibilityMobileApp',
   doordash: 'visibilityDoordash',
   doordash3p: 'visibilityDoordash',
-  // Legacy / POS aliases
-  online: 'visibilityWebsite', // POS "Online" ordering ≈ Website
-  // POS-only channels with no app equivalent (nugget, catering)
-  // are intentionally not mapped and are ignored on import.
+  online: 'visibilityOnline', // POS "Online" ordering channel (distinct from Website)
+  nugget: 'visibilityNugget',
+  // POS-only channels with no app equivalent (catering) are intentionally not
+  // mapped and are ignored on import.
 };
 
 /** Channel keys belonging to a visibility group (derived from VISIBILITY_CHANNELS). */
@@ -312,7 +316,7 @@ const groupChannelKeys = (group: VisibilityGroup): VisibilityChannelKey[] =>
   VISIBILITY_CHANNELS.filter((c) => c.group === group).map((c) => c.key);
 
 /**
- * Serialize the 6 boolean channel fields into the POS `visibility` JSON column.
+ * Serialize the boolean channel fields into the POS `visibility` JSON column.
  * The POS accepts a JSON array of either group tokens (`["OnPrem","OffPrem"]`)
  * or individual channel tokens (`["Kiosk","QR","Doordash"]`). Per group: when
  * every channel in the group is on we collapse to the group token; when only
@@ -350,7 +354,8 @@ const normalizePlatformName = (value: unknown): string =>
  *   • Individual boolean columns: `visibilityPos: true`, etc.
  *
  * Legacy columns `visibilityOnline` and `visibilityThirdParty` are handled:
- *   - `visibilityOnline` → sets visibilityQr, visibilityWebsite, visibilityMobileApp
+ *   - `visibilityOnline` (legacy combined) → sets visibilityQr, visibilityWebsite,
+ *     visibilityMobileApp, and the standalone visibilityOnline channel
  *   - `visibilityThirdParty` → sets visibilityDoordash
  */
 export function parseVisibilityFromRow(
@@ -366,9 +371,11 @@ export function parseVisibilityFromRow(
           visibilityPos:        false,
           visibilityKiosk:      false,
           visibilityMenuBoard:  false,
+          visibilityMobileApp:  false,
+          visibilityNugget:     false,
           visibilityQr:         false,
           visibilityWebsite:    false,
-          visibilityMobileApp:  false,
+          visibilityOnline:     false,
           visibilityDoordash:   false,
         };
         let recognizedCount = 0;
@@ -415,9 +422,13 @@ export function parseVisibilityFromRow(
     visibilityPos:        parseBool(row['visibilityPos']),
     visibilityKiosk:      parseBool(row['visibilityKiosk']),
     visibilityMenuBoard:  parseBool(row['visibilityMenuBoard']),
+    visibilityMobileApp:  parseBool(row['visibilityMobileApp'], legacyOnline),
+    visibilityNugget:     parseBool(row['visibilityNugget']),
     visibilityQr:         parseBool(row['visibilityQr'],        legacyOnline),
     visibilityWebsite:    parseBool(row['visibilityWebsite'],   legacyOnline),
-    visibilityMobileApp:  parseBool(row['visibilityMobileApp'], legacyOnline),
+    // New Online channel: legacy per-column files predate it, so fall back to the
+    // legacy combined `visibilityOnline` flag (new-app exports use the JSON array).
+    visibilityOnline:     parseBool(row['visibilityOnline'],    legacyOnline),
     visibilityDoordash:   parseBool(row['visibilityDoordash'],  legacyThirdParty),
   };
 }
@@ -505,9 +516,11 @@ export function parseVisibilityFromScraper(item: {
     visibilityPos:        item.visibilityPos        ?? true,
     visibilityKiosk:      item.visibilityKiosk      ?? true,
     visibilityMenuBoard:  item.visibilityMenuBoard  ?? true,
+    visibilityMobileApp:  item.visibilityMobileApp  ?? online,
+    visibilityNugget:     true,
     visibilityQr:         item.visibilityQr         ?? online,
     visibilityWebsite:    item.visibilityWebsite     ?? online,
-    visibilityMobileApp:  item.visibilityMobileApp  ?? online,
+    visibilityOnline:     online,
     visibilityDoordash:   item.visibilityDoordash   ?? thirdParty,
   };
 }
