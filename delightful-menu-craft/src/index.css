@@ -224,7 +224,7 @@
   }
 
   .category-column.expanded {
-    @apply w-80 flex-shrink-0 bg-[hsl(var(--column-active))];
+    @apply w-[464px] flex-shrink-0 bg-[hsl(var(--column-active))];
     border-left: 2px solid hsl(var(--primary));
     border-right: 2px solid hsl(var(--primary));
   }

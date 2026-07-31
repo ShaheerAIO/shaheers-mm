@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { useUserPreferencesStore } from '@/store/userPreferencesStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
-import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil, Copy, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Plus, GripVertical, Search, X, Library, Trash2, FolderPlus, Pencil, Copy, ChevronUp, ChevronDown, ChevronRight, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { shortenName } from '@/lib/shortenName';
 import type { Category, Item } from '@/types/menu';
@@ -56,7 +56,6 @@ export function CategoryColumn({
     categoryItems,
     updateCategory,
     setEditingCategory,
-    reorderCategories,
     reorderCategoryItems,
   } = useMenuStore();
   const isReadOnly = useIsReadOnly();
@@ -80,10 +79,8 @@ export function CategoryColumn({
   // Native DnD state for reordering items in the focused category.
   const [itemDragIndex, setItemDragIndex] = useState<number | null>(null);
   const [itemDragOverIndex, setItemDragOverIndex] = useState<number | null>(null);
-  // Native DnD state for reordering subcategory chips within a row.
-  const [subcatDrag, setSubcatDrag] = useState<{ parentId: number; index: number } | null>(null);
-  const [subcatDragOver, setSubcatDragOver] = useState<{ parentId: number; index: number } | null>(null);
-  const [subcatDragArmed, setSubcatDragArmed] = useState(false);
+  // Which subcategory nodes are expanded in the nav rail tree.
+  const [expandedSubcats, setExpandedSubcats] = useState<Set<number>>(new Set());
   // Editable draft for the numeric position control in the header.
   const [positionDraft, setPositionDraft] = useState('');
 
@@ -110,25 +107,12 @@ export function CategoryColumn({
     return cur === category.id ? chain : [];
   }, [activeSubcat, categories, category.id]);
 
-  // One chip row per drill level: row 0 = root's children, row N = children of
-  // the level-(N-1) selection. Each row is shown as long as it has children.
-  const subcatRows = useMemo(() => {
-    const rows: { parentId: number; selectedId: number | null; children: Category[] }[] = [];
-    let parentId = category.id;
-    let depth = 0;
-    // Walk the active path; render the row of siblings at each level.
-    for (let children = childrenOf(parentId); children.length > 0; ) {
-      const selectedId = activePath[depth] ?? null;
-      rows.push({ parentId, selectedId, children });
-      if (selectedId == null) break;
-      parentId = selectedId;
-      depth += 1;
-      children = childrenOf(parentId);
-    }
-    return rows;
-    // childrenOf reads `categories`, which is already a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category.id, categories, activePath]);
+  // Whether this column's root category has any subcategories at all. Drives the
+  // "leaf vs parent" rules (add-item guard, per-item action visibility).
+  const hasSubcats = useMemo(
+    () => categories.some((c) => c.parentCategoryId === category.id),
+    [categories, category.id]
+  );
 
   // The currently focused category at any depth (root when nothing drilled).
   const focusedCategory = useMemo(
@@ -172,6 +156,19 @@ export function CategoryColumn({
       setSubcatDraftName('');
     }
   }, [categories, editingSubcatId]);
+
+  // Auto-expand every ancestor along the active path so the focused
+  // subcategory is always visible in the nav rail tree.
+  useEffect(() => {
+    if (activePath.length === 0) return;
+    setExpandedSubcats((prev) => {
+      const next = new Set(prev);
+      // Every node in the path except the focused leaf itself is an ancestor
+      // that must be open; opening the leaf too is harmless.
+      activePath.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [activePath]);
 
   // Keep the position input in sync with the column's actual position.
   useEffect(() => {
@@ -265,7 +262,7 @@ export function CategoryColumn({
 
     // Prevent adding items when "All" is selected in subcategories
     // (items belong to specific categories, not to a rolled-up view)
-    if (activeSubcat === null && subcatRows.length > 0) {
+    if (activeSubcat === null && hasSubcats) {
       setCannotAddItemReason('Please select a specific category or subcategory to add an item.');
       return;
     }
@@ -529,42 +526,121 @@ export function CategoryColumn({
     setItemDragOverIndex(null);
   };
 
-  const handleSubcatDragStart = (e: React.DragEvent, parentId: number, index: number) => {
-    if (isReadOnly || !subcatDragArmed) {
-      e.preventDefault();
-      return;
-    }
-    setSubcatDrag({ parentId, index });
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+  const toggleSubcatExpanded = (id: number) => {
+    setExpandedSubcats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const handleSubcatDragOver = (e: React.DragEvent, parentId: number, index: number) => {
-    if (!subcatDrag || subcatDrag.parentId !== parentId) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (subcatDragOver?.parentId !== parentId || subcatDragOver?.index !== index) {
-      setSubcatDragOver({ parentId, index });
-    }
+  // Subtree item count for a node: distinct items assigned anywhere in the
+  // node's descendant subtree (matches how the item list rolls items up).
+  const subtreeItemCount = (nodeId: number): number => {
+    const subtreeIds = collectSubtreeIds(nodeId);
+    const seen = new Set<number>();
+    categoryItems.forEach((ci) => {
+      if (subtreeIds.has(ci.categoryId)) seen.add(ci.itemId);
+    });
+    return seen.size;
   };
 
-  const handleSubcatDrop = (e: React.DragEvent, parentId: number, index: number) => {
-    e.preventDefault();
-    if (!subcatDrag || subcatDrag.parentId !== parentId) return;
-    const from = subcatDrag.index;
-    setSubcatDrag(null);
-    setSubcatDragOver(null);
-    setSubcatDragArmed(false);
-    if (from === index) return;
-    // parentId === category.id means these are children of the root category;
-    // the store treats that as a normal parented scope.
-    reorderCategories(parentId, from, index);
-  };
-
-  const handleSubcatDragEnd = () => {
-    setSubcatDrag(null);
-    setSubcatDragOver(null);
-    setSubcatDragArmed(false);
+  // Recursive nav-rail row for a subcategory and its descendants.
+  const renderSubcatNode = (subcat: Category, depth: number): JSX.Element => {
+    const kids = childrenOf(subcat.id);
+    const hasKids = kids.length > 0;
+    const isOpen = expandedSubcats.has(subcat.id);
+    const isActive = activeSubcat === subcat.id;
+    const dotColor = subcat.color?.trim() || '#f97316';
+    const isRenaming = editingSubcatId === subcat.id;
+    return (
+      <div key={subcat.id}>
+        <div
+          className={cn(
+            'group flex items-center gap-1 rounded-md pr-1 transition-colors',
+            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/60'
+          )}
+          style={{ paddingLeft: 4 + depth * 10 }}
+        >
+          {hasKids ? (
+            <button
+              type="button"
+              onClick={() => toggleSubcatExpanded(subcat.id)}
+              className="flex-shrink-0 p-0.5 text-muted-foreground hover:text-foreground"
+              title={isOpen ? 'Collapse' : 'Expand'}
+            >
+              <ChevronRight className={cn('w-3 h-3 transition-transform', isOpen && 'rotate-90')} />
+            </button>
+          ) : (
+            <span
+              className="flex-shrink-0 h-1.5 w-1.5 rounded-full ml-[7px]"
+              style={{ backgroundColor: dotColor }}
+            />
+          )}
+          {isRenaming ? (
+            <input
+              type="text"
+              value={subcatDraftName}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setSubcatDraftName(e.target.value)}
+              onBlur={() => submitSubcategoryRename(subcat)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelSubcategoryRename(subcat);
+                }
+              }}
+              className="min-w-0 flex-1 bg-background text-foreground border border-border rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+              autoFocus
+              aria-label="Subcategory name"
+            />
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveSubcat(subcat.id)}
+                onDoubleClick={(e) => startSubcategoryRename(subcat, e)}
+                className={cn('min-w-0 flex-1 truncate text-left text-xs py-1', isActive && 'font-medium')}
+                title={isReadOnly ? subcat.categoryName : `${subcat.categoryName} (double-click to rename)`}
+              >
+                {subcat.categoryName}
+              </button>
+              <span className="flex-shrink-0 text-[10px] text-muted-foreground/70 tabular-nums group-hover:hidden">
+                {subtreeItemCount(subcat.id)}
+              </span>
+              {!isReadOnly && (
+                <span className="hidden group-hover:flex items-center flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setEditingCategory(subcat.id); }}
+                    className="p-0.5 text-muted-foreground/80 hover:text-foreground transition-colors"
+                    title="Edit subcategory settings"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteSubcategory(subcat, e)}
+                    className="p-0.5 text-muted-foreground/60 hover:text-destructive transition-colors"
+                    title="Delete subcategory"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        {hasKids && isOpen && (
+          <div>{kids.map((kid) => renderSubcatNode(kid, depth + 1))}</div>
+        )}
+      </div>
+    );
   };
 
   if (!isExpanded) {
@@ -706,150 +782,39 @@ export function CategoryColumn({
           </div>
         </div>
 
-        {/* Subcategory Tabs (one row per drill level for nested subcategories) */}
-        <div className="border-b border-panel-border">
-          {subcatRows.length === 0 && !isReadOnly && (
-            <div className="flex flex-wrap gap-1 px-3 py-2 items-center">
+        {/* Nav rail (subcategory tree) + column body */}
+        <div className="flex flex-1 min-h-0">
+          {/* Subcategory nav rail */}
+          <div className="w-36 flex-shrink-0 flex flex-col border-r border-[hsl(var(--panel-border))] bg-[hsl(var(--panel-bg))]/40">
+            <div className="flex-1 overflow-y-auto scrollbar-thin px-2 py-2 space-y-0.5">
               <button
-                onClick={handleAddSubcategory}
-                className="flex items-center px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
-                title="Add subcategory"
-              >
-                <FolderPlus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-          {subcatRows.map((row, depth) => (
-            <div
-              key={row.parentId}
-              className={cn(
-                'flex flex-wrap gap-1 px-3 py-2 items-center',
-                depth > 0 && 'border-t border-panel-border/60 pl-5'
-              )}
-            >
-              <button
-                onClick={() => setActiveSubcat(row.parentId === category.id ? null : row.parentId)}
+                type="button"
+                onClick={() => setActiveSubcat(null)}
                 className={cn(
-                  'px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap',
-                  row.selectedId == null
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  'w-full flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-left transition-colors',
+                  !activeSubcat ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted/60'
                 )}
               >
-                All
+                All items
               </button>
-              {!isReadOnly && depth === subcatRows.length - 1 && (
+              {childrenOf(category.id).map((subcat) => renderSubcatNode(subcat, 0))}
+            </div>
+            {!isReadOnly && (
+              <div className="px-2 pb-2 pt-1 border-t border-[hsl(var(--panel-border))]">
                 <button
                   onClick={handleAddSubcategory}
-                  className="flex items-center px-2 py-1 text-xs rounded-md transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded-md border border-dashed border-border text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
                   title={activeSubcat ? `Add subcategory under "${focusedCategory.categoryName}"` : 'Add subcategory'}
                 >
                   <FolderPlus className="w-3.5 h-3.5" />
+                  Subcategory
                 </button>
-              )}
-              {row.children.map((subcat, subcatIndex) => {
-                const isActive = row.selectedId === subcat.id;
-                const chipColor = subcat.color?.trim() || '#f97316';
-                const isChipDragOver =
-                  subcatDragOver?.parentId === row.parentId &&
-                  subcatDragOver?.index === subcatIndex &&
-                  subcatDrag?.index !== subcatIndex;
-                return (
-                  <div
-                    key={subcat.id}
-                    draggable={!isReadOnly && editingSubcatId !== subcat.id && subcatDragArmed}
-                    onDragStart={(e) => handleSubcatDragStart(e, row.parentId, subcatIndex)}
-                    onDragOver={(e) => handleSubcatDragOver(e, row.parentId, subcatIndex)}
-                    onDrop={(e) => handleSubcatDrop(e, row.parentId, subcatIndex)}
-                    onDragEnd={handleSubcatDragEnd}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors min-w-0 max-w-[200px]',
-                      isActive ? 'text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
-                      isChipDragOver && 'ring-2 ring-primary ring-inset'
-                    )}
-                    style={isActive ? { backgroundColor: chipColor } : undefined}
-                  >
-                    {editingSubcatId !== subcat.id && !isReadOnly && (
-                      <GripVertical
-                        className={cn(
-                          'w-3 h-3 flex-shrink-0 cursor-grab',
-                          isActive ? 'text-white/70' : 'text-muted-foreground/60'
-                        )}
-                        onMouseDown={() => setSubcatDragArmed(true)}
-                        onMouseUp={() => setSubcatDragArmed(false)}
-                      />
-                    )}
-                    {editingSubcatId === subcat.id ? (
-                      <input
-                        type="text"
-                        value={subcatDraftName}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setSubcatDraftName(e.target.value)}
-                        onBlur={() => submitSubcategoryRename(subcat)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            (e.target as HTMLInputElement).blur();
-                          }
-                          if (e.key === 'Escape') {
-                            e.preventDefault();
-                            cancelSubcategoryRename(subcat);
-                          }
-                        }}
-                        className={cn(
-                          'min-w-0 flex-1 bg-background/90 text-foreground border border-border rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring',
-                          isActive && 'bg-background text-foreground'
-                        )}
-                        autoFocus
-                        aria-label="Subcategory name"
-                      />
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSubcat(subcat.id)}
-                          onDoubleClick={(e) => startSubcategoryRename(subcat, e)}
-                          className="leading-none truncate min-w-0 text-left"
-                          title="Double-click to rename"
-                        >
-                          {subcat.categoryName}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setEditingCategory(subcat.id); }}
-                          className={cn(
-                            'flex-shrink-0 p-0.5 rounded transition-colors',
-                            isActive
-                              ? 'text-white/80 hover:text-white'
-                              : 'text-muted-foreground/80 hover:text-foreground'
-                          )}
-                          title="Edit subcategory settings"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      </>
-                    )}
-                    {editingSubcatId !== subcat.id && !isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteSubcategory(subcat, e)}
-                        className={cn(
-                          'leading-none transition-colors flex-shrink-0',
-                          isActive
-                            ? 'text-white/70 hover:text-white'
-                            : 'text-muted-foreground/60 hover:text-destructive'
-                        )}
-                        title="Delete subcategory"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+              </div>
+            )}
+          </div>
+
+          {/* Column body: search + sort, item list, add-item buttons */}
+          <div className="flex flex-col flex-1 min-w-0">
 
         {/* Search + view sort */}
         <div className="px-3 py-2 border-b border-panel-border flex items-center gap-2">
@@ -938,7 +903,7 @@ export function CategoryColumn({
                 </span>
                 {/* Show copy/duplicate button except when "All" is selected in subcategories
                     (items shown are from multiple categories, so modifying one is ambiguous) */}
-                {!isReadOnly && !(activeSubcat === null && subcatRows.length > 0) && (
+                {!isReadOnly && !(activeSubcat === null && hasSubcats) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -953,7 +918,7 @@ export function CategoryColumn({
                 )}
                 {/* Show remove button except when "All" is selected in subcategories
                     (prevents removing items from ambiguous multi-category context) */}
-                {!isReadOnly && !(activeSubcat === null && subcatRows.length > 0) && (
+                {!isReadOnly && !(activeSubcat === null && hasSubcats) && (
                   <button
                     onClick={(e) => handleRemoveItemFromCategory(item.id, e)}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
@@ -987,6 +952,8 @@ export function CategoryColumn({
             </button>
           </div>
         )}
+          </div>
+        </div>
       </div>
 
       {/* Add Items Modal */}
