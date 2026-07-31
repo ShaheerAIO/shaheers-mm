@@ -753,12 +753,31 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     if (!item.inheritModifiersFromCategory) return [];
     const catEntry = categoryItems.find((ci) => ci.itemId === item.id);
     if (!catEntry) return [];
-    return categoryModifiers
-      .filter((cm) => cm.categoryId === catEntry.categoryId)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((cm) => modifiers.find((m) => m.id === cm.modifierId))
-      .filter((m): m is NonNullable<typeof m> => m !== undefined);
-  }, [item.id, item.inheritModifiersFromCategory, categoryItems, categoryModifiers, modifiers]);
+    // Walk the category chain from the item's own (sub)category up to the root via
+    // parentCategoryId, so an item nested in a subcategory also inherits its
+    // ancestor categories' modifiers (the POS applies category modifiers down the
+    // tree). Cycle-safe. Ordered direct-category first, then up the ancestors.
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const chainIndex = new Map<number, number>();
+    let cur: number | null = catEntry.categoryId;
+    while (cur != null && !chainIndex.has(cur)) {
+      chainIndex.set(cur, chainIndex.size);
+      cur = catById.get(cur)?.parentCategoryId ?? null;
+    }
+    const seen = new Set<number>();
+    const result: typeof modifiers = [];
+    categoryModifiers
+      .filter((cm) => chainIndex.has(cm.categoryId))
+      .sort((a, b) =>
+        (chainIndex.get(a.categoryId)! - chainIndex.get(b.categoryId)!) || (a.sortOrder - b.sortOrder))
+      .forEach((cm) => {
+        if (seen.has(cm.modifierId)) return;
+        seen.add(cm.modifierId);
+        const m = modifiers.find((mm) => mm.id === cm.modifierId);
+        if (m) result.push(m);
+      });
+    return result;
+  }, [item.id, item.inheritModifiersFromCategory, categoryItems, categoryModifiers, modifiers, categories]);
 
   // Get options for a modifier
   const getModifierOptions = (modifierId: number) => {
