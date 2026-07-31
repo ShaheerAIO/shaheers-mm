@@ -1000,6 +1000,21 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     });
   }, [isNoCharge, modifierOptionAssignments, modifier.id, updateModifierModifierOption]);
 
+  // Group pricing: every option shares one surcharge (stored per-option on the
+  // join's maxLimit). Keep them equal to the first option's price so the single
+  // shared field stays authoritative, even as options are added/removed.
+  const isGroup = draft.modifierOptionPriceType === 'Group';
+  const groupPrice = modifierOptionAssignments[0]?.maxLimit ?? 0;
+  useEffect(() => {
+    if (!isGroup) return;
+    const shared = modifierOptionAssignments[0]?.maxLimit ?? 0;
+    modifierOptionAssignments.forEach((a) => {
+      if (a.maxLimit !== shared) updateModifierModifierOption(modifier.id, a.modifierOptionId, { maxLimit: shared });
+    });
+  }, [isGroup, modifierOptionAssignments, modifier.id, updateModifierModifierOption]);
+  const setGroupPrice = (v: number) =>
+    modifierOptionAssignments.forEach((a) => updateModifierModifierOption(modifier.id, a.modifierOptionId, { maxLimit: v }));
+
   // Filter options by search
   const filteredOptionAssignments = useMemo(() => {
     if (!optionSearch.trim()) return modifierOptionAssignments;
@@ -2095,6 +2110,10 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     <div className="flex items-center gap-2.5 shrink-0">
                       {isNoCharge ? (
                         <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : isGroup ? (
+                        <span className="text-xs text-muted-foreground" title="Set by the group price above">
+                          ${groupPrice.toFixed(2)} · group
+                        </span>
                       ) : (
                         <PriceStepperInput
                           value={assignment.maxLimit}
@@ -2382,6 +2401,20 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       <SelectItem value="Group">Group pricing</SelectItem>
                     </SelectContent>
                   </Select>
+                  {isGroup && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">All options</span>
+                      <PriceStepperInput
+                        value={groupPrice}
+                        onFocus={(e) => e.target.select()}
+                        onCommit={setGroupPrice}
+                        prefix={<span className="text-xs text-muted-foreground">$</span>}
+                        wrapperClassName="w-24 h-8"
+                        placeholder="0.00"
+                        aria-label="Group price applied to all options"
+                      />
+                    </div>
+                  )}
                 </div>
               </>
             )}

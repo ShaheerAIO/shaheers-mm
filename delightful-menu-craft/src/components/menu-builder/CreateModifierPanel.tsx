@@ -192,6 +192,22 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setOptions((opts) => (opts.some((o) => o.price !== 0) ? opts.map((o) => ({ ...o, price: 0 })) : opts));
   }, [isNoCharge]);
 
+  // Group pricing: every option shares one surcharge. Keep them equal — on
+  // switching to Group, and whenever an option is added/removed — so the single
+  // shared field stays authoritative. Uses options[0]'s price as the shared value.
+  const isGroup = modifierOptionPriceType === 'Group';
+  const groupPrice = options[0]?.price ?? 0;
+  useEffect(() => {
+    if (!isGroup) return;
+    setOptions((opts) => {
+      if (opts.length === 0) return opts;
+      const shared = opts[0].price;
+      return opts.some((o) => o.price !== shared) ? opts.map((o) => ({ ...o, price: shared })) : opts;
+    });
+  }, [isGroup, options.length]);
+  const setGroupPrice = (v: number) =>
+    setOptions((opts) => opts.map((o) => ({ ...o, price: v })));
+
   useEffect(() => {
     if (!optionSortMenuOpen) return;
     const handler = (e: MouseEvent) => {
@@ -876,6 +892,10 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {isNoCharge ? (
                         <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : isGroup ? (
+                        <span className="text-xs text-muted-foreground" title="Set by the group price above">
+                          ${groupPrice.toFixed(2)} · group
+                        </span>
                       ) : (
                         <PriceStepperInput
                           value={option.price}
@@ -1185,6 +1205,21 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         <SelectItem value="Group">Group pricing</SelectItem>
                       </SelectContent>
                     </Select>
+                    {isGroup && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">All options</span>
+                        <PriceStepperInput
+                          value={groupPrice}
+                          onFocus={(e) => e.target.select()}
+                          onCommit={setGroupPrice}
+                          prefix={<span className="text-xs text-muted-foreground">$</span>}
+                          wrapperClassName="w-20 h-7"
+                          className="text-sm"
+                          placeholder="0.00"
+                          aria-label="Group price applied to all options"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-2">
