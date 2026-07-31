@@ -619,27 +619,30 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     (modifierMode === 'flat' ? options.length > 0 : nestedModifierIds.length > 0) &&
     (noMaxSelection || maxSelector >= minSelector);
 
+  // Total number of choices a guest could pick from (flat options or nested
+  // sub-modifiers).
+  const availableOptionCount = modifierMode === 'flat' ? options.length : nestedModifierIds.length;
+
+  // Dynamic Max SELECTION ceiling from the selection toggles. When guests may
+  // repeat the same option, the cap is the sum of per-option limits (or ∞), so
+  // it can legitimately exceed the number of distinct options — do NOT clamp to
+  // the option/sub-modifier count. Nested sub-modifiers carry no per-option
+  // limit, so their ceiling is driven purely by multiSelect/repeat.
   const selectionCeiling = modifierSelectionCeiling({
     multiSelect,
     allowRepeat: canGuestSelectMoreModifiers,
-    limitPerOption: options.some(o => o.maxQtyPerOption !== 1),
-    optionCount: options.length,
-    perOptionLimits: options.map(o => o.maxQtyPerOption),
+    limitPerOption: modifierMode === 'flat' && options.some(o => o.maxQtyPerOption !== 1),
+    optionCount: availableOptionCount,
+    perOptionLimits: modifierMode === 'flat' ? options.map(o => o.maxQtyPerOption) : [],
   });
+  const maxSelectorCeiling = isFinite(selectionCeiling) ? selectionCeiling : Infinity;
 
-  // Total number of choices a guest could pick from (flat options or nested
-  // sub-modifiers). The Max SELECTION field must never exceed this, regardless
-  // of the (separately displayed) combination limit.
-  const availableOptionCount = modifierMode === 'flat' ? options.length : nestedModifierIds.length;
-  const maxSelectorCeiling =
-    Math.min(isFinite(selectionCeiling) ? selectionCeiling : Infinity, availableOptionCount || Infinity);
-
-  // Keep Max SELECTION from silently exceeding the option/sub-modifier count
-  // as options are added or removed.
+  // Keep Max SELECTION from silently exceeding the computed ceiling as options
+  // or sub-modifiers are added or removed.
   useEffect(() => {
-    if (noMaxSelection || availableOptionCount === 0) return;
-    setMaxSelector((v) => Math.min(v, availableOptionCount));
-  }, [availableOptionCount, noMaxSelection]);
+    if (noMaxSelection || !isFinite(selectionCeiling) || availableOptionCount === 0) return;
+    setMaxSelector((v) => Math.min(v, selectionCeiling));
+  }, [selectionCeiling, availableOptionCount, noMaxSelection]);
 
   const minSelectorField = useClearableIntInput(minSelector, (parsed) => {
     const isRequired = isOptional === 'Required' || isOptional === 'Select one';

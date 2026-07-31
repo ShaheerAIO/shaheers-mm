@@ -34,10 +34,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-type VisDraft = Pick<Category,
-  'visibilityPos' | 'visibilityKiosk' | 'visibilityMenuBoard' | 'visibilityQr' |
-  'visibilityWebsite' | 'visibilityMobileApp' | 'visibilityDoordash'
->;
+type VisDraft = Pick<Category, VisibilityChannelKey>;
 
 type Draft = {
   categoryName: string;
@@ -145,8 +142,10 @@ export function CategoryDetailPanel({ category }: Props) {
     visibilityPos: category.visibilityPos ?? true,
     visibilityKiosk: category.visibilityKiosk ?? true,
     visibilityMenuBoard: category.visibilityMenuBoard ?? true,
+    visibilityNugget: category.visibilityNugget ?? true,
     visibilityQr: category.visibilityQr ?? true,
     visibilityWebsite: category.visibilityWebsite ?? true,
+    visibilityOnline: category.visibilityOnline ?? true,
     visibilityMobileApp: category.visibilityMobileApp ?? true,
     visibilityDoordash: category.visibilityDoordash ?? true,
     daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
@@ -215,8 +214,10 @@ export function CategoryDetailPanel({ category }: Props) {
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
+      visibilityNugget: category.visibilityNugget ?? true,
       visibilityQr: category.visibilityQr ?? true,
       visibilityWebsite: category.visibilityWebsite ?? true,
+      visibilityOnline: category.visibilityOnline ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
       visibilityDoordash: category.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
@@ -255,8 +256,10 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.visibilityPos !== (category.visibilityPos ?? true) ||
     draft.visibilityKiosk !== (category.visibilityKiosk ?? true) ||
     draft.visibilityMenuBoard !== (category.visibilityMenuBoard ?? true) ||
+    draft.visibilityNugget !== (category.visibilityNugget ?? true) ||
     draft.visibilityQr !== (category.visibilityQr ?? true) ||
     draft.visibilityWebsite !== (category.visibilityWebsite ?? true) ||
+    draft.visibilityOnline !== (category.visibilityOnline ?? true) ||
     draft.visibilityMobileApp !== (category.visibilityMobileApp ?? true) ||
     draft.visibilityDoordash !== (category.visibilityDoordash ?? true) ||
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (category.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
@@ -290,8 +293,10 @@ export function CategoryDetailPanel({ category }: Props) {
       visibilityPos: category.visibilityPos ?? true,
       visibilityKiosk: category.visibilityKiosk ?? true,
       visibilityMenuBoard: category.visibilityMenuBoard ?? true,
+      visibilityNugget: category.visibilityNugget ?? true,
       visibilityQr: category.visibilityQr ?? true,
       visibilityWebsite: category.visibilityWebsite ?? true,
+      visibilityOnline: category.visibilityOnline ?? true,
       visibilityMobileApp: category.visibilityMobileApp ?? true,
       visibilityDoordash: category.visibilityDoordash ?? true,
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
@@ -794,18 +799,11 @@ export function CategoryDetailPanel({ category }: Props) {
 
             {/* Channel dropdowns — schedule editor lives inside each expanded group */}
             {(() => {
+              // Derived from VISIBILITY_CHANNELS so group membership (MPOS in On-Prem,
+              // the Online channel in Off-Prem) stays in sync with the single source.
               const GROUPS = [
-                { id: 'onPrem' as const, label: 'On-Prem' as VisibilityGroup, channels: [
-                  { key: 'visibilityPos' as VisibilityChannelKey, label: 'POS' },
-                  { key: 'visibilityKiosk' as VisibilityChannelKey, label: 'Kiosk' },
-                  { key: 'visibilityMenuBoard' as VisibilityChannelKey, label: 'Menu Board' },
-                ]},
-                { id: 'offPrem' as const, label: 'Off-Prem' as VisibilityGroup, channels: [
-                  { key: 'visibilityQr' as VisibilityChannelKey, label: 'QR Code' },
-                  { key: 'visibilityWebsite' as VisibilityChannelKey, label: 'Website' },
-                  { key: 'visibilityMobileApp' as VisibilityChannelKey, label: 'MPOS' },
-                  { key: 'visibilityDoordash' as VisibilityChannelKey, label: 'DoorDash' },
-                ]},
+                { id: 'onPrem' as const, label: 'On-Prem' as VisibilityGroup, channels: VISIBILITY_CHANNELS.filter((c) => c.group === 'On-Prem') },
+                { id: 'offPrem' as const, label: 'Off-Prem' as VisibilityGroup, channels: VISIBILITY_CHANNELS.filter((c) => c.group === 'Off-Prem') },
               ];
               return (
                 <div className="space-y-1.5">
