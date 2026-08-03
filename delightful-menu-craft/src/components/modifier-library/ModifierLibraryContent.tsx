@@ -423,7 +423,7 @@ export function ModifierLibraryContent() {
                       <span>0 options</span>
                     )}
                     <span className="bg-muted text-muted-foreground px-1 rounded">
-                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
+                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection || modifier.maxSelector === 0 ? '∞' : modifier.maxSelector}
                     </span>
                     {usedByCount > 0 && (
                       <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
@@ -1616,7 +1616,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <div className="text-xs text-muted-foreground pt-0.5 flex items-center gap-2 flex-wrap">
                 {draft.isOptional?.trim() ? `${draft.isOptional} • ` : ''}
                 <span className="font-medium text-foreground">
-                  Min: {draft.minSelector} / Max: {draft.noMaxSelection ? '∞' : draft.maxSelector}
+                  Min: {draft.minSelector} / Max: {draft.noMaxSelection || draft.maxSelector === 0 ? '∞' : draft.maxSelector}
                 </span>
               </div>
             </div>

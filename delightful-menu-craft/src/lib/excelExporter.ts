@@ -222,9 +222,15 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
     // modifiers). isOptional is the boolean form derived from the resolved modType.
     const modType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
     const isOptional = modType !== 'Required';
+    // "Unlimited selections" has two in-app representations: the explicit
+    // noMaxSelection flag, and a maxSelector of 0 (the implicit sentinel the
+    // previews honor). The POS has no 0-sentinel — it drops a modifier exported
+    // with max 0 — so collapse both into the POS's explicit form: noMaxSelection
+    // true with min/max forced to 1.
+    const isUnlimited = m.noMaxSelection || m.maxSelector === 0;
     // POS rule: minSelector must be 0 when the modifier is optional and not a
     // nested-adding modifier — an optional modifier can't require a selection.
-    const minSelector = isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector);
+    const minSelector = isOptional && !m.addNested ? 0 : (isUnlimited ? 1 : m.minSelector);
     return {
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
       isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
@@ -232,9 +238,10 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       // POS rule: canGuestSelectMoreModifiers cannot be TRUE when addNested is TRUE.
       canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers && !m.addNested, multiSelect: m.multiSelect,
       limitIndividualModifierSelection: m.limitIndividualModifierSelection,
-      // POS format: when No Max Limit is on, min/max are 1/1 and noMaxSelection carries the "unlimited" meaning.
-      minSelector, maxSelector: m.noMaxSelection ? 1 : m.maxSelector,
-      noMaxSelection: m.noMaxSelection,
+      // POS format: unlimited → min/max are 1/1 and the noMaxSelection column
+      // carries the "unlimited" meaning.
+      minSelector, maxSelector: isUnlimited ? 1 : m.maxSelector,
+      noMaxSelection: isUnlimited,
       prefix: resolvePrefix(m.prefix), pizzaSelection: m.pizzaSelection, stockStatus: true,
       price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
       // Nested modifiers must reference their parent; backfill from the parent's

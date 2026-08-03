@@ -1131,7 +1131,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             <AccordionContent>
               <div className="space-y-2.5 pb-1">
                 <div className="text-xs text-muted-foreground">
-                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
+                  Min: {minSelector} / Max: {noMaxSelection || maxSelector === 0 ? '∞' : maxSelector}
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-end gap-2 flex-wrap">
