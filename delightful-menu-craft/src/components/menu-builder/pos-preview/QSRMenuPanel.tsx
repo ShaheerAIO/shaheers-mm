@@ -5,6 +5,7 @@ import { shortenName } from '@/lib/shortenName';
 import type { Item } from '@/types/menu';
 import { POS_TILE_HEIGHT, POS_TILE_WIDTH } from './posTileStyles';
 import { isAvailableOnChannelAt } from '@/lib/visibility';
+import { collectCategorySubtreeIds } from '@/lib/categoryTree';
 
 interface QSRMenuPanelProps {
   onAddToTicket: (item: Item) => void;
@@ -30,30 +31,21 @@ export function QSRMenuPanel({ onAddToTicket, searchQuery = '' }: QSRMenuPanelPr
 
   const menuColumns = useMemo(() => {
     return rootCategories.map((cat) => {
-      const subcats = categories
-        .filter((c) => c.parentCategoryId === cat.id)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-
-      const directItems = categoryItems
-        .filter((ci) => ci.categoryId === cat.id)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((ci) => items.find((i) => i.id === ci.itemId))
-        .filter((i): i is Item => i !== undefined && isAvailableOnChannelAt(i, 'visibilityPos'));
-
-      const subcatItemsFlat = subcats.flatMap((sub) =>
-        categoryItems
-          .filter((ci) => ci.categoryId === sub.id)
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((ci) => items.find((i) => i.id === ci.itemId))
-          .filter((i): i is Item => i !== undefined && isAvailableOnChannelAt(i, 'visibilityPos')),
-      );
-
+      // Roll up items from the whole subcategory subtree (any depth), deduped.
+      const subtreeIds = collectCategorySubtreeIds(cat.id, categories);
       const seen = new Set<number>();
       const flatItems: Item[] = [];
-      for (const item of [...directItems, ...subcatItemsFlat]) {
-        if (!seen.has(item.id)) {
-          seen.add(item.id);
-          flatItems.push(item);
+      for (const catId of subtreeIds) {
+        const rows = categoryItems
+          .filter((ci) => ci.categoryId === catId)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        for (const ci of rows) {
+          if (seen.has(ci.itemId)) continue;
+          const item = items.find((i) => i.id === ci.itemId);
+          if (item && isAvailableOnChannelAt(item, 'visibilityPos')) {
+            seen.add(ci.itemId);
+            flatItems.push(item);
+          }
         }
       }
 
