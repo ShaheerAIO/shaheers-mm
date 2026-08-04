@@ -423,7 +423,7 @@ export function ModifierLibraryContent() {
                       <span>0 options</span>
                     )}
                     <span className="bg-muted text-muted-foreground px-1 rounded">
-                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection || modifier.maxSelector === 0 ? '∞' : modifier.maxSelector}
+                      Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
                     </span>
                     {usedByCount > 0 && (
                       <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
@@ -1444,7 +1444,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     });
   });
   const maxSelectorField = useClearableIntInput(draft.maxSelector, (parsed) => {
-    setDraft((d) => ({ ...d, maxSelector: Math.min(maxSelectorCeiling, Math.max(parsed, d.minSelector)) }));
+    // Max selection must be >= 1 — the POS drops a modifier exported with max 0.
+    setDraft((d) => ({ ...d, maxSelector: Math.min(maxSelectorCeiling, Math.max(parsed, d.minSelector, 1)) }));
   });
 
   // A size modifier is inherently a flat list of sizes. Reveal the Sizes editor
@@ -1616,7 +1617,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <div className="text-xs text-muted-foreground pt-0.5 flex items-center gap-2 flex-wrap">
                 {draft.isOptional?.trim() ? `${draft.isOptional} • ` : ''}
                 <span className="font-medium text-foreground">
-                  Min: {draft.minSelector} / Max: {draft.noMaxSelection || draft.maxSelector === 0 ? '∞' : draft.maxSelector}
+                  Min: {draft.minSelector} / Max: {draft.noMaxSelection ? '∞' : draft.maxSelector}
                 </span>
               </div>
             </div>
