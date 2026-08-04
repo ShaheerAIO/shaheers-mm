@@ -28,7 +28,7 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
-import { ModTypeBadge, getEffectiveModType } from '@/components/menu-builder/pos-preview/ModifierPanel';
+import { ModTypeBadge } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
@@ -1820,20 +1820,20 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          const makeRequired = getEffectiveModType(child) !== 'Required';
+                          const makeRequired = child.minSelector < 1;
                           updateModifier(child.id, makeRequired
                             ? { minSelector: Math.max(1, child.minSelector || 1), modType: 'Required', isOptional: 'Required' }
                             : { minSelector: 0, modType: 'Optional', isOptional: 'Select any' });
                         }}
                         className={cn(
                           "shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors",
-                          getEffectiveModType(child) === 'Required'
+                          child.minSelector >= 1
                             ? "bg-destructive/10 text-destructive hover:bg-destructive/20"
                             : "bg-muted text-muted-foreground hover:bg-muted/70",
                         )}
-                        title="Required = guest must choose (min 1); Optional = min 0"
+                        title="Required = min 1+; Optional = min 0"
                       >
-                        {getEffectiveModType(child) === 'Required' ? 'Required' : 'Optional'}
+                        {child.minSelector >= 1 ? 'Required' : 'Optional'}
                       </button>
                       <button
                         type="button"

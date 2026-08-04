@@ -160,17 +160,20 @@ export function KioskCustomizeScreen({
       return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
     };
 
-    const check = (mod: Modifier): boolean => {
+    const check = (mod: Modifier, isChild = false): boolean => {
       const children = getChildModifiers(mod);
-      if (children.length > 0) return children.every(check);
+      if (children.length > 0) return children.every((child) => check(child, true));
       if (optionCount(mod.id) === 0) return true;
       const count = selectedOptions[mod.id]?.length ?? 0;
-      const minReq = getEffectiveModType(mod) === 'Required' ? Math.max(mod.minSelector, 1) : mod.minSelector;
+      // Nested children: Min is the source of truth (0 = optional, >=1 = required).
+      const minReq = isChild
+        ? mod.minSelector
+        : getEffectiveModType(mod) === 'Required' ? Math.max(mod.minSelector, 1) : mod.minSelector;
       const maxReq = mod.noMaxSelection ? Number.POSITIVE_INFINITY : mod.maxSelector;
       return count >= minReq && count <= maxReq;
     };
 
-    return attachedModifiers.every(check);
+    return attachedModifiers.every((mod) => check(mod));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachedModifiers, selectedOptions, sizeModifier, sizeIsSelected, modifiers, modifierModifierOptions, modifierOptions]);
 
