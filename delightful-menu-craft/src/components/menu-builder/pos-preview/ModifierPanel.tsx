@@ -382,23 +382,26 @@ export function ModifierPanel({
       return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
     };
 
-    const checkModifier = (mod: Modifier): boolean => {
+    const checkModifier = (mod: Modifier, isChild = false): boolean => {
       const children = getChildModifiers(mod);
       if (children.length > 0) {
-        return children.every(checkModifier);
+        return children.every((child) => checkModifier(child, true));
       }
       if (optionCountForModifier(mod.id) === 0) return true;
 
       const count = selectedOptions[mod.id]?.length ?? 0;
-      const minReq =
-        getEffectiveModType(mod) === 'Required'
+      // Nested children: Min is the source of truth (0 = optional, >=1 = required).
+      // Top-level modifiers keep the modType-driven rule.
+      const minReq = isChild
+        ? mod.minSelector
+        : getEffectiveModType(mod) === 'Required'
           ? Math.max(mod.minSelector, 1)
           : mod.minSelector;
       const maxReq = mod.noMaxSelection ? Number.POSITIVE_INFINITY : mod.maxSelector;
       return count >= minReq && count <= maxReq;
     };
 
-    return attachedModifiers.every(checkModifier);
+    return attachedModifiers.every((mod) => checkModifier(mod));
   }, [
     attachedModifiers,
     selectedOptions,

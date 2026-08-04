@@ -218,13 +218,24 @@ const resolvePrefix = (s: string): string => ((s || '').trim() ? s : 'Select any
 
 const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
   mods.map((m) => {
+    // A nested child modifier is one attached under an addNested parent.
+    const isNestedChild = m.isNested || nesting.childToParent.has(m.id) || Boolean(m.parentModifierId);
     // modType is required by the POS importer; fall back when blank (e.g. nested
     // modifiers). isOptional is the boolean form derived from the resolved modType.
-    const modType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
+    const baseModType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
+    // For nested children, Min is the source of truth for required/optional:
+    // min >= 1 => Required (keep the min), min 0 => Optional (Push Optional preserved).
+    // Top-level/flat modifiers keep the modType-driven behavior.
+    const modType = isNestedChild
+      ? (m.minSelector >= 1 ? 'Required' : (baseModType === 'Push Optional' ? 'Push Optional' : 'Optional'))
+      : baseModType;
     const isOptional = modType !== 'Required';
-    // POS rule: minSelector must be 0 when the modifier is optional and not a
-    // nested-adding modifier — an optional modifier can't require a selection.
-    const minSelector = isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector);
+    // POS rule: minSelector must be 0 when a modifier is optional and not a
+    // nested-adding modifier. Nested children keep their configured min — it now
+    // drives their required/optional status, so it must survive the export.
+    const minSelector = isNestedChild
+      ? (m.noMaxSelection ? 1 : m.minSelector)
+      : (isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector));
     return {
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
       isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
