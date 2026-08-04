@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { RotateCcw, ShoppingCart, UtensilsCrossed } from 'lucide-react';
 import type { Item } from '@/types/menu';
 import { isVisibleOnChannel, isAvailableOnChannelAt } from '@/lib/visibility';
+import { collectCategorySubtreeIds } from '@/lib/categoryTree';
 import { KioskItemCard } from './KioskItemCard';
 
 interface KioskMenuScreenProps {
@@ -63,27 +64,26 @@ export function KioskMenuScreen({
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories, selectedMenuId]);
 
-  // One section per root category (its own items + nested subcategory items,
-  // deduped, gated by kiosk visibility + schedule). Empty sections are dropped.
+  // One section per root category (its own items + all nested subcategory items
+  // at any depth, deduped, gated by kiosk visibility + schedule). Empty sections
+  // are dropped.
   const sections = useMemo<Section[]>(() => {
-    const resolve = (catId: number) =>
-      categoryItems
-        .filter((ci) => ci.categoryId === catId)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((ci) => items.find((i) => i.id === ci.itemId))
-        .filter((i): i is Item => i !== undefined && isAvailableOnChannelAt(i, 'visibilityKiosk'));
-
     return rootCategories
       .map((cat) => {
-        const subcats = categories
-          .filter((c) => c.parentCategoryId === cat.id)
-          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const subtreeIds = collectCategorySubtreeIds(cat.id, categories);
         const seen = new Set<number>();
         const list: Item[] = [];
-        for (const item of [resolve(cat.id), ...subcats.map((s) => resolve(s.id))].flat()) {
-          if (!seen.has(item.id)) {
-            seen.add(item.id);
-            list.push(item);
+        for (const catId of subtreeIds) {
+          const rows = categoryItems
+            .filter((ci) => ci.categoryId === catId)
+            .sort((a, b) => a.sortOrder - b.sortOrder);
+          for (const ci of rows) {
+            if (seen.has(ci.itemId)) continue;
+            const item = items.find((i) => i.id === ci.itemId);
+            if (item && isAvailableOnChannelAt(item, 'visibilityKiosk')) {
+              seen.add(ci.itemId);
+              list.push(item);
+            }
           }
         }
         return {

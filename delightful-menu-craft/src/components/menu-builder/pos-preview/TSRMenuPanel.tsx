@@ -34,7 +34,9 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
   } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
-  const [activeSubcategoryId, setActiveSubcategoryId] = useState<number | null>(null);
+  // Subcategories expand inline (accordion) at any nesting depth; a set lets
+  // several branches be open at once, mirroring the builder's nav-rail tree.
+  const [expandedSubcats, setExpandedSubcats] = useState<Set<number>>(new Set());
   const [activeItemId, setActiveItemId] = useState<number | null>(null);
 
   const rootCategories = useMemo(() => {
@@ -58,8 +60,15 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories, activeCategoryId]);
 
+  const childSubcatsOf = useCallback(
+    (parentId: number) =>
+      categories
+        .filter((c) => c.parentCategoryId === parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    [categories],
+  );
+
   const activeCategory = rootCategories.find((c) => c.id === activeCategoryId) ?? null;
-  const activeSubcategory = subcategories.find((c) => c.id === activeSubcategoryId) ?? null;
 
   /** Items linked directly to the root category (not under a subcategory). */
   const directRootItems = useMemo(() => {
@@ -112,7 +121,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
   }, [activeItemId, activeCategoryId, subcategories.length]);
 
   const activeItem = items.find((i) => i.id === activeItemId) ?? null;
-  const accentColor = activeSubcategory?.color || activeCategory?.color || '#f97316';
+  const accentColor = activeCategory?.color || '#f97316';
 
   // Flat list of all POS-visible items in the selected menu, for search
   const allMenuItems = useMemo(() => {
@@ -159,18 +168,8 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       crumbs.push({
         label: activeCategory.posDisplayName || activeCategory.categoryName,
         onClick: () => {
-          setActiveSubcategoryId(null);
           setActiveItemId(null);
           if (subcategories.length === 0) setActiveCategoryId(null);
-        },
-      });
-    }
-    if (activeSubcategory) {
-      crumbs.push({
-        label: activeSubcategory.posDisplayName || activeSubcategory.categoryName,
-        onClick: () => {
-          setActiveItemId(null);
-          setActiveSubcategoryId(null);
         },
       });
     }
@@ -181,27 +180,32 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
       });
     }
     return crumbs;
-  }, [activeCategory, activeSubcategory, activeItem, subcategories.length]);
+  }, [activeCategory, activeItem, subcategories.length]);
 
   const handleBack = () => {
     if (activeItemId) {
       setActiveItemId(null);
-    } else if (activeSubcategoryId) {
-      setActiveSubcategoryId(null);
     } else {
       setActiveCategoryId(null);
+      setExpandedSubcats(new Set());
     }
   };
 
   const handleCategoryClick = (cat: Category) => {
     setActiveCategoryId(cat.id);
-    setActiveSubcategoryId(null);
+    setExpandedSubcats(new Set());
     setActiveItemId(null);
   };
 
-  /** Toggle expand: items stay under the subcategory button; click again to collapse. */
+  /** Toggle a subcategory branch open/closed; its items and any nested
+   *  subcategories stay inline beneath it. */
   const handleSubcategoryClick = (subId: number) => {
-    setActiveSubcategoryId((prev) => (prev === subId ? null : subId));
+    setExpandedSubcats((prev) => {
+      const next = new Set(prev);
+      if (next.has(subId)) next.delete(subId);
+      else next.add(subId);
+      return next;
+    });
     setActiveItemId(null);
   };
 
@@ -224,6 +228,74 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
   const handleDone = (item: Item, opts: Record<number, number[]>, qty: number) => {
     onAddToTicket(item, opts, qty);
     setActiveItemId(null);
+  };
+
+  /**
+   * Render a subcategory branch: its tile, and — when expanded — any nested
+   * subcategories (recursively) followed by its own items, indented under a rail.
+   */
+  const renderSubcatBranch = (cat: Category): JSX.Element => {
+    const subAccent = cat.color || accentColor;
+    const expanded = expandedSubcats.has(cat.id);
+    const childSubs = childSubcatsOf(cat.id);
+    const subItems = getItemsForCategoryId(cat.id);
+    return (
+      <div
+        key={cat.id}
+        className={cn('flex flex-col gap-2 min-w-0', imageMode ? 'items-stretch' : 'items-start')}
+      >
+        {imageMode ? (
+          <CategoryImageCard
+            name={cat.posDisplayName || cat.categoryName}
+            color={subAccent}
+            image={cat.image}
+            expanded={expanded}
+            onClick={() => handleSubcategoryClick(cat.id)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleSubcategoryClick(cat.id)}
+            className={cn(
+              `${POS_TILE_FRAME} flex items-center justify-center px-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.97]`,
+              expanded && 'ring-2 ring-white/50 ring-offset-2 ring-offset-[hsl(var(--pos-shell))]',
+            )}
+            style={{ backgroundColor: subAccent }}
+          >
+            <span className="line-clamp-2 leading-tight px-0.5">
+              {cat.posDisplayName || cat.categoryName}
+            </span>
+          </button>
+        )}
+        {expanded && (
+          <div
+            className={cn(
+              'flex flex-col w-full max-w-full pl-2 sm:pl-3 ml-0.5 sm:ml-1 border-l-2 border-zinc-600/70 pt-1 pb-1',
+              imageMode ? 'gap-2.5' : 'gap-2',
+            )}
+          >
+            {/* Nested subcategories first, then this category's own items. */}
+            {childSubs.map((child) => renderSubcatBranch(child))}
+            {subItems.length > 0 && (
+              <div className={cn('flex flex-wrap', imageMode ? 'gap-2.5' : 'gap-2')}>
+                {subItems.map((item) => (
+                  <ItemTileButton
+                    key={item.id}
+                    item={item}
+                    accentColor={subAccent}
+                    onPick={() => handleItemClick(item)}
+                    imageMode={imageMode}
+                  />
+                ))}
+              </div>
+            )}
+            {childSubs.length === 0 && subItems.length === 0 && (
+              <p className="w-full text-zinc-600 text-xs py-2">No items in this subcategory</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const isSearchActive = searchQuery.trim().length > 0;
@@ -353,74 +425,10 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
           )
         )}
 
-        {/* Level: subcategories — subcategory buttons on top; items stack underneath (not above) */}
+        {/* Level: subcategories — nested branches expand inline (accordion) at any depth */}
         {level === 'subcategories' && (
           <div className="flex flex-col gap-4 w-full min-w-0 items-stretch">
-            {subcategories.map((cat) => {
-              const subAccent = cat.color || accentColor;
-              const expanded = activeSubcategoryId === cat.id;
-              const subItems = getItemsForCategoryId(cat.id);
-              return (
-                <div key={cat.id} className={cn('flex flex-col gap-2 min-w-0', imageMode ? 'items-stretch' : 'items-start')}>
-                  {imageMode ? (
-                    <CategoryImageCard
-                      name={cat.posDisplayName || cat.categoryName}
-                      color={subAccent}
-                      image={cat.image}
-                      expanded={expanded}
-                      onClick={() => handleSubcategoryClick(cat.id)}
-                    />
-                  ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleSubcategoryClick(cat.id)}
-                    className={cn(
-                      `${POS_TILE_FRAME} flex items-center justify-center px-2 text-center text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.97]`,
-                      expanded &&
-                        'ring-2 ring-white/50 ring-offset-2 ring-offset-[hsl(var(--pos-shell))]',
-                    )}
-                    style={{ backgroundColor: subAccent }}
-                  >
-                    <span className="line-clamp-2 leading-tight px-0.5">
-                      {cat.posDisplayName || cat.categoryName}
-                    </span>
-                  </button>
-                  )}
-                  {expanded && (
-                    imageMode ? (
-                      <div className="flex flex-wrap gap-2.5 w-full max-w-full pl-2 sm:pl-3 ml-0.5 sm:ml-1 border-l-2 border-zinc-600/70 pt-1 pb-1">
-                        {subItems.map((item) => (
-                          <ItemTileButton
-                            key={item.id}
-                            item={item}
-                            accentColor={subAccent}
-                            onPick={() => handleItemClick(item)}
-                            imageMode
-                          />
-                        ))}
-                        {subItems.length === 0 && (
-                          <p className="w-full text-zinc-600 text-xs py-2">No items in this subcategory</p>
-                        )}
-                      </div>
-                    ) : (
-                    <div className="flex flex-col gap-2 w-full max-w-full pl-2 sm:pl-3 ml-0.5 sm:ml-1 border-l-2 border-zinc-600/70 pt-1 pb-1">
-                      {subItems.map((item) => (
-                        <ItemTileButton
-                          key={item.id}
-                          item={item}
-                          accentColor={subAccent}
-                          onPick={() => handleItemClick(item)}
-                        />
-                      ))}
-                      {subItems.length === 0 && (
-                        <p className="w-full text-zinc-600 text-xs py-2">No items in this subcategory</p>
-                      )}
-                    </div>
-                    )
-                  )}
-                </div>
-              );
-            })}
+            {subcategories.map((cat) => renderSubcatBranch(cat))}
 
             {directRootItems.length > 0 && (
               <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800/80">

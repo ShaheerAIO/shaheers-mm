@@ -10,6 +10,7 @@ import { AddItemsModal } from './AddItemsModal';
 import { ColorPalettePicker } from '@/components/ColorPalettePicker';
 import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR, pickUnusedCategoryColor } from '@/lib/posColors';
 import { defaultVisibility, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
+import { canAddSubcategory, MAX_CATEGORY_TIERS } from '@/lib/categoryTree';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +77,7 @@ export function CategoryColumn({
   const [subcatDraftName, setSubcatDraftName] = useState('');
   const [confirmAddSubcatWithItems, setConfirmAddSubcatWithItems] = useState<{ parentId: number; categoryName: string; itemCount: number } | null>(null);
   const [cannotAddItemReason, setCannotAddItemReason] = useState<string | null>(null);
+  const [maxDepthReached, setMaxDepthReached] = useState(false);
   // Native DnD state for reordering items in the focused category.
   const [itemDragIndex, setItemDragIndex] = useState<number | null>(null);
   const [itemDragOverIndex, setItemDragOverIndex] = useState<number | null>(null);
@@ -401,6 +403,13 @@ export function CategoryColumn({
   const handleAddSubcategory = () => {
     // Nest under the currently-focused subcategory (or the root when none is drilled)
     const parentId = activeSubcat ?? category.id;
+
+    // Enforce the nesting cap: root + subcategories may span at most
+    // MAX_CATEGORY_TIERS tiers.
+    if (!canAddSubcategory(parentId, categories)) {
+      setMaxDepthReached(true);
+      return;
+    }
 
     // Enforce rule: a category cannot have both items AND subcategories.
     // If the parent already holds items, ask the user to confirm before we
@@ -1038,6 +1047,23 @@ export function CategoryColumn({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Remove Items & Add Subcategory
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cannot add subcategory - nesting depth cap reached */}
+      <AlertDialog open={maxDepthReached} onOpenChange={(open) => { if (!open) setMaxDepthReached(false); }}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Nesting Limit Reached</AlertDialogTitle>
+            <AlertDialogDescription>
+              Categories can be nested up to {MAX_CATEGORY_TIERS} levels deep (a category plus {MAX_CATEGORY_TIERS - 1} levels of subcategories). This subcategory is already at the deepest allowed level, so you can't add another subcategory beneath it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setMaxDepthReached(false)}>
+              OK
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
