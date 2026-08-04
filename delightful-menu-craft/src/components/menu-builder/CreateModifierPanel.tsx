@@ -666,7 +666,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     setMinSelector(Math.max(floor, Math.min(parsed, noMaxSelection ? Infinity : maxSelector)));
   });
   const maxSelectorField = useClearableIntInput(maxSelector, (parsed) => {
-    setMaxSelector(Math.min(maxSelectorCeiling, Math.max(parsed, minSelector)));
+    // Max selection must be >= 1 — the POS drops a modifier exported with max 0.
+    setMaxSelector(Math.min(maxSelectorCeiling, Math.max(parsed, minSelector, 1)));
   });
 
   return (
@@ -1131,7 +1132,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             <AccordionContent>
               <div className="space-y-2.5 pb-1">
                 <div className="text-xs text-muted-foreground">
-                  Min: {minSelector} / Max: {noMaxSelection || maxSelector === 0 ? '∞' : maxSelector}
+                  Min: {minSelector} / Max: {noMaxSelection ? '∞' : maxSelector}
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-end gap-2 flex-wrap">
