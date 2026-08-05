@@ -18,6 +18,13 @@ import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModType
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Item } from '@/types/menu';
 import {
+  THREE_PO_PLATFORMS,
+  parseThreePoPricing,
+  serializeThreePoPricing,
+  type ThreePoPlatform,
+  type ThreePoPricing,
+} from '@/lib/threePoPricing';
+import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
   getChannelsByGroup,
@@ -56,14 +63,27 @@ function serializeIds(ids: number[]): string {
   return [...new Set(ids)].sort((a, b) => a - b).join(',');
 }
 
+type ThreePoKind = 'pickup' | 'delivery';
+const threePoInputKey = (platform: ThreePoPlatform, kind: ThreePoKind) => `${platform}-${kind}`;
+// Empty string means "unset" (0).
+const fmtPrice = (v: number) => (v ? v.toFixed(2) : '');
+
+/** Build the per-platform Pickup/Delivery input buffers from a pricing object. */
+function buildThreePoInputs(pricing: ThreePoPricing): Record<string, string> {
+  const out: Record<string, string> = {};
+  THREE_PO_PLATFORMS.forEach(({ key }) => {
+    out[threePoInputKey(key, 'pickup')] = fmtPrice(pricing[key].pickupPrice);
+    out[threePoInputKey(key, 'delivery')] = fmtPrice(pricing[key].deliveryPrice);
+  });
+  return out;
+}
+
 interface DraftState {
   itemName: string;
   posDisplayName: string;
   kdsName: string;
   itemPrice: number;
-  doordashPrice: number;
-  uberEatsPrice: number;
-  grubHubPrice: number;
+  threePoPricing: ThreePoPricing;
   itemDescription: string;
   itemPicture: string;
   kioskItemImage: string;
@@ -234,9 +254,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     posDisplayName: item.posDisplayName,
     kdsName: item.kdsName ?? item.itemName,
     itemPrice: item.itemPrice,
-    doordashPrice: item.doordashPrice ?? 0,
-    uberEatsPrice: item.uberEatsPrice ?? 0,
-    grubHubPrice: item.grubHubPrice ?? 0,
+    threePoPricing: parseThreePoPricing(item.threePoPricing),
     itemDescription: item.itemDescription,
     itemPicture: item.itemPicture || '',
     kioskItemImage: item.kioskItemImage || '',
@@ -278,11 +296,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
-  // 3PO delivery price inputs — empty string means "unset" (0).
-  const fmt3po = (v: number | undefined) => (v ? v.toFixed(2) : '');
-  const [doordashInput, setDoordashInput] = useState(fmt3po(item.doordashPrice));
-  const [uberEatsInput, setUberEatsInput] = useState(fmt3po(item.uberEatsPrice));
-  const [grubHubInput, setGrubHubInput] = useState(fmt3po(item.grubHubPrice));
+  // Per-platform Pickup/Delivery input buffers, keyed by `${platform}-${kind}`.
+  const [threePoInputs, setThreePoInputs] = useState<Record<string, string>>(() =>
+    buildThreePoInputs(parseThreePoPricing(item.threePoPricing)),
+  );
   const [pendingModifierIds, setPendingModifierIds] = useState<number[]>([]);
   const [pendingRemovedModifierIds, setPendingRemovedModifierIds] = useState<number[]>([]);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
@@ -336,9 +353,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: item.posDisplayName,
       kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
-      doordashPrice: item.doordashPrice ?? 0,
-      uberEatsPrice: item.uberEatsPrice ?? 0,
-      grubHubPrice: item.grubHubPrice ?? 0,
+      threePoPricing: parseThreePoPricing(item.threePoPricing),
       itemDescription: item.itemDescription,
       itemPicture: item.itemPicture || '',
       kioskItemImage: item.kioskItemImage || '',
@@ -375,9 +390,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setBulkStart('');
     setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
-    setDoordashInput(fmt3po(item.doordashPrice));
-    setUberEatsInput(fmt3po(item.uberEatsPrice));
-    setGrubHubInput(fmt3po(item.grubHubPrice));
+    setThreePoInputs(buildThreePoInputs(parseThreePoPricing(item.threePoPricing)));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setModifierOrder(
@@ -497,9 +510,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.posDisplayName !== item.posDisplayName ||
       draft.kdsName !== (item.kdsName ?? item.itemName) ||
       draft.itemPrice !== item.itemPrice ||
-      draft.doordashPrice !== (item.doordashPrice ?? 0) ||
-      draft.uberEatsPrice !== (item.uberEatsPrice ?? 0) ||
-      draft.grubHubPrice !== (item.grubHubPrice ?? 0) ||
+      serializeThreePoPricing(draft.threePoPricing) !== serializeThreePoPricing(parseThreePoPricing(item.threePoPricing)) ||
       draft.itemDescription !== item.itemDescription ||
       draft.itemPicture !== (item.itemPicture || '') ||
       draft.kioskItemImage !== (item.kioskItemImage || '') ||
@@ -569,9 +580,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: draft.posDisplayName,
       kdsName: draft.kdsName,
       itemPrice: draft.itemPrice,
-      doordashPrice: draft.doordashPrice,
-      uberEatsPrice: draft.uberEatsPrice,
-      grubHubPrice: draft.grubHubPrice,
+      threePoPricing: serializeThreePoPricing(draft.threePoPricing),
       itemDescription: draft.itemDescription,
       itemPicture: draft.itemPicture,
       kioskItemImage: draft.kioskItemImage,
@@ -642,9 +651,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       posDisplayName: item.posDisplayName,
       kdsName: item.kdsName ?? item.itemName,
       itemPrice: item.itemPrice,
-      doordashPrice: item.doordashPrice ?? 0,
-      uberEatsPrice: item.uberEatsPrice ?? 0,
-      grubHubPrice: item.grubHubPrice ?? 0,
+      threePoPricing: parseThreePoPricing(item.threePoPricing),
       itemDescription: item.itemDescription,
       itemPicture: item.itemPicture || '',
       kioskItemImage: item.kioskItemImage || '',
@@ -681,9 +688,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setBulkStart('');
     setBulkEnd('');
     setPriceInput(item.itemPrice.toFixed(2));
-    setDoordashInput(fmt3po(item.doordashPrice));
-    setUberEatsInput(fmt3po(item.uberEatsPrice));
-    setGrubHubInput(fmt3po(item.grubHubPrice));
+    setThreePoInputs(buildThreePoInputs(parseThreePoPricing(item.threePoPricing)));
     setPendingModifierIds([]);
     setPendingRemovedModifierIds([]);
     setModifierOrder(
@@ -707,17 +712,32 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     }
   };
 
-  const handle3poPriceChange = (
-    value: string,
-    setInput: (v: string) => void,
-    field: 'doordashPrice' | 'uberEatsPrice' | 'grubHubPrice',
-  ) => {
-    setInput(value);
+  const handleThreePoPriceChange = (platform: ThreePoPlatform, kind: ThreePoKind, value: string) => {
+    setThreePoInputs((prev) => ({ ...prev, [threePoInputKey(platform, kind)]: value }));
     const trimmed = value.trim();
     const price = trimmed === '' ? 0 : parseFloat(trimmed);
     if (!isNaN(price) && price >= 0) {
-      setDraft(d => ({ ...d, [field]: price }));
+      setDraft((d) => ({
+        ...d,
+        threePoPricing: {
+          ...d.threePoPricing,
+          [platform]: {
+            ...d.threePoPricing[platform],
+            [kind === 'pickup' ? 'pickupPrice' : 'deliveryPrice']: price,
+          },
+        },
+      }));
     }
+  };
+
+  const handleThreePoInheritToggle = (platform: ThreePoPlatform, inherit: boolean) => {
+    setDraft((d) => ({
+      ...d,
+      threePoPricing: {
+        ...d.threePoPricing,
+        [platform]: { ...d.threePoPricing[platform], inherit },
+      },
+    }));
   };
 
   // Get modifiers attached to this item via itemModifiers join table
@@ -1402,36 +1422,63 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         >
           <AccordionItem value="third-party" className="border-b border-border px-3">
             <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Third-party delivery prices
+              Third-party pricing
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Optional per-platform prices. Leave blank to inherit the base price
-                  {draft.itemPrice > 0 ? ` ($${draft.itemPrice.toFixed(2)})` : ''}.
+                  Set independent Pickup and Delivery prices per platform, or inherit the
+                  base price{draft.itemPrice > 0 ? ` ($${draft.itemPrice.toFixed(2)})` : ''}.
                 </p>
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { label: 'DoorDash', value: doordashInput, setInput: setDoordashInput, field: 'doordashPrice' as const },
-                    { label: 'UberEats', value: uberEatsInput, setInput: setUberEatsInput, field: 'uberEatsPrice' as const },
-                    { label: 'GrubHub',  value: grubHubInput,  setInput: setGrubHubInput,  field: 'grubHubPrice' as const },
-                  ]).map(({ label, value, setInput, field }) => (
-                    <div key={field} className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">{label}</Label>
-                      <NumberStepperInput
-                        inputMode="decimal"
-                        placeholder={draft.itemPrice > 0 ? draft.itemPrice.toFixed(2) : '0.00'}
-                        value={value}
-                        onChange={(e) => handle3poPriceChange(e.target.value, setInput, field)}
-                        onStep={(delta) =>
-                          handle3poPriceChange(Math.max(0, (parseFloat(value) || 0) + delta).toFixed(2), setInput, field)
-                        }
-                        prefix={<span className="text-muted-foreground">$</span>}
-                        wrapperClassName="w-full"
-                      />
+                {THREE_PO_PLATFORMS.map(({ key, label }) => {
+                  const platform = draft.threePoPricing[key];
+                  const basePlaceholder = draft.itemPrice > 0 ? draft.itemPrice.toFixed(2) : '0.00';
+                  return (
+                    <div key={key} className="rounded-md border border-border bg-background/40 p-2.5 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium">{label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground">Inherit</span>
+                          <Switch
+                            checked={platform.inherit}
+                            onCheckedChange={(checked) => handleThreePoInheritToggle(key, checked)}
+                          />
+                        </div>
+                      </div>
+                      {platform.inherit ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          Inherits pricing from third-party orders (no adjustment).
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['pickup', 'delivery'] as ThreePoKind[]).map((kind) => {
+                            const value = threePoInputs[threePoInputKey(key, kind)] ?? '';
+                            return (
+                              <div key={kind} className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground capitalize">{kind}</Label>
+                                <NumberStepperInput
+                                  inputMode="decimal"
+                                  placeholder={basePlaceholder}
+                                  value={value}
+                                  onChange={(e) => handleThreePoPriceChange(key, kind, e.target.value)}
+                                  onStep={(delta) =>
+                                    handleThreePoPriceChange(
+                                      key,
+                                      kind,
+                                      Math.max(0, (parseFloat(value) || 0) + delta).toFixed(2),
+                                    )
+                                  }
+                                  prefix={<span className="text-muted-foreground">$</span>}
+                                  wrapperClassName="w-full"
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </AccordionContent>
           </AccordionItem>
