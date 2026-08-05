@@ -833,16 +833,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
   }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
 
-  // Sync minSelector with selection type: Required/Select one force a minimum
-  // of 1; every other type (including reverting back to optional/unset)
-  // resets to 0.
-  useEffect(() => {
-    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
-      if (draft.minSelector === 0) setDraft(d => ({ ...d, minSelector: 1 }));
-    } else if (draft.minSelector !== 0) {
-      setDraft(d => ({ ...d, minSelector: 0 }));
-    }
-  }, [draft.isOptional]);
 
   const currentStructureFingerprint = useMemo(
     () =>
@@ -1467,6 +1457,19 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     const shouldBe = draft.minSelector >= 1 ? 'Required' : 'Select any';
     if (draft.isOptional !== shouldBe) setDraft((d) => ({ ...d, isOptional: shouldBe }));
   }, [isNestedContainer, draft.minSelector, draft.isOptional]);
+
+  // Flat modifiers: Selection Type drives Min (Required/Select one force min 1;
+  // any other type resets to 0). Nested containers are skipped — there Min is
+  // the driver (see the effect above); running both reconcilers together creates
+  // an isOptional⇄Min feedback loop (min 0 ⇄ 1 flicker).
+  useEffect(() => {
+    if (isNestedContainer) return;
+    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
+      if (draft.minSelector === 0) setDraft((d) => ({ ...d, minSelector: 1 }));
+    } else if (draft.minSelector !== 0) {
+      setDraft((d) => ({ ...d, minSelector: 0 }));
+    }
+  }, [draft.isOptional, isNestedContainer]);
 
   const minSelectorField = useClearableIntInput(draft.minSelector, (parsed) => {
     setDraft((d) => {
