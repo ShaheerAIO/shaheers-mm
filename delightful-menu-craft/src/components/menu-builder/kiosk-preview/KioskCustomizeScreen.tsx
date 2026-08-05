@@ -110,6 +110,26 @@ export function KioskCustomizeScreen({
 
   const getChildModifiers = (modifier: Modifier) => getChildModifiersForInit(modifier, modifiers);
 
+  /** Total selected options anywhere in this modifier's subtree (leaves hold the selections). */
+  const subtreeSelectionCount = (mod: Modifier, visited: Set<number> = new Set()): number => {
+    if (visited.has(mod.id)) return 0;
+    visited.add(mod.id);
+    const children = getChildModifiers(mod);
+    if (children.length > 0) {
+      return children.reduce((sum, c) => sum + subtreeSelectionCount(c, visited), 0);
+    }
+    return selectedOptions[mod.id]?.length ?? 0;
+  };
+
+  /** True if any leaf in this modifier's subtree exposes selectable options. */
+  const subtreeHasOptions = (mod: Modifier, visited: Set<number> = new Set()): boolean => {
+    if (visited.has(mod.id)) return false;
+    visited.add(mod.id);
+    const children = getChildModifiers(mod);
+    if (children.length > 0) return children.some((c) => subtreeHasOptions(c, visited));
+    return getOptions(mod.id).length > 0;
+  };
+
   const toggleOption = (mod: Modifier, optionId: number) => {
     const isMultiSelect = mod.multiSelect || mod.noMaxSelection || mod.maxSelector > 1;
     setSelectedOptions((prev) => {
@@ -161,8 +181,30 @@ export function KioskCustomizeScreen({
     };
 
     const check = (mod: Modifier, isChild = false): boolean => {
+      // POS contract (verified against android-pos: TsrModifierManagerImpl.
+      // areRequiredNestedSatisfied + TsrMenuFragment.checkForMinSelectionModifiers):
+      // a REQUIRED child is always enforced, even untouched — the parent cannot
+      // override it. An OPTIONAL child's own Min applies only once it is engaged
+      // (has any selection in its subtree); the parent's engaged-children
+      // Min/Max decide whether it must be engaged at all.
+      if (isChild && getEffectiveModType(mod) !== 'Required' && subtreeSelectionCount(mod) === 0) return true;
       const children = getChildModifiers(mod);
-      if (children.length > 0) return children.every((child) => check(child, true));
+      if (children.length > 0) {
+        // A nested container's own Min/Max constrain how many child modifiers
+        // the guest engages with (engaged = any selection in the child's
+        // subtree). Children keep their own internal option rules below.
+        const selectable = children.filter((c) => subtreeHasOptions(c));
+        if (selectable.length > 0) {
+          const engaged = selectable.filter((c) => subtreeSelectionCount(c) > 0).length;
+          const minEngaged = isChild
+            ? mod.minSelector
+            : getEffectiveModType(mod) === 'Required' ? Math.max(mod.minSelector, 1) : mod.minSelector;
+          const maxEngaged =
+            mod.noMaxSelection || mod.maxSelector <= 0 ? Number.POSITIVE_INFINITY : mod.maxSelector;
+          if (engaged < Math.min(minEngaged, selectable.length) || engaged > maxEngaged) return false;
+        }
+        return children.every((child) => check(child, true));
+      }
       if (optionCount(mod.id) === 0) return true;
       const count = selectedOptions[mod.id]?.length ?? 0;
       // Nested children: Min is the source of truth (0 = optional, >=1 = required).
@@ -181,10 +223,13 @@ export function KioskCustomizeScreen({
   const linePrice = unitPrice * qty;
   const showImage = item.kioskItemImage && !imgError;
 
-  /** One option rendered as a selectable chip (with a ± stepper for multi-qty). */
+  /** One option rendered as a selectable chip (with a ± stepper for multi-qty).
+   *  `blocked` = an ancestor container's engaged-children Max is reached and this
+   *  branch is untouched, so its chips are greyed until a slot frees. */
   const renderOptionChip = (
     mod: Modifier,
     o: { modifierOptionId: number; option?: { posDisplayName?: string; optionName?: string }; maxQtyPerOption?: number; maxLimit: number },
+    blocked = false,
   ) => {
     const { modifierOptionId, option, maxQtyPerOption = 1, maxLimit } = o;
     const surcharge = typeof maxLimit === 'number' && maxLimit > 0 ? maxLimit : 0;
@@ -202,6 +247,7 @@ export function KioskCustomizeScreen({
           className={cn(
             'flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
             isSelected ? 'border-[#ED7C69] bg-[#ED7C69]/8 text-[#ED7C69]' : 'border-black/15 bg-white text-[#242528]',
+            blocked && 'opacity-40',
           )}
         >
           <span>
@@ -212,7 +258,7 @@ export function KioskCustomizeScreen({
             <button
               type="button"
               onClick={() => decrementOption(mod, modifierOptionId)}
-              disabled={count === 0}
+              disabled={count === 0 || blocked}
               className="flex h-6 w-6 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B] disabled:opacity-30"
             >
               <Minus className="h-3 w-3" />
@@ -221,7 +267,8 @@ export function KioskCustomizeScreen({
             <button
               type="button"
               onClick={() => incrementOption(mod, modifierOptionId, maxQtyPerOption)}
-              className="flex h-6 w-6 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B]"
+              disabled={blocked}
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-black/10 text-[#6B6B6B] disabled:opacity-30"
             >
               <Plus className="h-3 w-3" />
             </button>
@@ -234,10 +281,12 @@ export function KioskCustomizeScreen({
       <button
         key={modifierOptionId}
         type="button"
+        disabled={blocked}
         onClick={() => toggleOption(mod, modifierOptionId)}
         className={cn(
           'rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors',
           isSelected ? 'border-[#ED7C69] bg-[#ED7C69]/8 text-[#ED7C69]' : 'border-black/15 bg-white text-[#242528]',
+          blocked && 'opacity-40 cursor-not-allowed',
         )}
       >
         {name}
@@ -246,14 +295,16 @@ export function KioskCustomizeScreen({
     );
   };
 
-  /** Render a modifier group (recurses into nested child groups). */
-  const renderModifier = (mod: Modifier, locked: boolean): JSX.Element => {
+  /** Render a modifier group (recurses into nested child groups).
+   *  `blocked` = a parent container's engaged-children Max is reached and this
+   *  child is untouched, so it greys out until a slot frees. */
+  const renderModifier = (mod: Modifier, locked: boolean, blocked = false): JSX.Element => {
     const children = getChildModifiers(mod);
     const badge = ruleBadge(mod);
     const options = getOptions(mod.id);
 
     return (
-      <section key={mod.id} className="py-4">
+      <section key={mod.id} className={cn('py-4', blocked && 'opacity-60')}>
         <div className="mb-1 flex items-center justify-between gap-2">
           <h3 className="text-base font-bold text-[#242528]">{mod.posDisplayName || mod.modifierName}</h3>
           <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', badge.className)}>{badge.label}</span>
@@ -263,11 +314,27 @@ export function KioskCustomizeScreen({
         {locked ? (
           <p className="text-sm text-[#9A9A9A]">Select a size first to unlock.</p>
         ) : children.length > 0 ? (
-          <div className="space-y-3">{children.map((child) => renderModifier(child, false))}</div>
+          (() => {
+            // This container's Min/Max apply to how many children the guest
+            // engages: at Max, untouched children grey out until a slot frees.
+            const engagedIds = new Set(
+              children.filter((c) => subtreeSelectionCount(c) > 0).map((c) => c.id),
+            );
+            const maxEngaged =
+              mod.noMaxSelection || mod.maxSelector <= 0 ? Number.POSITIVE_INFINITY : mod.maxSelector;
+            const atMaxEngaged = engagedIds.size >= maxEngaged;
+            return (
+              <div className="space-y-3">
+                {children.map((child) =>
+                  renderModifier(child, false, blocked || (atMaxEngaged && !engagedIds.has(child.id))),
+                )}
+              </div>
+            );
+          })()
         ) : options.length === 0 ? (
           <p className="text-sm text-[#9A9A9A]">No options defined</p>
         ) : (
-          <div className="flex flex-wrap gap-2">{options.map((o) => renderOptionChip(mod, o))}</div>
+          <div className="flex flex-wrap gap-2">{options.map((o) => renderOptionChip(mod, o, blocked))}</div>
         )}
       </section>
     );
