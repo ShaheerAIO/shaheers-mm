@@ -274,7 +274,7 @@ export interface Station {
 // UI State Types
 // =============================================================================
 
-export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'settings' | 'categories';
+export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'settings' | 'categories' | 'archive';
 export type ViewMode = 'tree' | 'pos-preview' | 'kiosk-preview';
 
 // =============================================================================

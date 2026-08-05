@@ -19,9 +19,9 @@ const Index = () => {
           <MainContent />
           {/* Keep RightSidebar mounted across tab switches so in-progress
               ItemDetailPanel draft edits survive; hide (display:none) off the
-              menu-builder tab. RightSidebar is fixed-positioned, so this takes
-              no layout space when visible either. */}
-          <div className={cn(activeTab !== 'menu-builder' && 'hidden')}>
+              menu-builder/archive tabs. RightSidebar is fixed-positioned, so
+              this takes no layout space when visible either. */}
+          <div className={cn(activeTab !== 'menu-builder' && activeTab !== 'archive' && 'hidden')}>
             <RightSidebar />
           </div>
         </div>
