@@ -28,7 +28,7 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
-import { ModTypeBadge } from '@/components/menu-builder/pos-preview/ModifierPanel';
+import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses, getEffectiveModType } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
@@ -401,7 +401,9 @@ export function ModifierLibraryContent() {
                   className={cn(
                     'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors',
                     'hover:bg-item-hover',
-                    selectedModifierId === modifier.id && 'bg-item-selected border-l-2 border-l-primary',
+                    selectedModifierId === modifier.id
+                      ? 'bg-item-selected border-l-2 border-l-primary'
+                      : getModTypeBarClasses(modifier),
                   )}
                 >
                   <button
@@ -412,7 +414,10 @@ export function ModifierLibraryContent() {
                   <div className="font-medium text-sm flex items-center gap-1.5">
                     {modifier.modifierName}
                     <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
-                    <ModTypeBadge mod={modifier} />
+                    <span className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium", getModTypeLabelClasses(modifier))}>
+                      <span className={cn("w-1.5 h-1.5 rounded-full", getModTypeDotClasses(modifier))} />
+                      {getModTypeLabel(modifier)}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     {directOptionCount > 0 ? (
@@ -828,16 +833,6 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
   }, [modifier.id, modifier.modifierName, modifier.posDisplayName]);
 
-  // Sync minSelector with selection type: Required/Select one force a minimum
-  // of 1; every other type (including reverting back to optional/unset)
-  // resets to 0.
-  useEffect(() => {
-    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
-      if (draft.minSelector === 0) setDraft(d => ({ ...d, minSelector: 1 }));
-    } else if (draft.minSelector !== 0) {
-      setDraft(d => ({ ...d, minSelector: 0 }));
-    }
-  }, [draft.isOptional]);
 
   const currentStructureFingerprint = useMemo(
     () =>
@@ -1416,6 +1411,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   // (often reused standalone elsewhere) and must keep those controls.
   const isNestedContainer = effectiveMode === 'nested';
 
+  // Guardrail: on the POS every Required child (verified in android-pos,
+  // TsrModifierManagerImpl.areRequiredNestedSatisfied) must be engaged, but the
+  // parent's Max caps how many children can be engaged. If more children are
+  // Required than the parent allows, no guest can ever satisfy them all — the
+  // order can never be completed. Block that config.
+  const requiredChildCount = isNestedContainer
+    ? childModifiers.filter((c) => getEffectiveModType(c) === 'Required').length
+    : 0;
+  const nestedMaxTooLow =
+    isNestedContainer && !draft.noMaxSelection && requiredChildCount > draft.maxSelector;
+
   // Total number of choices a guest could pick from (flat options or nested
   // sub-modifiers).
   const availableOptionCount =
@@ -1442,10 +1448,35 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setDraft((d) => (d.maxSelector > selectionCeiling ? { ...d, maxSelector: selectionCeiling } : d));
   }, [selectionCeiling, availableOptionCount, draft.noMaxSelection]);
 
+  // Nested-mode containers hide the Selection Type control — Min drives their
+  // required/optional status instead (min ≥ 1 ⇒ Required, min 0 ⇒ Optional),
+  // mirroring how the exporter resolves nested modifiers. Keep isOptional synced
+  // to Min so the change persists and exports correctly.
+  useEffect(() => {
+    if (!isNestedContainer) return;
+    const shouldBe = draft.minSelector >= 1 ? 'Required' : 'Select any';
+    if (draft.isOptional !== shouldBe) setDraft((d) => ({ ...d, isOptional: shouldBe }));
+  }, [isNestedContainer, draft.minSelector, draft.isOptional]);
+
+  // Flat modifiers: Selection Type drives Min (Required/Select one force min 1;
+  // any other type resets to 0). Nested containers are skipped — there Min is
+  // the driver (see the effect above); running both reconcilers together creates
+  // an isOptional⇄Min feedback loop (min 0 ⇄ 1 flicker).
+  useEffect(() => {
+    if (isNestedContainer) return;
+    if (draft.isOptional === 'Required' || draft.isOptional === 'Select one') {
+      if (draft.minSelector === 0) setDraft((d) => ({ ...d, minSelector: 1 }));
+    } else if (draft.minSelector !== 0) {
+      setDraft((d) => ({ ...d, minSelector: 0 }));
+    }
+  }, [draft.isOptional, isNestedContainer]);
+
   const minSelectorField = useClearableIntInput(draft.minSelector, (parsed) => {
     setDraft((d) => {
       const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
-      const floor = isRequired ? 1 : 0;
+      // Nested containers derive required/optional from Min itself, so Min floors
+      // at 0 (0 = optional). Flat modifiers keep the Selection-Type-driven floor.
+      const floor = isNestedContainer ? 0 : (isRequired ? 1 : 0);
       return { ...d, minSelector: Math.max(floor, Math.min(parsed, d.noMaxSelection ? Infinity : d.maxSelector)) };
     });
   });
@@ -2275,14 +2306,18 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <NumberStepperInput
                 inputMode="numeric"
                 value={minSelectorField.value}
-                // optional types lock min at 0; required types allow editing from 1 up to max
-                disabled={draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional'}
+                // Optional types lock min at 0; required types allow editing from 1 up to max.
+                // Nested containers hide Selection Type, so Min stays editable and drives it.
+                disabled={!isNestedContainer && (draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional')}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => minSelectorField.onChange(e.target.value)}
                 onBlur={minSelectorField.onBlur}
                 onStep={minSelectorField.step}
                 wrapperClassName="w-full"
               />
+              {isNestedContainer && (
+                <p className="text-[10px] text-muted-foreground">0 = optional · 1+ = required</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="section-header">Max Selection</Label>
@@ -2331,6 +2366,23 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <p className="text-xs text-muted-foreground">Guest can pick the same option multiple times</p>
             </div>
           </div>
+
+          {/* Guardrail: more Required sub-modifiers than the container's Max can
+              ever be satisfied on the POS — block saving that dead-end config. */}
+          {nestedMaxTooLow && (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold">Impossible selection rule</p>
+                <p className="text-destructive/90">
+                  {requiredChildCount} required sub-modifier{requiredChildCount === 1 ? '' : 's'}, but Max is {draft.maxSelector}.
+                  On the POS every required sub-modifier must be engaged, so a guest can never satisfy them all and the
+                  item can't be completed. Raise Max to at least {requiredChildCount}, turn on “No maximum”, or make some
+                  sub-modifiers optional (set their Min to 0).
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Pizza & Size Settings + Selection Type + Pricing — one row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-lg">
@@ -2450,7 +2502,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges || !maxSelectorValid || !isNamesValid}
+              disabled={!hasChanges || !maxSelectorValid || !isNamesValid || nestedMaxTooLow}
+              title={nestedMaxTooLow ? 'Fix the impossible selection rule before saving' : undefined}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />

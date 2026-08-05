@@ -94,6 +94,9 @@ export interface Item {
   doordashPrice: number;
   uberEatsPrice: number;
   grubHubPrice: number;
+  // Per-platform 3PO pricing (inherit toggle + Pickup/Delivery). JSON-encoded
+  // ThreePoPricing (see lib/threePoPricing.ts). Store/UI only — not yet exported.
+  threePoPricing?: string;
   // Visibility channels
   visibilityPos: boolean;
   visibilityKiosk: boolean;
@@ -274,7 +277,7 @@ export interface Station {
 // UI State Types
 // =============================================================================
 
-export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'settings' | 'categories';
+export type TabType = 'menu-builder' | 'modifier-library' | 'stations' | 'settings' | 'categories' | 'archive';
 export type ViewMode = 'tree' | 'pos-preview' | 'kiosk-preview';
 
 // =============================================================================

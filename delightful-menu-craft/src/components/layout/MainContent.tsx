@@ -4,6 +4,7 @@ import { ModifierLibraryContent } from '@/components/modifier-library/ModifierLi
 import { StationsContent } from '@/components/stations/StationsContent';
 import { SettingsContent } from '@/components/settings/SettingsContent';
 import { CategoriesContent } from '@/components/categories/CategoriesContent';
+import { ArchiveContent } from '@/components/archive/ArchiveContent';
 import { ReadOnlyFieldset } from '@/components/ReadOnlyFieldset';
 
 export function MainContent() {
@@ -21,6 +22,9 @@ export function MainContent() {
       )}
       {activeTab === 'categories' && (
         <ReadOnlyFieldset><CategoriesContent /></ReadOnlyFieldset>
+      )}
+      {activeTab === 'archive' && (
+        <ReadOnlyFieldset><ArchiveContent /></ReadOnlyFieldset>
       )}
       {activeTab === 'settings' && (
         <ReadOnlyFieldset><SettingsContent /></ReadOnlyFieldset>
