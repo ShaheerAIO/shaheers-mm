@@ -6,6 +6,7 @@ import {
   Layers,
   Users,
   FolderOpen,
+  Archive,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useMenuStore } from '@/store/menuStore';
@@ -19,6 +20,7 @@ const tabs: { id: TabType; label: string; icon: typeof LayoutGrid }[] = [
   { id: 'modifier-library', label: 'Modifiers', icon: Settings2 },
   { id: 'stations', label: 'Stations', icon: Radio },
   { id: 'categories', label: 'Bulk', icon: Layers },
+  { id: 'archive', label: 'Archive', icon: Archive },
   { id: 'settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 
