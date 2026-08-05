@@ -920,6 +920,12 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         maxSelector: draft.maxSelector,
         noMaxSelection: draft.noMaxSelection,
         isOptional: draft.isOptional,
+        // Keep modType in sync — the exporter and previews check it before
+        // isOptional, so a stale value would override this edit.
+        modType:
+          draft.isOptional === 'Required' || draft.isOptional === 'Select one' ? 'Required' :
+          draft.isOptional === 'Push Optional' ? 'Push Optional' :
+          draft.isOptional ? 'Optional' : '',
         modifierOptionPriceType: draft.modifierOptionPriceType,
         multiSelect: draft.multiSelect,
         canGuestSelectMoreModifiers: draft.canGuestSelectMoreModifiers,
