@@ -34,6 +34,45 @@ export function ModTypeBadge({ mod, className }: { mod: Modifier; className?: st
   );
 }
 
+/** Short label for a modifier's Required / Push / Optional behavior. */
+export function getModTypeLabel(mod: Modifier): string {
+  const t = getEffectiveModType(mod);
+  return t === 'Push Optional' ? 'Push' : t;
+}
+
+/** Soft gradient + left accent border for coloring an entire bar/row by modifier behavior (red/yellow/green). */
+export function getModTypeBarClasses(mod: Modifier): string {
+  const t = getEffectiveModType(mod);
+  const styles: Record<typeof t, string> = {
+    Required: 'border-l-2 border-l-red-500/70 bg-gradient-to-r from-red-500/10 via-red-500/[0.03] to-transparent',
+    'Push Optional': 'border-l-2 border-l-yellow-500/70 bg-gradient-to-r from-yellow-500/15 via-yellow-500/[0.04] to-transparent',
+    Optional: 'border-l-2 border-l-green-500/70 bg-gradient-to-r from-green-500/10 via-green-500/[0.03] to-transparent',
+  };
+  return styles[t];
+}
+
+/** Text color classes matching `getModTypeBarClasses`, for the label rendered on the bar. */
+export function getModTypeLabelClasses(mod: Modifier): string {
+  const t = getEffectiveModType(mod);
+  const styles: Record<typeof t, string> = {
+    Required: 'text-red-600 dark:text-red-400',
+    'Push Optional': 'text-yellow-700 dark:text-yellow-400',
+    Optional: 'text-green-600 dark:text-green-400',
+  };
+  return styles[t];
+}
+
+/** Solid dot color matching `getModTypeBarClasses`, for a small status indicator next to the label. */
+export function getModTypeDotClasses(mod: Modifier): string {
+  const t = getEffectiveModType(mod);
+  const styles: Record<typeof t, string> = {
+    Required: 'bg-red-500',
+    'Push Optional': 'bg-yellow-500',
+    Optional: 'bg-green-500',
+  };
+  return styles[t];
+}
+
 /**
  * True if the item has any attached modifier that — itself or via its nested
  * descendant modifiers — exposes at least one selectable option. This is the
