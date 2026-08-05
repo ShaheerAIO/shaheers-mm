@@ -14,7 +14,7 @@ import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
-import { ModTypeBadge } from '@/components/menu-builder/pos-preview/ModifierPanel';
+import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { Item } from '@/types/menu';
 import {
@@ -1692,12 +1692,17 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   <AccordionItem
                     value={modifier.id.toString()}
                     className={cn(
-                      "border rounded-md",
-                      isPending && "border-green-500/50 bg-green-500/5",
+                      "border rounded-md overflow-hidden",
+                      isPending && "border-green-500/50",
                       isPendingRemoval && "opacity-50"
                     )}
                   >
-                    <AccordionTrigger className="px-3 py-2 text-sm hover:no-underline">
+                    <AccordionTrigger
+                      className={cn(
+                        "px-3 py-2 text-sm hover:no-underline transition-colors",
+                        getModTypeBarClasses(modifier),
+                      )}
+                    >
                       <div className="flex items-center justify-between w-full pr-2">
                         <div className="flex items-center gap-2">
                           {isDraggable && (
@@ -1712,7 +1717,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               New
                             </span>
                           )}
-                          <ModTypeBadge mod={modifier} />
+                          <span className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium", getModTypeLabelClasses(modifier))}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", getModTypeDotClasses(modifier))} />
+                            {getModTypeLabel(modifier)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-0.5">
                           <button

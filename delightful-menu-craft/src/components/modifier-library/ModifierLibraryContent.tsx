@@ -28,7 +28,7 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
-import { ModTypeBadge } from '@/components/menu-builder/pos-preview/ModifierPanel';
+import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
@@ -401,7 +401,9 @@ export function ModifierLibraryContent() {
                   className={cn(
                     'flex items-start gap-1 px-3 py-2.5 border-b border-panel-border transition-colors',
                     'hover:bg-item-hover',
-                    selectedModifierId === modifier.id && 'bg-item-selected border-l-2 border-l-primary',
+                    selectedModifierId === modifier.id
+                      ? 'bg-item-selected border-l-2 border-l-primary'
+                      : getModTypeBarClasses(modifier),
                   )}
                 >
                   <button
@@ -412,7 +414,10 @@ export function ModifierLibraryContent() {
                   <div className="font-medium text-sm flex items-center gap-1.5">
                     {modifier.modifierName}
                     <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
-                    <ModTypeBadge mod={modifier} />
+                    <span className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium", getModTypeLabelClasses(modifier))}>
+                      <span className={cn("w-1.5 h-1.5 rounded-full", getModTypeDotClasses(modifier))} />
+                      {getModTypeLabel(modifier)}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     {directOptionCount > 0 ? (
