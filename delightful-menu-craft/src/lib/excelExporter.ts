@@ -238,7 +238,11 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       : (isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector));
     return {
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
-      isNested: m.isNested, addNested: m.addNested, modifierOptionPriceType: m.modifierOptionPriceType,
+      isNested: m.isNested, addNested: m.addNested,
+      // POS rule: a nested container (addNested) carries no pricing of its own —
+      // its price lives on the child modifiers' options — so it must export as
+      // NoCharge regardless of the type stored on the parent.
+      modifierOptionPriceType: m.addNested ? 'NoCharge' : m.modifierOptionPriceType,
       isOptional, // POS expects a boolean
       // POS rule: canGuestSelectMoreModifiers cannot be TRUE when addNested is TRUE.
       canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers && !m.addNested, multiSelect: m.multiSelect,
