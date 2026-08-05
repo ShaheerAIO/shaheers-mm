@@ -1436,10 +1436,22 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     setDraft((d) => (d.maxSelector > selectionCeiling ? { ...d, maxSelector: selectionCeiling } : d));
   }, [selectionCeiling, availableOptionCount, draft.noMaxSelection]);
 
+  // Nested-mode containers hide the Selection Type control — Min drives their
+  // required/optional status instead (min ≥ 1 ⇒ Required, min 0 ⇒ Optional),
+  // mirroring how the exporter resolves nested modifiers. Keep isOptional synced
+  // to Min so the change persists and exports correctly.
+  useEffect(() => {
+    if (!isNestedContainer) return;
+    const shouldBe = draft.minSelector >= 1 ? 'Required' : 'Select any';
+    if (draft.isOptional !== shouldBe) setDraft((d) => ({ ...d, isOptional: shouldBe }));
+  }, [isNestedContainer, draft.minSelector, draft.isOptional]);
+
   const minSelectorField = useClearableIntInput(draft.minSelector, (parsed) => {
     setDraft((d) => {
       const isRequired = d.isOptional === 'Required' || d.isOptional === 'Select one';
-      const floor = isRequired ? 1 : 0;
+      // Nested containers derive required/optional from Min itself, so Min floors
+      // at 0 (0 = optional). Flat modifiers keep the Selection-Type-driven floor.
+      const floor = isNestedContainer ? 0 : (isRequired ? 1 : 0);
       return { ...d, minSelector: Math.max(floor, Math.min(parsed, d.noMaxSelection ? Infinity : d.maxSelector)) };
     });
   });
@@ -2269,14 +2281,18 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               <NumberStepperInput
                 inputMode="numeric"
                 value={minSelectorField.value}
-                // optional types lock min at 0; required types allow editing from 1 up to max
-                disabled={draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional'}
+                // Optional types lock min at 0; required types allow editing from 1 up to max.
+                // Nested containers hide Selection Type, so Min stays editable and drives it.
+                disabled={!isNestedContainer && (draft.isOptional === 'Select any' || draft.isOptional === 'Push Optional')}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => minSelectorField.onChange(e.target.value)}
                 onBlur={minSelectorField.onBlur}
                 onStep={minSelectorField.step}
                 wrapperClassName="w-full"
               />
+              {isNestedContainer && (
+                <p className="text-[10px] text-muted-foreground">0 = optional · 1+ = required</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="section-header">Max Selection</Label>

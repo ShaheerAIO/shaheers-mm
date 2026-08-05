@@ -371,6 +371,26 @@ export function ModifierPanel({
     return modifiers.filter((m) => m.parentModifierId === modifier.id);
   };
 
+  /** Total selected options anywhere in this modifier's subtree (leaves hold the selections). */
+  const subtreeSelectionCount = (mod: Modifier, visited: Set<number> = new Set()): number => {
+    if (visited.has(mod.id)) return 0;
+    visited.add(mod.id);
+    const children = getChildModifiers(mod);
+    if (children.length > 0) {
+      return children.reduce((sum, c) => sum + subtreeSelectionCount(c, visited), 0);
+    }
+    return selectedOptions[mod.id]?.length ?? 0;
+  };
+
+  /** True if any leaf in this modifier's subtree exposes selectable options. */
+  const subtreeHasOptions = (mod: Modifier, visited: Set<number> = new Set()): boolean => {
+    if (visited.has(mod.id)) return false;
+    visited.add(mod.id);
+    const children = getChildModifiers(mod);
+    if (children.length > 0) return children.some((c) => subtreeHasOptions(c, visited));
+    return getOptions(mod.id).length > 0;
+  };
+
   /** True when every modifier group meets min/max (and Required implies at least minSelector, min 1). */
   const canPressDone = useMemo(() => {
     if (attachedModifiers.length === 0) return true;
@@ -383,8 +403,31 @@ export function ModifierPanel({
     };
 
     const checkModifier = (mod: Modifier, isChild = false): boolean => {
+      // POS contract (verified against android-pos: TsrModifierManagerImpl.
+      // areRequiredNestedSatisfied + TsrMenuFragment.checkForMinSelectionModifiers):
+      // a REQUIRED child is always enforced, even untouched — the parent cannot
+      // override it. An OPTIONAL child's own Min applies only once it is engaged
+      // (has any selection in its subtree); the parent's engaged-children
+      // Min/Max decide whether it must be engaged at all.
+      if (isChild && getEffectiveModType(mod) !== 'Required' && subtreeSelectionCount(mod) === 0) return true;
       const children = getChildModifiers(mod);
       if (children.length > 0) {
+        // A nested container's own Min/Max constrain how many of its child
+        // modifiers the guest engages with (a child is engaged when anything in
+        // its subtree is selected). Each child's internal option rules are then
+        // checked independently below.
+        const selectable = children.filter((c) => subtreeHasOptions(c));
+        if (selectable.length > 0) {
+          const engaged = selectable.filter((c) => subtreeSelectionCount(c) > 0).length;
+          const minEngaged = isChild
+            ? mod.minSelector
+            : getEffectiveModType(mod) === 'Required'
+              ? Math.max(mod.minSelector, 1)
+              : mod.minSelector;
+          const maxEngaged =
+            mod.noMaxSelection || mod.maxSelector <= 0 ? Number.POSITIVE_INFINITY : mod.maxSelector;
+          if (engaged < Math.min(minEngaged, selectable.length) || engaged > maxEngaged) return false;
+        }
         return children.every((child) => checkModifier(child, true));
       }
       if (optionCountForModifier(mod.id) === 0) return true;
@@ -419,8 +462,10 @@ export function ModifierPanel({
     };
   }, [canPressDone, onTicketBlockChange]);
 
-  /** Leaf modifier: option tiles (and pizza side strip when applicable). */
-  const renderFlatLeaf = (mod: Modifier) => {
+  /** Leaf modifier: option tiles (and pizza side strip when applicable).
+   *  `blocked` = an ancestor container's engaged-children Max is reached and
+   *  this branch is untouched, so its options are greyed until a slot frees. */
+  const renderFlatLeaf = (mod: Modifier, blocked = false) => {
     const currentOptions = getOptions(mod.id);
     return (
       <div>
@@ -472,7 +517,7 @@ export function ModifierPanel({
               !mod.noMaxSelection &&
               mod.maxSelector > 0 &&
               (activeSelections?.length ?? 0) >= mod.maxSelector;
-            const isBlockedByMax = !isSelected && !isPizza && atMax;
+            const isBlockedByMax = blocked || (!isSelected && !isPizza && atMax);
 
             return (
               <button
@@ -555,11 +600,33 @@ export function ModifierPanel({
     depth: number,
     path: number[],
     onPathChange: (next: number[]) => void,
+    blocked = false,
   ) => {
     const children = getChildModifiers(mod);
     if (children.length === 0) {
-      return renderFlatLeaf(mod);
+      return renderFlatLeaf(mod, blocked);
     }
+
+    // This container's Min/Max constrain how many CHILD modifiers the guest
+    // engages (a child is engaged when anything in its subtree is selected).
+    // At Max, untouched children grey out until a slot is freed.
+    const engagedChildIds = new Set(
+      children.filter((c) => subtreeSelectionCount(c) > 0).map((c) => c.id),
+    );
+    const maxEngaged =
+      mod.noMaxSelection || mod.maxSelector <= 0 ? Number.POSITIVE_INFINITY : mod.maxSelector;
+    const atMaxEngaged = engagedChildIds.size >= maxEngaged;
+    const minEngaged = mod.minSelector;
+    const engagementHint =
+      minEngaged >= 1
+        ? isFinite(maxEngaged)
+          ? maxEngaged === minEngaged
+            ? `Choose ${minEngaged}`
+            : `Choose ${minEngaged}–${maxEngaged}`
+          : `Choose at least ${minEngaged}`
+        : isFinite(maxEngaged) && maxEngaged < children.length
+          ? `Choose up to ${maxEngaged}`
+          : null;
 
     const selectedIdAtDepth = path[depth];
     const selectedChild =
@@ -569,13 +636,21 @@ export function ModifierPanel({
 
     return (
       <div className="flex flex-col gap-2 w-full min-w-0">
+        {engagementHint && (
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">
+            {engagementHint}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2 content-start">
           {children.map((child) => {
             const isOpen = selectedIdAtDepth === child.id;
+            const childBlocked = blocked || (atMaxEngaged && !engagedChildIds.has(child.id));
             return (
               <button
                 key={child.id}
                 type="button"
+                // Keep an already-open child clickable so it can still be closed.
+                disabled={childBlocked && !isOpen}
                 onClick={() => {
                   onPathChange(
                     path[depth] === child.id
@@ -587,7 +662,9 @@ export function ModifierPanel({
                   `${POS_TILE_FRAME} flex flex-col items-center justify-center gap-0.5 px-2 text-xs font-semibold text-center transition-all border`,
                   isOpen
                     ? 'bg-orange-500/20 border-[hsl(var(--pos-accent))] text-[hsl(var(--pos-accent-muted))]'
-                    : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
+                    : childBlocked
+                      ? 'bg-zinc-800/40 border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed'
+                      : 'bg-zinc-800/60 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800',
                 )}
                 style={{ borderLeftWidth: 4, borderLeftColor: categoryColor }}
               >
@@ -605,7 +682,13 @@ export function ModifierPanel({
         </div>
         {selectedChild && (
           <div className="w-full min-w-0 border-t border-zinc-800/60 pt-2 flex flex-col gap-2">
-            {renderNestedDrill(selectedChild, depth + 1, path, onPathChange)}
+            {renderNestedDrill(
+              selectedChild,
+              depth + 1,
+              path,
+              onPathChange,
+              blocked || (atMaxEngaged && !engagedChildIds.has(selectedChild.id)),
+            )}
           </div>
         )}
       </div>
