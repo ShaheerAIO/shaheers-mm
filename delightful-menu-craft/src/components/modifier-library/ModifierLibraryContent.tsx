@@ -28,7 +28,7 @@ import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/mo
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { fingerprintModifierStructure } from '@/lib/modifierStructureFingerprint';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
-import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses } from '@/components/menu-builder/pos-preview/ModifierPanel';
+import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses, getEffectiveModType } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
@@ -1421,6 +1421,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   // (often reused standalone elsewhere) and must keep those controls.
   const isNestedContainer = effectiveMode === 'nested';
 
+  // Guardrail: on the POS every Required child (verified in android-pos,
+  // TsrModifierManagerImpl.areRequiredNestedSatisfied) must be engaged, but the
+  // parent's Max caps how many children can be engaged. If more children are
+  // Required than the parent allows, no guest can ever satisfy them all — the
+  // order can never be completed. Block that config.
+  const requiredChildCount = isNestedContainer
+    ? childModifiers.filter((c) => getEffectiveModType(c) === 'Required').length
+    : 0;
+  const nestedMaxTooLow =
+    isNestedContainer && !draft.noMaxSelection && requiredChildCount > draft.maxSelector;
+
   // Total number of choices a guest could pick from (flat options or nested
   // sub-modifiers).
   const availableOptionCount =
@@ -2353,6 +2364,23 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </div>
           </div>
 
+          {/* Guardrail: more Required sub-modifiers than the container's Max can
+              ever be satisfied on the POS — block saving that dead-end config. */}
+          {nestedMaxTooLow && (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold">Impossible selection rule</p>
+                <p className="text-destructive/90">
+                  {requiredChildCount} required sub-modifier{requiredChildCount === 1 ? '' : 's'}, but Max is {draft.maxSelector}.
+                  On the POS every required sub-modifier must be engaged, so a guest can never satisfy them all and the
+                  item can't be completed. Raise Max to at least {requiredChildCount}, turn on “No maximum”, or make some
+                  sub-modifiers optional (set their Min to 0).
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Pizza & Size Settings + Selection Type + Pricing — one row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-lg">
             <div className="flex flex-col gap-1.5 p-3 rounded-md border border-border/60 bg-background/40">
@@ -2471,7 +2499,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={!hasChanges || !maxSelectorValid || !isNamesValid}
+              disabled={!hasChanges || !maxSelectorValid || !isNamesValid || nestedMaxTooLow}
+              title={nestedMaxTooLow ? 'Fix the impossible selection rule before saving' : undefined}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
