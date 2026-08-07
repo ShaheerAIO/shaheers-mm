@@ -18,6 +18,13 @@ import type {
   ExcelMenuData,
 } from '@/types/menu';
 import { parseVisibilityFromRow, parseDaySchedules, serializeDaySchedules, parseGroupSchedules, serializeGroupSchedules } from '@/lib/visibility';
+import {
+  THREE_PO_TYPE_EXCEL,
+  defaultThreePoPricing,
+  serializeThreePoPricing,
+  type ThreePoPlatform,
+  type ThreePoPricing,
+} from '@/lib/threePoPricing';
 
 // Sheet names as they appear in the Excel file
 const SHEET_NAMES = {
@@ -36,6 +43,7 @@ const SHEET_NAMES = {
   ALLERGEN: 'Allergen',
   TAG: 'Tag',
   CUSTOM_TAXES: 'CustomTaxes',
+  ITEM_3PO: 'Item 3PO',
 };
 
 // Helper to safely parse boolean values from Excel
@@ -367,6 +375,40 @@ const parseCustomTaxes = (sheet: XLSX.WorkSheet): CustomTax[] => {
     .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };
 
+// Reverse of THREE_PO_TYPE_EXCEL: map the sheet's snake_case tpoType tokens
+// (and, defensively, the internal camelCase keys) back to the platform key.
+const EXCEL_TYPE_TO_KEY: Record<string, ThreePoPlatform> = (() => {
+  const m: Record<string, ThreePoPlatform> = {};
+  (Object.entries(THREE_PO_TYPE_EXCEL) as [ThreePoPlatform, string][]).forEach(([key, token]) => {
+    m[token.toLowerCase()] = key;
+    m[key.toLowerCase()] = key;
+  });
+  return m;
+})();
+
+// Parse the Item 3PO sheet into a map of itemId (as written in the sheet) →
+// serialized ThreePoPricing. There is one row per platform per item; rows are
+// grouped back into a single per-item pricing blob.
+const parseItem3PO = (sheet: XLSX.WorkSheet): Map<number, string> => {
+  const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  const byItem = new Map<number, ThreePoPricing>();
+  data.forEach((row) => {
+    const itemId = parseNumber(row['itemId']);
+    const key = EXCEL_TYPE_TO_KEY[parseString(row['tpoType']).trim().toLowerCase()];
+    if (itemId <= 0 || !key) return;
+    const pricing = byItem.get(itemId) ?? defaultThreePoPricing();
+    pricing[key] = {
+      inherit: parseBoolean(row['inheritGeneralSettings']),
+      pickupPrice: parseNumber(row['pickupPrice']),
+      deliveryPrice: parseNumber(row['deliveryPrice']),
+    };
+    byItem.set(itemId, pricing);
+  });
+  const out = new Map<number, string>();
+  byItem.forEach((pricing, id) => out.set(id, serializeThreePoPricing(pricing)));
+  return out;
+};
+
 /**
  * Parse an Excel file and return structured menu data
  */
@@ -460,6 +502,31 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         result.modifierModifierOptions = result.modifierModifierOptions.map((j) =>
           j.maxLimit ? j : { ...j, maxLimit: optionPrice.get(j.modifierOptionId) ?? 0 }
         );
+
+        // Item 3PO: attach per-platform pricing back onto items. The exporter
+        // keys these rows by the POS setting-id, while the app keys items by
+        // their raw id — so rebuild id → setting-id from the Item sheet and match
+        // through it. External files that key 3PO by the raw item id (no
+        // settingId column) fall through to a direct id match.
+        const threePoSheet = getSheet(SHEET_NAMES.ITEM_3PO);
+        if (threePoSheet) {
+          const pricingByKey = parseItem3PO(threePoSheet);
+          if (pricingByKey.size) {
+            const itemToSetting = new Map<number, number>();
+            if (itemSheet) {
+              XLSX.utils.sheet_to_json<Record<string, unknown>>(itemSheet).forEach((row) => {
+                const id = parseNumber(row['id']);
+                const settingId = parseNumber(row['settingId']);
+                if (id > 0 && settingId > 0) itemToSetting.set(id, settingId);
+              });
+            }
+            result.items = result.items.map((item) => {
+              const pricing =
+                pricingByKey.get(itemToSetting.get(item.id) ?? -1) ?? pricingByKey.get(item.id);
+              return pricing ? { ...item, threePoPricing: pricing } : item;
+            });
+          }
+        }
 
         console.log('Imported:', {
           menus: result.menus.length,
