@@ -4,8 +4,7 @@
 // Per platform (DoorDash / Uber Eats / GrubHub) an operator can either inherit
 // pricing from the item's base price, or set independent fixed Pickup and
 // Delivery prices. Stored on Item as a JSON-encoded string (`threePoPricing`).
-// Store/UI only for now — not yet wired into Excel export/import (pending the
-// finalized "Item 3PO" sheet columns).
+// Excel export maps this to the "Item 3PO" sheet (see excelExporter).
 
 export const THREE_PO_PLATFORMS = [
   { key: 'doordash', label: 'DoorDash' },
@@ -14,6 +13,14 @@ export const THREE_PO_PLATFORMS = [
 ] as const;
 
 export type ThreePoPlatform = (typeof THREE_PO_PLATFORMS)[number]['key'];
+
+// Excel `tpoType` column uses snake_case platform ids, distinct from the
+// internal camelCase keys used elsewhere in code/UI.
+export const THREE_PO_TYPE_EXCEL: Record<ThreePoPlatform, string> = {
+  doordash: 'doordash',
+  uberEats: 'uber_eats',
+  grubHub: 'grubhub',
+};
 
 export interface ThreePoPlatformPricing {
   /** When true, the platform inherits the item's base price (no adjustment). */

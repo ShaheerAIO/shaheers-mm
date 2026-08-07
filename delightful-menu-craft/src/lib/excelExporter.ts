@@ -13,6 +13,7 @@ import type {
   CustomTax,
 } from '@/types/menu';
 import { serializeVisibility } from '@/lib/visibility';
+import { THREE_PO_PLATFORMS, THREE_PO_TYPE_EXCEL, parseThreePoPricing } from '@/lib/threePoPricing';
 
 // Sheet names — must match the POS import schema exactly (order included).
 const SHEET_NAMES = {
@@ -322,6 +323,28 @@ const buildTagRows = (tags: Tag[]) =>
     isDefault: t.isSystem === true,
   }));
 
+// One row per platform per item. When inherit=true, pickupPrice/deliveryPrice
+// stay empty since the platform uses the general settings, not an override.
+const buildItem3PORows = (items: Item[], sid: Map<number, number>) => {
+  const rows: { id: number; itemId: number; pickupPrice?: number; deliveryPrice?: number; inheritGeneralSettings: boolean; tpoType: string }[] = [];
+  let id = 1;
+  for (const item of items) {
+    const pricing = parseThreePoPricing(item.threePoPricing);
+    for (const { key } of THREE_PO_PLATFORMS) {
+      const p = pricing[key];
+      rows.push({
+        id: id++,
+        itemId: sid.get(item.id) ?? item.id,
+        pickupPrice: p.inherit ? undefined : p.pickupPrice,
+        deliveryPrice: p.inherit ? undefined : p.deliveryPrice,
+        inheritGeneralSettings: p.inherit,
+        tpoType: THREE_PO_TYPE_EXCEL[key],
+      });
+    }
+  }
+  return rows;
+};
+
 // The POS importer requires sortOrder to be unique within its group (e.g. per
 // itemId in Item Modifiers, per modifierId in Modifier ModifierOptions).
 // Renumber 1..n within each group, preserving the existing relative order.
@@ -395,7 +418,7 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   // CustomTax object keys (id/name/rate) already match the columns.
   append((data.customTaxes ?? []) as CustomTax[], HEADERS.CUSTOM_TAXES, SHEET_NAMES.CUSTOM_TAXES);
   append(settings, HEADERS.SETTING, SHEET_NAMES.SETTING);
-  append([], HEADERS.ITEM_3PO, SHEET_NAMES.ITEM_3PO);
+  append(buildItem3PORows(data.items, itemSid), HEADERS.ITEM_3PO, SHEET_NAMES.ITEM_3PO);
 
   return workbook;
 };
