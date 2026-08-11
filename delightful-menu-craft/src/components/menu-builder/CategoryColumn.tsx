@@ -21,6 +21,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface CategoryColumnProps {
   category: Category;
@@ -69,6 +76,11 @@ export function CategoryColumn({
   // disabled while this is anything but 'manual'. Persisted as a user preference.
   const sortMode = useUserPreferencesStore((s) => s.categoryItemSort);
   const setSortMode = useUserPreferencesStore((s) => s.setCategoryItemSort);
+  // View-only sort for the subcategory nav rail. Same "cosmetic only" contract
+  // as the item sort above — never writes to the menu store. Persisted as a
+  // user preference and applied at every depth of the subcategory tree.
+  const subcatSortMode = useUserPreferencesStore((s) => s.subcategorySort);
+  const setSubcatSortMode = useUserPreferencesStore((s) => s.setSubcategorySort);
   const [showAddItemsModal, setShowAddItemsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<{ itemId: number; categoryItemId: number; categoryId: number } | null>(null);
@@ -86,11 +98,21 @@ export function CategoryColumn({
   // Editable draft for the numeric position control in the header.
   const [positionDraft, setPositionDraft] = useState('');
 
-  // Direct children of a given category id, sorted.
-  const childrenOf = (parentId: number): Category[] =>
-    categories
+  // Direct children of a given category id. Base order is always sortOrder;
+  // the view-only subcategory sort preference (name A-Z / Z-A) is layered on
+  // top purely for display, matching the item list's cosmetic sort.
+  const childrenOf = (parentId: number): Category[] => {
+    const kids = categories
       .filter((c) => c.parentCategoryId === parentId)
       .sort((a, b) => a.sortOrder - b.sortOrder);
+    if (subcatSortMode === 'name-asc') {
+      return [...kids].sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+    }
+    if (subcatSortMode === 'name-desc') {
+      return [...kids].sort((a, b) => b.categoryName.localeCompare(a.categoryName));
+    }
+    return kids;
+  };
 
   // The chain of category ids from the root's direct children down to the
   // currently-active subcategory (cycle-safe). Empty when nothing is drilled.
@@ -683,6 +705,8 @@ export function CategoryColumn({
     );
   }
 
+  const rootSubcats = childrenOf(category.id);
+
   return (
     <>
       <div
@@ -795,6 +819,38 @@ export function CategoryColumn({
         <div className="flex flex-1 min-h-0">
           {/* Subcategory nav rail */}
           <div className="w-36 flex-shrink-0 flex flex-col border-r border-[hsl(var(--panel-border))] bg-[hsl(var(--panel-bg))]/40">
+            {rootSubcats.length > 0 && (
+              <div className="flex items-center justify-between px-2 pt-2">
+                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                  Subcategories
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'p-0.5 rounded transition-colors',
+                        subcatSortMode === 'manual' ? 'text-muted-foreground/70 hover:text-foreground' : 'text-primary'
+                      )}
+                      title="Sort subcategories view only — doesn't change the saved order"
+                      aria-label="Sort subcategories (view only)"
+                    >
+                      <ArrowUpDown className="w-3 h-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[8rem]">
+                    <DropdownMenuRadioGroup
+                      value={subcatSortMode}
+                      onValueChange={(v) => setSubcatSortMode(v as typeof subcatSortMode)}
+                    >
+                      <DropdownMenuRadioItem value="manual" className="text-xs">Manual</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="name-asc" className="text-xs">Name A–Z</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="name-desc" className="text-xs">Name Z–A</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto scrollbar-thin px-2 py-2 space-y-0.5">
               <button
                 type="button"
@@ -806,7 +862,7 @@ export function CategoryColumn({
               >
                 All items
               </button>
-              {childrenOf(category.id).map((subcat) => renderSubcatNode(subcat, 0))}
+              {rootSubcats.map((subcat) => renderSubcatNode(subcat, 0))}
             </div>
             {!isReadOnly && (
               <div className="px-2 pb-2 pt-1 border-t border-[hsl(var(--panel-border))]">
