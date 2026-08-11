@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Breadcrumb subcategories — in the builder</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --shell:#101014; --panel:#16161a; --panel-2:#1e1e24; --panel-3:#24242b;
+    --border:#2a2a31; --border-2:#33333c; --text:#e8e8ea; --muted:#9a9aa3; --faint:#6c6c75;
+    --accent:#FCA98F; --accent-dim:rgba(252,169,143,0.14); --accent-brd:rgba(252,169,143,0.5);
+    --blue:#85C6E9; --green:#D7EB9E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:28px 22px 70px;}
+  .head{max-width:1160px;margin:0 auto 18px;}
+  h1{font-size:21px;margin:0 0 6px;}
+  .sub{color:var(--muted);max-width:820px;font-size:13.5px;}
+  .sub code{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:12px;}
+
+  /* ---- builder shell ---- */
+  .app{max-width:1160px;margin:0 auto;height:560px;display:flex;
+    background:var(--shell);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(0,0,0,.45);}
+  .rail{width:56px;flex:none;background:#0d0d10;border-right:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;}
+  .rail .ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    color:var(--faint);font-size:17px;cursor:pointer;}
+  .rail .ico.on{background:var(--accent-dim);color:var(--accent);}
+  .rail .sp{flex:1;}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .topbar{height:52px;flex:none;border-bottom:1px solid var(--border);display:flex;align-items:center;
+    gap:6px;padding:0 14px;background:var(--shell);}
+  .mtab{padding:6px 13px;border-radius:9px;font-size:13px;color:var(--muted);cursor:pointer;
+    border:1px solid transparent;white-space:nowrap;}
+  .mtab.on{background:var(--panel-2);color:var(--text);border-color:var(--border-2);}
+  .mtab .dot{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:7px;vertical-align:middle;}
+  .topbar .sp{flex:1;}
+  .btn{font-size:12.5px;padding:6px 11px;border-radius:8px;border:1px solid var(--border-2);
+    background:var(--panel-2);color:var(--text);cursor:pointer;}
+  .btn.primary{background:var(--accent);color:#1a1a1a;border-color:var(--accent);font-weight:600;}
+
+  .cols{flex:1;display:flex;min-height:0;}
+  .col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);}
+  .col.cats{width:320px;flex:none;background:var(--panel);}
+  .col.items{flex:1;background:var(--bg);}
+  .col-h{height:46px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;
+    border-bottom:1px solid var(--border);font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+  .col-body{flex:1;overflow:auto;padding:12px;}
+
+  /* ---- breadcrumb ---- */
+  .crumbs{display:flex;align-items:center;gap:3px;flex-wrap:wrap;padding:11px 12px;margin:-12px -12px 10px;
+    border-bottom:1px solid var(--border);background:var(--panel-2);position:sticky;top:-12px;z-index:2;}
+  .crumb{cursor:pointer;color:var(--muted);padding:3px 7px;border-radius:6px;font-size:12.5px;white-space:nowrap;}
+  .crumb:hover{color:var(--text);background:var(--panel-3);}
+  .crumb.root{color:var(--faint);}
+  .crumb.here{color:var(--accent);font-weight:600;background:var(--accent-dim);}
+  .crumb-sep{color:var(--border-2);font-size:12px;}
+  .up{margin-left:auto;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 8px;border-radius:6px;border:1px solid var(--border);}
+  .up:hover{color:var(--text);}
+
+  /* rows in category column */
+  .crow{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px;
+    border:1px solid var(--border);background:var(--panel-2);margin-bottom:7px;cursor:pointer;transition:.12s;}
+  .crow:hover{border-color:var(--border-2);background:var(--panel-3);}
+  .crow.sel{border-color:var(--accent-brd);background:var(--accent-dim);}
+  .crow .swatch{width:8px;height:26px;border-radius:4px;flex:none;background:var(--accent);}
+  .crow .nm{flex:1;min-width:0;}
+  .crow .nm b{font-size:13.5px;font-weight:600;display:block;}
+  .crow .nm small{color:var(--muted);font-size:11.5px;}
+  .crow .meta{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11.5px;}
+  .crow.sel .meta{color:var(--accent);}
+  .go{font-size:15px;color:var(--faint);}
+  .crow:hover .go{color:var(--muted);}
+  .pill{font-size:10.5px;padding:2px 7px;border-radius:20px;background:var(--panel-3);color:var(--muted);border:1px solid var(--border);}
+  .pill.folder{color:var(--accent);border-color:var(--accent-brd);background:var(--accent-dim);}
+
+  .addbtn{width:100%;padding:10px;border-radius:9px;border:1px dashed var(--border-2);background:transparent;
+    color:var(--muted);cursor:pointer;font-size:12.5px;margin-top:2px;}
+  .addbtn:hover{color:var(--text);border-color:var(--accent-brd);}
+
+  /* item column */
+  .item-hint{color:var(--faint);font-size:13px;padding:34px 10px;text-align:center;}
+  .irow{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;background:var(--panel);
+    border:1px solid var(--border);margin-bottom:8px;}
+  .irow .thumb{width:34px;height:34px;border-radius:8px;background:var(--panel-3);flex:none;}
+  .irow .nm{flex:1;}
+  .irow .nm b{display:block;font-size:13.5px;}
+  .irow .nm small{color:var(--muted);font-size:11.5px;}
+  .irow .price{color:var(--text);font-variant-numeric:tabular-nums;font-weight:600;}
+  .items-title{font-size:13px;color:var(--muted);margin-bottom:12px;}
+  .items-title b{color:var(--text);}
+
+  .note{max-width:1160px;margin:20px auto 0;color:var(--muted);font-size:13px;background:var(--panel);
+    border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .note b{color:var(--text);}
+  .note ul{margin:8px 0 0;padding-left:18px;} .note li{margin:4px 0;}
+  kbd{background:var(--panel-3);border:1px solid var(--border-2);border-radius:5px;padding:1px 6px;font-size:11px;}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>Subcategories as breadcrumbs — inside the builder</h1>
+  <div class="sub">
+    The left <b>category column</b> now shows <b>one level at a time</b> with a breadcrumb trail on top.
+    Click a <span style="color:var(--accent)">folder row</span> to drill in (breadcrumb grows); click a
+    <b>leaf category</b> to load its items in the right column. Click any crumb to jump back.
+    Mirrors the real <code>parentCategoryId</code> tree.
+  </div>
+</div>
+
+<div class="app">
+  <!-- icon rail -->
+  <div class="rail">
+    <div class="ico on" title="Menu builder">▤</div>
+    <div class="ico" title="Modifiers">⊞</div>
+    <div class="ico" title="Stations">◫</div>
+    <div class="ico" title="Settings">⚙</div>
+    <div class="sp"></div>
+    <div class="ico" title="Account">◍</div>
+  </div>
+
+  <div class="main">
+    <!-- menu tabs -->
+    <div class="topbar">
+      <div class="mtab on"><span class="dot" style="background:#FCA98F"></span>Dinner</div>
+      <div class="mtab"><span class="dot" style="background:#85C6E9"></span>Lunch</div>
+      <div class="mtab"><span class="dot" style="background:#D7EB9E"></span>Kids</div>
+      <div class="sp"></div>
+      <button class="btn">Import</button>
+      <button class="btn primary">Export</button>
+    </div>
+
+    <!-- two columns -->
+    <div class="cols">
+      <div class="col cats">
+        <div class="col-h">Categories</div>
+        <div class="col-body" id="catBody"></div>
+      </div>
+      <div class="col items">
+        <div class="col-h" id="itemHead">Items</div>
+        <div class="col-body" id="itemBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>How it behaves</b>
+  <ul>
+    <li><b>Breadcrumb</b> = your path. <span style="color:var(--accent)">Dinner › Beverages › Hot Drinks</span>. Click any crumb to jump straight there.</li>
+    <li><b>Folder row</b> (has subcategories) → clicking drills in and extends the breadcrumb.</li>
+    <li><b>Leaf row</b> (has items) → clicking selects it and its items fill the right column — no more stacked chip rows.</li>
+    <li>Only ever <b>one level of categories on screen</b>, so depth never clutters the panel. <kbd>← Up</kbd> goes one level.</li>
+  </ul>
+</div>
+
+<script>
+const DATA={ id:0,name:'Dinner',children:[
+  {id:1,name:'Beverages',color:'#85C6E9',children:[
+    {id:11,name:'Hot Drinks',color:'#FCA98F',children:[
+      {id:111,name:'Coffee',color:'#FCA98F',items:[{n:'Espresso',p:'3.00',d:'Double shot'},{n:'Latte',p:'4.50',d:'Whole / oat / almond'},{n:'Cappuccino',p:'4.25',d:''}]},
+      {id:112,name:'Tea',color:'#D7EB9E',items:[{n:'Green Tea',p:'3.00',d:''},{n:'Chai Latte',p:'3.75',d:'Spiced'}]},
+    ]},
+    {id:12,name:'Cold Drinks',color:'#85C6E9',children:[
+      {id:121,name:'Sodas',color:'#85C6E9',items:[{n:'Cola',p:'2.50',d:''},{n:'Sprite',p:'2.50',d:''}]},
+      {id:122,name:'Juices',color:'#D7EB9E',items:[{n:'Orange',p:'3.50',d:'Fresh'},{n:'Apple',p:'3.50',d:''}]},
+    ]},
+  ]},
+  {id:2,name:'Food',color:'#FCA98F',children:[
+    {id:21,name:'Appetizers',color:'#FCA98F',items:[{n:'Fries',p:'4.00',d:''},{n:'Wings',p:'8.50',d:'6 pc · buffalo/BBQ'}]},
+    {id:22,name:'Mains',color:'#D7EB9E',items:[{n:'Cheeseburger',p:'11.00',d:'Add bacon +$1.50'},{n:'Margherita Pizza',p:'13.50',d:'12 inch'}]},
+  ]},
+]};
+const isFolder=n=>Array.isArray(n.children)&&n.children.length;
+const countItems=n=>isFolder(n)?n.children.reduce((a,c)=>a+countItems(c),0):(n.items?n.items.length:0);
+const countSubs=n=>isFolder(n)?n.children.length:0;
+
+let path=[1,11];          // start inside Dinner › Beverages › Hot Drinks
+let selectedLeaf=null;    // id of a selected leaf category
+
+function nodeAt(p){ let cur=DATA; p.forEach(id=>{cur=(cur.children||[]).find(n=>n.id===id)||cur;}); return cur; }
+function chainAt(p){ const chain=[DATA]; let cur=DATA; p.forEach(id=>{cur=(cur.children||[]).find(n=>n.id===id); if(cur)chain.push(cur);}); return chain; }
+
+function render(){
+  const body=document.getElementById('catBody'); body.innerHTML='';
+  const chain=chainAt(path);
+  const here=chain[chain.length-1];
+
+  // breadcrumb
+  const cr=document.createElement('div'); cr.className='crumbs';
+  chain.forEach((n,i)=>{
+    const c=document.createElement('span');
+    c.className='crumb'+(i===0?' root':'')+(i===chain.length-1?' here':'');
+    c.textContent=n.name;
+    c.onclick=()=>{ path=path.slice(0,i); selectedLeaf=null; render(); };
+    cr.appendChild(c);
+    if(i<chain.length-1){const s=document.createElement('span');s.className='crumb-sep';s.textContent='›';cr.appendChild(s);}
+  });
+  if(path.length){ const up=document.createElement('span'); up.className='up'; up.textContent='← Up';
+    up.onclick=()=>{ path=path.slice(0,-1); selectedLeaf=null; render(); }; cr.appendChild(up); }
+  body.appendChild(cr);
+
+  // children rows
+  (here.children||[]).forEach(n=>{
+    const folder=isFolder(n);
+    const row=document.createElement('div');
+    row.className='crow'+(!folder && n.id===selectedLeaf?' sel':'');
+    row.innerHTML=
+      '<span class="swatch" style="background:'+(n.color||'#FCA98F')+'"></span>'+
+      '<span class="nm"><b>'+n.name+'</b><small>'+(folder?countSubs(n)+' subcategories · '+countItems(n)+' items':(n.items.length+' items'))+'</small></span>'+
+      '<span class="meta">'+(folder?'<span class="pill folder">folder</span><span class="go">›</span>':'<span class="pill">leaf</span>')+'</span>';
+    row.onclick=()=>{ if(folder){ path=[...path,n.id]; selectedLeaf=null; } else { selectedLeaf=n.id; } render(); };
+    body.appendChild(row);
+  });
+
+  // add button (context-aware label like the real app's leaf/parent rule)
+  const add=document.createElement('button'); add.className='addbtn';
+  const hasSubs=(here.children||[]).some(isFolder) || (here.children||[]).length && isFolder((here.children||[])[0]);
+  add.textContent = (here.children||[]).length && isFolder((here.children||[])[0]) ? '+ Add subcategory' : '+ Add subcategory';
+  body.appendChild(add);
+
+  renderItems();
+}
+
+function renderItems(){
+  const head=document.getElementById('itemHead'); const body=document.getElementById('itemBody');
+  body.innerHTML='';
+  const leaf = selectedLeaf!=null ? nodeAt([...path,selectedLeaf]) : null;
+  if(!leaf || !leaf.items){
+    head.textContent='Items';
+    body.innerHTML='<div class="item-hint">Select a leaf category on the left to see its items.<br>Folder categories hold subcategories, not items.</div>';
+    return;
+  }
+  head.innerHTML='Items · <span style="text-transform:none;letter-spacing:0;color:var(--text)">'+leaf.name+'</span>';
+  const t=document.createElement('div'); t.className='items-title';
+  t.innerHTML='<b>'+leaf.items.length+'</b> items in “'+leaf.name+'”';
+  body.appendChild(t);
+  leaf.items.forEach(it=>{
+    const r=document.createElement('div'); r.className='irow';
+    r.innerHTML='<span class="thumb"></span><span class="nm"><b>'+it.n+'</b>'+(it.d?'<small>'+it.d+'</small>':'<small>&nbsp;</small>')+'</span><span class="price">$'+it.p+'</span>';
+    body.appendChild(r);
+  });
+  const add=document.createElement('button'); add.className='addbtn'; add.style.marginTop='4px'; add.textContent='+ Add item';
+  body.appendChild(add);
+}
+
+render();
+</script>
+</body>
+</html>
