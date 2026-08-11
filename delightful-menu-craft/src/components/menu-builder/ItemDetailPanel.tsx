@@ -79,6 +79,16 @@ function buildThreePoInputs(pricing: ThreePoPricing): Record<string, string> {
   return out;
 }
 
+/**
+ * Optional whole-number field (prep time, calories): an empty box means "not
+ * configured" (null → blank cell on export), which is distinct from a typed 0.
+ */
+const parseOptionalCount = (raw: string): number | null => {
+  if (raw.trim() === '') return null;
+  const n = parseInt(raw, 10);
+  return isNaN(n) ? null : Math.max(0, n);
+};
+
 interface DraftState {
   itemName: string;
   posDisplayName: string;
@@ -102,8 +112,8 @@ interface DraftState {
   noMaxLimit: boolean;
   inheritModifiersFromCategory: boolean;
   inheritVisibilityFromCategory: boolean;
-  preparationTime: number;
-  calories: number;
+  preparationTime: number | null;
+  calories: number | null;
   saleCategory: string;
   visibilityPos: boolean;
   visibilityKiosk: boolean;
@@ -2774,10 +2784,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   <span className="text-muted-foreground">Prep time (min)</span>
                   <NumberStepperInput
                     inputMode="numeric"
-                    value={draft.preparationTime}
+                    value={draft.preparationTime ?? ''}
+                    placeholder="—"
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setDraft(d => ({ ...d, preparationTime: Math.max(0, parseInt(e.target.value) || 0) }))}
-                    onStep={(delta) => setDraft(d => ({ ...d, preparationTime: Math.max(0, d.preparationTime + delta) }))}
+                    onChange={(e) => setDraft(d => ({ ...d, preparationTime: parseOptionalCount(e.target.value) }))}
+                    onStep={(delta) => setDraft(d => ({ ...d, preparationTime: Math.max(0, (d.preparationTime ?? 0) + delta) }))}
                     wrapperClassName="w-20"
                   />
                 </div>
@@ -2785,10 +2796,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   <span className="text-muted-foreground">Calories (kcal)</span>
                   <NumberStepperInput
                     inputMode="numeric"
-                    value={draft.calories}
+                    value={draft.calories ?? ''}
+                    placeholder="—"
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setDraft(d => ({ ...d, calories: Math.max(0, parseInt(e.target.value) || 0) }))}
-                    onStep={(delta) => setDraft(d => ({ ...d, calories: Math.max(0, d.calories + delta) }))}
+                    onChange={(e) => setDraft(d => ({ ...d, calories: parseOptionalCount(e.target.value) }))}
+                    onStep={(delta) => setDraft(d => ({ ...d, calories: Math.max(0, (d.calories ?? 0) + delta) }))}
                     wrapperClassName="w-20"
                     aria-label="Calories in kilocalories"
                   />
