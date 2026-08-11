@@ -16,6 +16,7 @@ import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
 import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Item } from '@/types/menu';
 import {
   THREE_PO_PLATFORMS,
@@ -329,7 +330,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const groupPickerRef = useRef<HTMLDivElement>(null);
   const [modPickerOpen, setModPickerOpen] = useState(false);
   const [modPickerSearch, setModPickerSearch] = useState('');
-  const modPickerRef = useRef<HTMLDivElement>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   // Which modifier's "sort options" dropdown is currently open (null = none)
@@ -429,17 +429,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [groupPickerOpen]);
-
-  useEffect(() => {
-    if (!modPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (modPickerRef.current && !modPickerRef.current.contains(e.target as Node)) {
-        setModPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [modPickerOpen]);
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -1651,48 +1640,51 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     </div>
                   )}
                   {availableModifiers.length > 0 && (
-                    <div className="relative" ref={modPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => { setModPickerOpen((o) => !o); setModPickerSearch(''); }}
-                        className="btn-add"
+                    <Popover
+                      open={modPickerOpen}
+                      onOpenChange={(o) => { setModPickerOpen(o); setModPickerSearch(''); }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button type="button" className="btn-add">
+                          <Plus className="w-3.5 h-3.5" />
+                          Add
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="w-56 p-0 bg-background"
+                        align="end"
+                        side="bottom"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add
-                      </button>
-                      {modPickerOpen && (
-                        <div className="absolute z-20 right-0 top-full mt-1 w-56 rounded-md border border-border bg-background shadow-md">
-                          <div className="p-1.5 border-b border-border">
-                            <input
-                              type="text"
-                              value={modPickerSearch}
-                              onChange={(e) => setModPickerSearch(e.target.value)}
-                              placeholder="Search modifiers…"
-                              className="input-field h-7 text-xs w-full"
-                              autoFocus
-                            />
-                          </div>
-                          <div className="max-h-48 overflow-y-auto">
-                            {availableModifiers
-                              .filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase()))
-                              .map((mod) => (
-                                <button
-                                  key={mod.id}
-                                  type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
-                                  onClick={() => { handleAddModifier(mod.id.toString()); setModPickerOpen(false); }}
-                                >
-                                  <span className="truncate">{mod.modifierName}</span>
-                                  <span className="text-muted-foreground/60 text-[10px] shrink-0">#{mod.id}</span>
-                                </button>
-                              ))}
-                            {availableModifiers.filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())).length === 0 && (
-                              <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
-                            )}
-                          </div>
+                        <div className="p-1.5 border-b border-border">
+                          <input
+                            type="text"
+                            value={modPickerSearch}
+                            onChange={(e) => setModPickerSearch(e.target.value)}
+                            placeholder="Search modifiers…"
+                            className="input-field h-7 text-xs w-full"
+                            autoFocus
+                          />
                         </div>
-                      )}
-                    </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {availableModifiers
+                            .filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase()))
+                            .map((mod) => (
+                              <button
+                                key={mod.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                                onClick={() => { handleAddModifier(mod.id.toString()); setModPickerOpen(false); }}
+                              >
+                                <span className="truncate">{mod.modifierName}</span>
+                                <span className="text-muted-foreground/60 text-[10px] shrink-0">#{mod.id}</span>
+                              </button>
+                            ))}
+                          {availableModifiers.filter((mod) => !modPickerSearch || mod.modifierName.toLowerCase().includes(modPickerSearch.toLowerCase())).length === 0 && (
+                            <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   )}
                   <button
                     className="btn-add"
