@@ -32,6 +32,9 @@ import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModType
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
+import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
+import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
+import { countLabel, resolveOptionPrice } from '@/lib/optionPriceScope';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -81,6 +84,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 // ---------------------------------------------------------------------------
 // Shared confirm dialog
 // ---------------------------------------------------------------------------
+/** A committed option-price edit whose blast radius the operator still has to pick. */
+interface PendingLibraryOptionPrice {
+  optionId: number;
+  optionName: string;
+  currentPrice: number;
+  nextPrice: number;
+  /** Modifiers other than the one being edited that share this option row. */
+  otherModifierCount: number;
+}
+
 type ConfirmState = {
   title: string;
   description: string;
@@ -411,9 +424,11 @@ export function ModifierLibraryContent() {
                     onClick={() => setSelectedModifier(modifier.id)}
                     className="min-w-0 flex-1 text-left cursor-pointer"
                   >
-                  <div className="font-medium text-sm flex items-center gap-1.5">
-                    {modifier.modifierName}
-                    <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
+                  <div className="font-medium text-sm flex items-center gap-1.5 min-w-0">
+                    <span className="truncate" title={modifier.modifierName}>
+                      {modifier.modifierName}
+                    </span>
+                    <span className="text-xs text-muted-foreground/60 font-normal shrink-0">#{modifier.id}</span>
                     <span className={cn("flex items-center gap-1.5 shrink-0 text-xs font-medium", getModTypeLabelClasses(modifier))}>
                       <span className={cn("w-1.5 h-1.5 rounded-full", getModTypeDotClasses(modifier))} />
                       {getModTypeLabel(modifier)}
@@ -731,10 +746,14 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     removeModifierModifierOption,
     reorderModifierOptions,
     setModifierOptionOrder,
+    setOptionPriceEverywhere,
+    forkOptionPriceForModifier,
     getNextId,
   } = useMenuStore();
-  
+
   const [optionSearch, setOptionSearch] = useState('');
+  // A committed option price waiting on the operator's choice of scope.
+  const [pendingOptionPrice, setPendingOptionPrice] = useState<PendingLibraryOptionPrice | null>(null);
   const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [nestedModSortMenuOpen, setNestedModSortMenuOpen] = useState(false);
@@ -1161,8 +1180,30 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     updateModifierModifierOption(modifier.id, optionId, { optionDisplayName: name });
   };
 
-  const handleOptionPriceChange = (optionId: number, maxLimit: number) => {
-    updateModifierModifierOption(modifier.id, optionId, { maxLimit });
+  /**
+   * Commit an option price. The POS keeps one price per option row, so when other
+   * modifiers share this option the operator has to say whether they all move or
+   * this modifier gets its own priced copy.
+   */
+  const handleOptionPriceChange = (
+    optionId: number,
+    optionName: string,
+    currentPrice: number,
+    price: number,
+  ) => {
+    if (price === currentPrice) return;
+
+    const otherModifierCount = new Set(
+      modifierModifierOptions
+        .filter((mmo) => mmo.modifierOptionId === optionId && mmo.modifierId !== modifier.id)
+        .map((mmo) => mmo.modifierId),
+    ).size;
+
+    if (otherModifierCount === 0) {
+      setOptionPriceEverywhere(optionId, price);
+      return;
+    }
+    setPendingOptionPrice({ optionId, optionName, currentPrice, nextPrice: price, otherModifierCount });
   };
 
   const handleOptionDisplayNameChange = (optionId: number, optionDisplayName: string) => {
@@ -2153,12 +2194,17 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                           ${groupPrice.toFixed(2)} · group
                         </span>
                       ) : (
-                        <PriceStepperInput
+                        <DeferredPriceInput
                           value={assignment.maxLimit}
-                          onFocus={(e) => e.target.select()}
-                          onCommit={(v) => handleOptionPriceChange(assignment.modifierOptionId, v)}
+                          onCommit={(price) => handleOptionPriceChange(
+                            assignment.modifierOptionId,
+                            assignment.option?.optionName || assignment.optionDisplayName,
+                            assignment.maxLimit,
+                            price,
+                          )}
                           prefix={<span className="text-muted-foreground text-xs">$</span>}
                           wrapperClassName="w-20"
+                          aria-label={`Price for ${assignment.option?.optionName || assignment.optionDisplayName}`}
                         />
                       )}
                       <div className="flex items-center gap-1" title="Max times a guest can select this option (0 = unlimited)">
@@ -2585,7 +2631,11 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                     }}
                     className="mt-0.5"
                   />
-                  <span className="min-w-0 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                  <span className="min-w-0 flex-1 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                  {/* Price disambiguates same-named clones (see buildForkName). */}
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    ${resolveOptionPrice(option, modifierModifierOptions).toFixed(2)}
+                  </span>
                 </label>
               ))
             )}
@@ -2614,6 +2664,41 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       />
 
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
+
+      {pendingOptionPrice && (() => {
+        const { optionId, optionName, currentPrice, nextPrice, otherModifierCount } = pendingOptionPrice;
+        const others = countLabel(otherModifierCount, 'other modifier');
+        return (
+          <OptionPriceScopeDialog
+            open
+            optionName={optionName}
+            currentPrice={currentPrice}
+            nextPrice={nextPrice}
+            sharedSummary={`${others} use this option`}
+            everywhereDescription={
+              <>
+                Every use of “{optionName}” moves to ${nextPrice.toFixed(2)}, including {others}.
+              </>
+            }
+            scopedLabel={`Only in “${modifier.modifierName}”`}
+            scopedDescription={
+              <>
+                Creates a ${nextPrice.toFixed(2)} copy of the option for this modifier. Guests
+                still see “{optionName}”; the {others} keep ${currentPrice.toFixed(2)}.
+              </>
+            }
+            onEverywhere={() => {
+              setOptionPriceEverywhere(optionId, nextPrice);
+              setPendingOptionPrice(null);
+            }}
+            onScoped={() => {
+              forkOptionPriceForModifier({ modifierId: modifier.id, optionId, price: nextPrice });
+              setPendingOptionPrice(null);
+            }}
+            onCancel={() => setPendingOptionPrice(null)}
+          />
+        );
+      })()}
     </>
   );
 }

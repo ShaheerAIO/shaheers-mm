@@ -23,6 +23,7 @@ import type {
   AiPatch,
 } from '@/types/menu';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
+import { resolveOptionPriceScope } from '@/lib/optionPriceScope';
 
 // System tags are always present in the store and cannot be deleted.
 export const SYSTEM_TAGS: Tag[] = [
@@ -158,6 +159,35 @@ interface MenuState {
   addModifierOption: (option: ModifierOption) => void;
   updateModifierOption: (id: number, updates: Partial<ModifierOption>) => void;
   deleteModifierOption: (id: number) => void;
+  /**
+   * Set an option's surcharge on every join that references it, keeping the
+   * option row in sync. The POS allows exactly one price per option row, so this
+   * is the only way to price an option without forking it.
+   */
+  setOptionPriceEverywhere: (optionId: number, price: number) => void;
+  /**
+   * Give one item its own price for (modifierId, optionId) by forking whatever is
+   * shared: the modifier when other items would be dragged along, then the option
+   * row so the new price is representable in the POS. Returns the ids the item's
+   * price now lives on (unchanged when no fork was needed).
+   */
+  forkOptionPriceForItem: (args: {
+    itemId: number;
+    modifierId: number;
+    optionId: number;
+    price: number;
+  }) => { modifierId: number; optionId: number };
+  /**
+   * Give one modifier its own price for an option, forking the option row when
+   * other modifiers share it. Every item using this modifier gets the new price —
+   * that's the point of editing a shared modifier in the library. Returns the
+   * option id the price now lives on.
+   */
+  forkOptionPriceForModifier: (args: {
+    modifierId: number;
+    optionId: number;
+    price: number;
+  }) => number;
   
   // Actions - Join Tables
   addItemModifier: (itemModifier: ItemModifier) => void;
@@ -240,6 +270,78 @@ interface MenuState {
 const getMaxId = (items: { id: number }[]): number => {
   if (items.length === 0) return 0;
   return Math.max(...items.map(item => item.id));
+};
+
+/** Library-facing names cap at 40 chars — the limit the name validators enforce. */
+const FORK_NAME_MAX = 40;
+
+/**
+ * `Base (cln-<sourceId>)` — the id of the row this was cloned from, so the
+ * original is findable at a glance. Only the base is ever trimmed: a truncated
+ * id would point at the wrong row.
+ */
+const buildForkName = (base: string, sourceId: number): string => {
+  const suffix = ` (cln-${sourceId})`;
+  const room = FORK_NAME_MAX - suffix.length;
+  if (base.length <= room) return `${base}${suffix}`;
+  return `${base.slice(0, Math.max(1, room - 1)).trimEnd()}…${suffix}`;
+};
+
+/**
+ * Price one modifier's option, forking the option row first if any other modifier
+ * shares it. The POS stores the surcharge on the option row, so two modifiers
+ * cannot disagree about a price without a second row to hold it. Only the
+ * library-facing `optionName` gets tagged — guest-facing names are copied verbatim.
+ * Pure: returns new arrays plus the option id the price ended up on.
+ */
+const priceOptionForModifier = ({
+  modifierId, optionId, price, modifierOptions, joins,
+}: {
+  modifierId: number;
+  optionId: number;
+  price: number;
+  modifierOptions: ModifierOption[];
+  joins: ModifierModifierOption[];
+}): { optionId: number; modifierOptions: ModifierOption[]; joins: ModifierModifierOption[] } => {
+  const nextOptions = [...modifierOptions];
+  const referencingModifiers = new Set(
+    joins.filter((j) => j.modifierOptionId === optionId).map((j) => j.modifierId),
+  );
+  const source = nextOptions.find((o) => o.id === optionId);
+
+  if (referencingModifiers.size > 1 && source) {
+    const forkId = getMaxId(nextOptions) + 1;
+    nextOptions.push({
+      ...source,
+      id: forkId,
+      optionName: buildForkName(source.optionName, source.id),
+      posDisplayName: source.posDisplayName || source.optionName,
+      price,
+    });
+    return {
+      optionId: forkId,
+      modifierOptions: nextOptions,
+      joins: joins.map((j) =>
+        j.modifierId === modifierId && j.modifierOptionId === optionId
+          ? { ...j, modifierOptionId: forkId, maxLimit: price }
+          : j,
+      ),
+    };
+  }
+
+  // Nothing else shared the row — price it in place, keeping the option row's own
+  // `price` in step since that's what the exporter and the POS read.
+  const idx = nextOptions.findIndex((o) => o.id === optionId);
+  if (idx !== -1) nextOptions[idx] = { ...nextOptions[idx], price };
+  return {
+    optionId,
+    modifierOptions: nextOptions,
+    joins: joins.map((j) =>
+      j.modifierId === modifierId && j.modifierOptionId === optionId
+        ? { ...j, maxLimit: price }
+        : j,
+    ),
+  };
 };
 
 /** When a category is removed, subcategories that pointed at it must go too. */
@@ -1176,7 +1278,107 @@ export const useMenuStore = create<MenuState>()(
         modifierOptions: state.modifierOptions.filter((o) => o.id !== id),
         modifierModifierOptions: state.modifierModifierOptions.filter((mmo) => mmo.modifierOptionId !== id),
       })),
-      
+
+      setOptionPriceEverywhere: (optionId, price) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          return {
+            modifierModifierOptions: state.modifierModifierOptions.map((mmo) =>
+              mmo.modifierOptionId === optionId ? { ...mmo, maxLimit: price } : mmo,
+            ),
+            // Keep the option row's own `price` in step — it's what the exporter
+            // falls back to and what the POS ultimately reads.
+            modifierOptions: state.modifierOptions.map((o) =>
+              o.id === optionId ? { ...o, price } : o,
+            ),
+          };
+        }),
+
+      forkOptionPriceForItem: ({ itemId, modifierId, optionId, price }) => {
+        const state = get();
+        if (state.isReadOnly) return { modifierId, optionId };
+
+        const scope = resolveOptionPriceScope({
+          itemId, modifierId, optionId,
+          items: state.items,
+          categories: state.categories,
+          categoryItems: state.categoryItems,
+          categoryModifiers: state.categoryModifiers,
+          itemModifiers: state.itemModifiers,
+          modifierModifierOptions: state.modifierModifierOptions,
+        });
+
+        // Only library-facing names get the clone tag; every guest-facing name is
+        // copied verbatim so the POS and the guest see no difference.
+        const modifiers = [...state.modifiers];
+        const modifierOptions = [...state.modifierOptions];
+        let joins = [...state.modifierModifierOptions];
+        let itemModifiers = state.itemModifiers;
+
+        let nextModifierId = modifierId;
+        let nextOptionId = optionId;
+
+        // 1. Fork the modifier when other items ride on the same one. Options and
+        //    nested children stay shared — only this option's price diverges.
+        if (scope.otherItemIds.length > 0) {
+          const source = state.modifiers.find((m) => m.id === modifierId);
+          if (source) {
+            nextModifierId = getMaxId(modifiers) + 1;
+            modifiers.push({
+              ...source,
+              id: nextModifierId,
+              modifierName: buildForkName(source.modifierName, source.id),
+              posDisplayName: source.posDisplayName || source.modifierName,
+            });
+            joins = [
+              ...joins,
+              ...joins
+                .filter((j) => j.modifierId === modifierId)
+                .map((j) => ({ ...j, modifierId: nextModifierId })),
+            ];
+            // Re-point this item's own attachment, keeping its sortOrder.
+            itemModifiers = itemModifiers.map((im) =>
+              im.itemId === itemId && im.modifierId === modifierId
+                ? { ...im, modifierId: nextModifierId }
+                : im,
+            );
+          }
+        }
+
+        // 2. Fork the option row when more than one modifier references it — after
+        //    step 1 the clone counts, so a forked modifier always lands here.
+        const priced = priceOptionForModifier({
+          modifierId: nextModifierId, optionId, price, modifierOptions, joins,
+        });
+        nextOptionId = priced.optionId;
+        joins = priced.joins;
+
+        set({
+          modifiers,
+          modifierOptions: priced.modifierOptions,
+          modifierModifierOptions: joins,
+          itemModifiers,
+        });
+        return { modifierId: nextModifierId, optionId: nextOptionId };
+      },
+
+      forkOptionPriceForModifier: ({ modifierId, optionId, price }) => {
+        const state = get();
+        if (state.isReadOnly) return optionId;
+
+        const priced = priceOptionForModifier({
+          modifierId, optionId, price,
+          modifierOptions: state.modifierOptions,
+          joins: state.modifierModifierOptions,
+        });
+
+        set({
+          modifierOptions: priced.modifierOptions,
+          modifierModifierOptions: priced.joins,
+        });
+        return priced.optionId;
+      },
+
       // Join Table Actions - Item Modifiers
       addItemModifier: (itemModifier) => set((state) => ({ 
         itemModifiers: [...state.itemModifiers, itemModifier] 

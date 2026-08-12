@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Modifier, ModifierOption } from '@/types/menu';
 import { formatModifierForSelect, formatModifierOptionForSelect } from '@/lib/modifierLabels';
+import { resolveOptionPrice } from '@/lib/optionPriceScope';
 import { parseBulkOptionNames } from '@/lib/bulkOptionNames';
 import { modifierSelectionCeiling } from '@/lib/posPricing';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
@@ -1497,7 +1498,11 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                     }}
                     className="mt-0.5"
                   />
-                  <span className="min-w-0 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                  <span className="min-w-0 flex-1 leading-tight">{formatModifierOptionForSelect(option)}</span>
+                  {/* Price disambiguates same-named clones (see buildForkName). */}
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    ${resolveOptionPrice(option, modifierModifierOptions).toFixed(2)}
+                  </span>
                 </label>
               ))
             )}

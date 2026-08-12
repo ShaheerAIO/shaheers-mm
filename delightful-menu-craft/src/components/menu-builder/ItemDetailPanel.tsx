@@ -49,6 +49,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { effectiveItemTaxRate } from '@/lib/tax';
+import { resolveOptionPriceScope, countLabel, type OptionPriceScope } from '@/lib/optionPriceScope';
+import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
+import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
 import { cn } from '@/lib/utils';
 
 interface ItemDetailPanelProps {
@@ -183,6 +186,17 @@ function getItemKdsNameError(value: string): string | null {
   return null;
 }
 
+/** A committed option-price edit whose blast radius the operator still has to pick. */
+interface PendingOptionPrice {
+  modifierId: number;
+  modifierName: string;
+  optionId: number;
+  optionName: string;
+  currentPrice: number;
+  nextPrice: number;
+  scope: OptionPriceScope;
+}
+
 export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const {
     updateItem,
@@ -212,6 +226,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     reorderModifierOptions,
     setModifierOptionOrder,
     setItemModifierOrder,
+    setOptionPriceEverywhere,
+    forkOptionPriceForItem,
     taxRate,
     customTaxes,
     setActiveTab,
@@ -328,6 +344,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [showAllergenInput, setShowAllergenInput] = useState(false);
   const [pendingDeleteAllergenId, setPendingDeleteAllergenId] = useState<number | null>(null);
   const [newStationName, setNewStationName] = useState('');
+  // A committed price waiting on the operator's choice of scope.
+  const [pendingOptionPrice, setPendingOptionPrice] = useState<PendingOptionPrice | null>(null);
   const [optionDragState, setOptionDragState] = useState<{ modifierId: number; index: number } | null>(null);
   const [optionDragOverState, setOptionDragOverState] = useState<{ modifierId: number; index: number } | null>(null);
   const [modDragId, setModDragId] = useState<number | null>(null);
@@ -859,6 +877,83 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     // until the addition is committed on Save.
     setItemModifierOrder(item.id, sortedIds.filter((id) => attachedModifierIds.includes(id)));
     setSortMenuOpen(false);
+  };
+
+  /**
+   * Commit an option-price edit. A modifier option carries a single price in the
+   * POS, so an edit that would also move other modifiers or items has to be
+   * resolved explicitly — apply it everywhere, or fork the shared rows so this
+   * item gets its own priced copy.
+   */
+  const handleCommitOptionPrice = (
+    modifier: { id: number; modifierName: string },
+    opt: {
+      modifierOptionId: number;
+      maxLimit: number;
+      optionDisplayName: string;
+      option?: { optionName: string };
+    },
+    nextPrice: number,
+  ) => {
+    const currentPrice = opt.maxLimit > 0 ? opt.maxLimit : 0;
+    if (nextPrice === currentPrice) return;
+
+    const scope = resolveOptionPriceScope({
+      itemId: item.id,
+      modifierId: modifier.id,
+      optionId: opt.modifierOptionId,
+      items,
+      categories,
+      categoryItems,
+      categoryModifiers,
+      itemModifiers,
+      modifierModifierOptions,
+    });
+
+    // Nothing else references the option row — no ambiguity to resolve.
+    if (!scope.isShared) {
+      setOptionPriceEverywhere(opt.modifierOptionId, nextPrice);
+      return;
+    }
+
+    setPendingOptionPrice({
+      modifierId: modifier.id,
+      modifierName: modifier.modifierName,
+      optionId: opt.modifierOptionId,
+      optionName: opt.option?.optionName || opt.optionDisplayName,
+      currentPrice,
+      nextPrice,
+      scope,
+    });
+  };
+
+  const applyPendingPriceEverywhere = () => {
+    if (!pendingOptionPrice) return;
+    setOptionPriceEverywhere(pendingOptionPrice.optionId, pendingOptionPrice.nextPrice);
+    setPendingOptionPrice(null);
+  };
+
+  const applyPendingPriceForItem = () => {
+    if (!pendingOptionPrice) return;
+    const { modifierId, optionId, nextPrice } = pendingOptionPrice;
+    const forked = forkOptionPriceForItem({
+      itemId: item.id,
+      modifierId,
+      optionId,
+      price: nextPrice,
+    });
+    // A forked modifier replaces the original for this item: keep its slot in the
+    // display order, and swap it into the pending set when the attachment hasn't
+    // been saved yet (the store can only re-point rows that already exist).
+    if (forked.modifierId !== modifierId) {
+      setModifierOrder((prev) => prev.map((id) => (id === modifierId ? forked.modifierId : id)));
+      setPendingModifierIds((prev) =>
+        prev.includes(modifierId)
+          ? prev.map((id) => (id === modifierId ? forked.modifierId : id))
+          : prev,
+      );
+    }
+    setPendingOptionPrice(null);
   };
 
   /** (Re)sort one modifier's flat options by name or price and persist the new sortOrder. */
@@ -1752,17 +1847,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                         getModTypeBarClasses(modifier),
                       )}
                     >
-                      <div className="flex items-center justify-between w-full pr-2">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between w-full pr-2 gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           {isDraggable && (
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0 cursor-grab active:cursor-grabbing" />
                           )}
-                          <span className="flex items-center gap-1.5">
-                            {modifier.modifierName}
-                            <span className="text-xs text-muted-foreground/60 font-normal">#{modifier.id}</span>
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate" title={modifier.modifierName}>
+                              {modifier.modifierName}
+                            </span>
+                            <span className="text-xs text-muted-foreground/60 font-normal shrink-0">#{modifier.id}</span>
                           </span>
                           {isPending && (
-                            <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">
+                            <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded shrink-0">
                               New
                             </span>
                           )}
@@ -1875,29 +1972,63 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                           >
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 cursor-grab active:cursor-grabbing shrink-0" />
                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span>{opt.option?.optionName || opt.optionDisplayName}</span>
+                              <span className="truncate">{opt.option?.optionName || opt.optionDisplayName}</span>
                               {opt.isDefaultSelected && (
-                                <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded shrink-0">
                                   Default
                                 </span>
                               )}
                             </div>
-                            <span className="text-muted-foreground shrink-0">
-                              {modifier.isSizeModifier ? (
-                                <>
-                                  ${(opt.maxLimit > 0 ? opt.maxLimit : 0).toFixed(2)}
-                                  {effectiveTaxRate > 0 && (
-                                    <span className="ml-1 text-muted-foreground/70">
-                                      (${((opt.maxLimit > 0 ? opt.maxLimit : 0) * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
+                            {(() => {
+                              const priceType = modifier.modifierOptionPriceType ?? 'NoCharge';
+                              const committed = opt.maxLimit > 0 ? opt.maxLimit : 0;
+                              // NoCharge pins every option to 0 and Group prices them
+                              // as a set, so neither is editable per option here.
+                              if (priceType === 'NoCharge') {
+                                return (
+                                  <span className="text-xs text-muted-foreground italic shrink-0">Free</span>
+                                );
+                              }
+                              if (priceType === 'Group') {
+                                return (
+                                  <span
+                                    className="text-xs text-muted-foreground shrink-0"
+                                    title="Set by the modifier's group price"
+                                  >
+                                    ${committed.toFixed(2)} · group
+                                  </span>
+                                );
+                              }
+                              return (
+                                <div
+                                  className="flex items-center gap-1 shrink-0"
+                                  // The row itself is draggable, so a press inside
+                                  // the input would start a reorder drag instead of
+                                  // placing the caret. Cancel the native drag and
+                                  // keep it from reaching the row's handler.
+                                  draggable={false}
+                                  onDragStart={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                >
+                                  <DeferredPriceInput
+                                    value={committed}
+                                    onCommit={(price) => handleCommitOptionPrice(modifier, opt, price)}
+                                    placeholder="0.00"
+                                    prefix={<span className="text-muted-foreground text-xs">$</span>}
+                                    wrapperClassName="w-20 h-7"
+                                    className="text-xs"
+                                    aria-label={`Price for ${opt.option?.optionName || opt.optionDisplayName}`}
+                                  />
+                                  {modifier.isSizeModifier && effectiveTaxRate > 0 && (
+                                    <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
+                                      (${(committed * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
                                     </span>
                                   )}
-                                </>
-                              ) : opt.maxLimit > 0 ? (
-                                `+$${opt.maxLimit.toFixed(2)}`
-                              ) : (
-                                '$0.00'
-                              )}
-                            </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))}
                         {/* Nested modifiers */}
@@ -2854,6 +2985,64 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           updateItem(item.id, patch);
         }}
       />
+
+      {pendingOptionPrice && (() => {
+        const { optionName, modifierName, currentPrice, nextPrice, scope } = pendingOptionPrice;
+        const sharedBits: string[] = [];
+        if (scope.otherModifierIds.length > 0) {
+          sharedBits.push(
+            `${countLabel(scope.otherModifierIds.length, 'other modifier')} use this option`,
+          );
+        }
+        if (scope.otherItemIds.length > 0) {
+          sharedBits.push(
+            `“${modifierName}” is on ${countLabel(scope.otherItemIds.length, 'other item')}`,
+          );
+        }
+        const forksModifier = scope.otherItemIds.length > 0;
+        // Inheritance only blocks the item-only path when the modifier itself has
+        // to be forked — re-pointing the item's own attachment would leave the
+        // inherited copy, at the old price, still applying to it.
+        const blockedByInheritance = scope.alsoInheritedByItem && forksModifier;
+        return (
+          <OptionPriceScopeDialog
+            open
+            optionName={optionName}
+            currentPrice={currentPrice}
+            nextPrice={nextPrice}
+            sharedSummary={sharedBits.join(', and ') || 'this option is used elsewhere'}
+            everywhereDescription={
+              <>
+                Every use of “{optionName}” moves to ${nextPrice.toFixed(2)}
+                {forksModifier
+                  ? `, including ${countLabel(scope.otherItemIds.length, 'other item')}`
+                  : ''}
+                .
+              </>
+            }
+            scopedLabel={`Only for “${item.itemName}”`}
+            scopedDescription={
+              blockedByInheritance ? (
+                <>
+                  Not available — “{modifierName}” also reaches this item through its
+                  category, so the price has to change at the category level, or
+                  inheritance has to be turned off first.
+                </>
+              ) : (
+                <>
+                  Creates a ${nextPrice.toFixed(2)} copy of the option
+                  {forksModifier ? ` and a copy of “${modifierName}” for this item` : ''}. Guests
+                  still see “{optionName}”; everything else keeps ${currentPrice.toFixed(2)}.
+                </>
+              )
+            }
+            scopedDisabled={blockedByInheritance}
+            onEverywhere={applyPendingPriceEverywhere}
+            onScoped={applyPendingPriceForItem}
+            onCancel={() => setPendingOptionPrice(null)}
+          />
+        );
+      })()}
 
       {/* Save Confirmation Notification */}
       {showSaveNotification && (
