@@ -188,7 +188,7 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     allergenIds: parseString(row['allergenIds']),
     inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
     addonIds: parseString(row['addonIds']),
-    isSpecialRequest: parseBoolean(row['isSpecialRequest']),
+    isSpecialRequest: row['isSpecialRequest'] !== undefined ? parseBoolean(row['isSpecialRequest']) : true,
     doordashPrice: parseNumber(row['doordashPrice']),
     uberEatsPrice: parseNumber(row['uberEatsPrice']),
     grubHubPrice: parseNumber(row['grubHubPrice']),
