@@ -23,6 +23,18 @@ const num = (v: unknown): number => {
   return 0;
 };
 
+// Scraped payloads leave prep time / calories null when the store doesn't
+// publish them — keep that as "not configured" rather than collapsing it to 0.
+const optNum = (v: unknown): number | null => {
+  if (typeof v === 'number') return isNaN(v) ? null : v;
+  if (typeof v === 'string') {
+    if (v.trim() === '') return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+};
+
 const bool = (v: unknown, defaultValue = false): boolean => {
   if (typeof v === 'boolean') return v;
   if (v === 1 || v === '1' || v === 'true') return true;
@@ -100,8 +112,8 @@ export function mapScraperToExcelData(data: ScraperMenuData): ExcelMenuData {
     maxLimit: num(i.maxLimit) || 1,
     noMaxLimit: bool(i.noMaxLimit, true),
     stationIds: str(i.stationIds),
-    preparationTime: num(i.preparationTime),
-    calories: num(i.calories),
+    preparationTime: optNum(i.preparationTime),
+    calories: optNum(i.calories),
     tagIds: str(i.tagIds),
     inheritTagsFromCategory: bool(i.inheritTagsFromCategory, false),
     saleCategory: str(i.saleCategory) || 'Food Sales',

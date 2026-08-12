@@ -80,8 +80,10 @@ export interface Item {
   maxLimit: number;
   noMaxLimit: boolean;
   stationIds: string; // comma-separated IDs
-  preparationTime: number;
-  calories: number;
+  // null = never configured → exported as a blank cell. 0 means an explicitly
+  // entered zero, which the POS treats as a real value.
+  preparationTime: number | null;
+  calories: number | null;
   tagIds: string; // comma-separated IDs
   inheritTagsFromCategory: boolean;
   saleCategory: string;

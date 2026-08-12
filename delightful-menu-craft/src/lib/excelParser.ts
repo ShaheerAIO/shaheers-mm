@@ -66,6 +66,18 @@ const parseNumber = (value: unknown): number => {
   return 0;
 };
 
+// Like parseNumber, but keeps "not configured" distinct from an explicit 0:
+// blank/missing cells become null so they export back out as blank cells.
+const parseOptionalNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') return isNaN(value) ? null : value;
+  if (typeof value === 'string') {
+    if (value.trim() === '') return null;
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
 // Helper to safely parse string values
 const parseString = (value: unknown): string => {
   if (value === null || value === undefined) return '';
@@ -168,8 +180,8 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
       .map((t) => t.trim())
       .filter((t) => { const n = parseInt(t, 10); return !isNaN(n) && n > 0 && String(n) === t; })
       .join(','),
-    preparationTime: parseNumber(row['preparationTime']),
-    calories: parseNumber(row['calories']),
+    preparationTime: parseOptionalNumber(row['preparationTime']),
+    calories: parseOptionalNumber(row['calories']),
     tagIds: parseString(row['tagIds']),
     inheritTagsFromCategory: parseBoolean(row['inheritTagsFromCategory']),
     saleCategory: parseString(row['saleCategory']),
@@ -274,8 +286,13 @@ const parseModifiers = (sheet: XLSX.WorkSheet): Modifier[] => {
     addNested: parseBoolean(row['addNested']),
     modifierOptionPriceType: parseString(row['modifierOptionPriceType']),
     isOptional: parseString(row['isOptional']),
-    canGuestSelectMoreModifiers: parseBoolean(row['canGuestSelectMoreModifiers']),
-    multiSelect: parseBoolean(row['multiSelect']),
+    // The POS columns are the reverse of this app's fields: the POS
+    // `canGuestSelectMoreModifiers` means "guest can pick more than one OPTION"
+    // (this app's multiSelect), and the POS `multiSelect` means "guest can pick
+    // the SAME option more than once" (this app's canGuestSelectMoreModifiers).
+    // Swap on the way in; the exporter swaps back on the way out.
+    multiSelect: parseBoolean(row['canGuestSelectMoreModifiers']),
+    canGuestSelectMoreModifiers: parseBoolean(row['multiSelect']),
     limitIndividualModifierSelection: parseBoolean(row['limitIndividualModifierSelection']),
     minSelector: parseNumber(row['minSelector']),
     maxSelector: parseNumber(row['maxSelector']),

@@ -245,8 +245,15 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       // NoCharge regardless of the type stored on the parent.
       modifierOptionPriceType: m.addNested ? 'NoCharge' : m.modifierOptionPriceType,
       isOptional, // POS expects a boolean
-      // POS rule: canGuestSelectMoreModifiers cannot be TRUE when addNested is TRUE.
-      canGuestSelectMoreModifiers: m.canGuestSelectMoreModifiers && !m.addNested, multiSelect: m.multiSelect,
+      // The POS columns are the reverse of this app's fields: the POS
+      // `canGuestSelectMoreModifiers` means "guest can pick more than one OPTION"
+      // (this app's multiSelect), and the POS `multiSelect` means "guest can pick
+      // the SAME option more than once" (this app's canGuestSelectMoreModifiers).
+      // Real POS exports confirm it: a 29-max "Topping Options" carries
+      // canGuestSelectMoreModifiers TRUE / multiSelect FALSE.
+      // POS rule: neither flag may be TRUE when addNested is TRUE.
+      canGuestSelectMoreModifiers: m.multiSelect && !m.addNested,
+      multiSelect: m.canGuestSelectMoreModifiers && !m.addNested,
       limitIndividualModifierSelection: m.limitIndividualModifierSelection,
       // POS format: when No Max Limit is on, min/max are 1/1 and noMaxSelection carries the "unlimited" meaning.
       // POS rule: a modifier's max selection must be >= 1 — the POS silently drops one exported with max 0.
