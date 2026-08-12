@@ -335,7 +335,7 @@ export function CategoryColumn({
       allergenIds: '',
       inheritModifiersFromCategory: true,
       addonIds: '',
-      isSpecialRequest: false,
+      isSpecialRequest: true,
       doordashPrice: 0,
       uberEatsPrice: 0,
       grubHubPrice: 0,

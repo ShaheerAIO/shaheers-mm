@@ -361,7 +361,7 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 19;
+export const STORE_VERSION = 20;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
@@ -747,6 +747,15 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     state.items = backfillChannels(state.items);
     state.modifiers = backfillChannels(state.modifiers);
     state.modifierOptions = backfillChannels(state.modifierOptions);
+  }
+
+  if (fromVersion < 20) {
+    // isSpecialRequest (the POS "Special Instructions" checkbox) was created as
+    // false with no way to turn it on, so every existing item exported with the
+    // box unchecked. The POS default is on — force it.
+    if (Array.isArray(state.items)) {
+      state.items = (state.items as Record<string, unknown>[]).map((i) => ({ ...i, isSpecialRequest: true }));
+    }
   }
 
   return persisted as MenuState;

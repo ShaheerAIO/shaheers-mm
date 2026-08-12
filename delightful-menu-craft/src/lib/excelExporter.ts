@@ -175,7 +175,9 @@ const buildItemRows = (items: Item[], sid: Map<number, number>) =>
     // saleCategory is required by the POS importer; default blanks to 'Food Sales'.
     inheritTagsFromCategory: i.inheritTagsFromCategory, saleCategory: (i.saleCategory || '').trim() || 'Food Sales',
     allergenIds: i.allergenIds, inheritModifiersFromCategory: i.inheritModifiersFromCategory,
-    addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest,
+    // Special Instructions is on unless the operator turned it off; a blank cell
+    // would fail POS validation.
+    addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest ?? true,
     // 3PO prices: blank (null) when unset, matching real POS files.
     doordashPrice: i.doordashPrice || '', uberEatsPrice: i.uberEatsPrice || '', grubHubPrice: i.grubHubPrice || '',
     // customTaxId: undefined when standard rate → absent cell (createSheet drops null/undefined).
