@@ -355,7 +355,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [modifierOrder, setModifierOrder] = useState<number[]>([]);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [groupPickerSearch, setGroupPickerSearch] = useState('');
-  const groupPickerRef = useRef<HTMLDivElement>(null);
   const [modPickerOpen, setModPickerOpen] = useState(false);
   const [modPickerSearch, setModPickerSearch] = useState('');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -446,17 +445,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   useEffect(() => {
     setItemNameDrivesPosKds(namesInitiallyLinked(item));
   }, [item.id, item.itemName, item.posDisplayName, item.kdsName]);
-
-  useEffect(() => {
-    if (!groupPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (groupPickerRef.current && !groupPickerRef.current.contains(e.target as Node)) {
-        setGroupPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [groupPickerOpen]);
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -786,6 +774,18 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     return modifiers.filter(m => !allAttachedModifierIds.includes(m.id));
   }, [modifiers, allAttachedModifierIds]);
 
+  // One trimmed predicate for the group picker, matching either name a group is
+  // shown by (the library lists groups as posDisplayName || groupName).
+  const filteredModifierGroups = useMemo(() => {
+    const q = groupPickerSearch.trim().toLowerCase();
+    if (!q) return modifierGroups;
+    return modifierGroups.filter(
+      (g) =>
+        g.groupName.toLowerCase().includes(q) ||
+        g.posDisplayName.toLowerCase().includes(q),
+    );
+  }, [modifierGroups, groupPickerSearch]);
+
   const inheritedCategoryModifiers = useMemo(() => {
     if (!item.inheritModifiersFromCategory) return [];
     const catEntry = categoryItems.find((ci) => ci.itemId === item.id);
@@ -843,6 +843,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   };
 
   const handleApplyGroup = (groupId: number) => {
+    // Close first, so picking a group with no modifiers still dismisses the popup
+    // instead of looking like a dead click.
+    setGroupPickerOpen(false);
+    setGroupPickerSearch('');
     const group = modifierGroups.find((g) => g.id === groupId);
     if (!group?.modifierIds) return;
     const idsToAdd = group.modifierIds
@@ -851,8 +855,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       .filter((id) => !isNaN(id) && id > 0 && !allAttachedModifierIds.includes(id));
     setPendingModifierIds((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
     setModifierOrder((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
-    setGroupPickerOpen(false);
-    setGroupPickerSearch('');
   };
 
   const handleRemoveModifier = (modifierId: number) => {
@@ -1698,51 +1700,57 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   )}
                   {/* Apply modifier group picker */}
                   {modifierGroups.length > 0 && (
-                    <div className="relative" ref={groupPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => { setGroupPickerOpen((o) => !o); setGroupPickerSearch(''); }}
-                        className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-muted/50 transition-colors"
-                        title="Apply modifier group"
+                    <Popover
+                      open={groupPickerOpen}
+                      onOpenChange={(o) => { setGroupPickerOpen(o); setGroupPickerSearch(''); }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-border hover:bg-muted/50 transition-colors"
+                          title="Apply modifier group"
+                        >
+                          <Layers className="w-3 h-3" />
+                          Group
+                        </button>
+                      </PopoverTrigger>
+                      {/* Portaled: an absolutely-positioned dropdown here gets clipped
+                          by AccordionContent's overflow-hidden (see commit 179183c). */}
+                      <PopoverContent
+                        className="w-56 p-0 bg-background"
+                        align="end"
+                        side="bottom"
                       >
-                        <Layers className="w-3 h-3" />
-                        Group
-                      </button>
-                      {groupPickerOpen && (
-                        <div className="absolute z-20 right-0 top-full mt-1 w-52 rounded-md border border-border bg-background shadow-md">
-                          <div className="p-1.5 border-b border-border">
-                            <input
-                              type="text"
-                              value={groupPickerSearch}
-                              onChange={(e) => setGroupPickerSearch(e.target.value)}
-                              placeholder="Search groups…"
-                              className="input-field h-7 text-xs w-full"
-                              autoFocus
-                            />
-                          </div>
-                          <div className="max-h-48 overflow-y-auto">
-                            {modifierGroups
-                              .filter((g) => !groupPickerSearch || g.groupName.toLowerCase().includes(groupPickerSearch.toLowerCase()))
-                              .map((g) => (
-                                <button
-                                  key={g.id}
-                                  type="button"
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
-                                  onClick={() => handleApplyGroup(g.id)}
-                                >
-                                  <span>{g.groupName}</span>
-                                  <span className="text-muted-foreground/60 text-[10px]">
-                                    {g.modifierIds ? g.modifierIds.split(',').filter(Boolean).length : 0} mods
-                                  </span>
-                                </button>
-                              ))}
-                            {modifierGroups.filter((g) => !groupPickerSearch || g.groupName.toLowerCase().includes(groupPickerSearch.toLowerCase())).length === 0 && (
-                              <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
-                            )}
-                          </div>
+                        <div className="p-1.5 border-b border-border">
+                          <input
+                            type="text"
+                            value={groupPickerSearch}
+                            onChange={(e) => setGroupPickerSearch(e.target.value)}
+                            placeholder="Search groups…"
+                            className="input-field h-7 text-xs w-full"
+                            autoFocus
+                          />
                         </div>
-                      )}
-                    </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {filteredModifierGroups.map((g) => (
+                            <button
+                              key={g.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between gap-2"
+                              onClick={() => handleApplyGroup(g.id)}
+                            >
+                              <span className="truncate">{g.posDisplayName || g.groupName}</span>
+                              <span className="text-muted-foreground/60 text-[10px] shrink-0">
+                                {g.modifierIds ? g.modifierIds.split(',').filter(Boolean).length : 0} mods
+                              </span>
+                            </button>
+                          ))}
+                          {filteredModifierGroups.length === 0 && (
+                            <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   )}
                   {availableModifiers.length > 0 && (
                     <Popover
