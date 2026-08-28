@@ -841,9 +841,9 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
             <textarea
               value={bulkCreateText}
               onChange={(e) => setBulkCreateText(e.target.value)}
-              rows={2}
+              rows={6}
               placeholder={'One per line, or comma / semicolon separated'}
-              className="w-full rounded-b-md border-t border-border/60 bg-background px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-b-md border-t border-border/60 bg-background px-2.5 py-1.5 text-sm min-h-[8rem] max-h-[40vh] resize-y focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
 
