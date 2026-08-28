@@ -353,8 +353,13 @@ const parseModifierModifierOptions = (sheet: XLSX.WorkSheet): ModifierModifierOp
     optionDisplayName: parseString(row['optionDisplayName']),
     sortOrder: parseNumber(row['sortOrder']),
     // Quantity cap: the POS join `maxLimit`, or the legacy `maxQtyPerOption` column.
+    // A blank POS cell means "no explicit cap", which is the app's default of 1
+    // (pick once) — not 0, which the app reads as unlimited. Mapping blank to 0
+    // would turn every option of an imported menu into unlimited quantity, and
+    // would stop the app's own export round-tripping now that the default is
+    // written as blank rather than 1.
     maxQtyPerOption: isPosFormat
-      ? parseNumber(row['maxLimit'])
+      ? (parseNumber(row['maxLimit']) > 0 ? parseNumber(row['maxLimit']) : 1)
       : (row['maxQtyPerOption'] !== undefined ? parseNumber(row['maxQtyPerOption']) : 1),
   }));
 };
