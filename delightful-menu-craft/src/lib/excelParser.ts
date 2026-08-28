@@ -275,6 +275,15 @@ const parseModifierGroups = (sheet: XLSX.WorkSheet): ModifierGroup[] => {
   }));
 };
 
+// Older exports wrote a synthetic "Select any" into every modifier prefix cell to
+// satisfy a POS validator. It was never operator input, so don't let it round-trip
+// back in as real data.
+const SYNTHETIC_PREFIX = 'Select any';
+const parsePrefix = (value: unknown): string => {
+  const s = parseString(value);
+  return s.trim() === SYNTHETIC_PREFIX ? '' : s;
+};
+
 // Parse Modifier sheet
 const parseModifiers = (sheet: XLSX.WorkSheet): Modifier[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
@@ -297,7 +306,7 @@ const parseModifiers = (sheet: XLSX.WorkSheet): Modifier[] => {
     minSelector: parseNumber(row['minSelector']),
     maxSelector: parseNumber(row['maxSelector']),
     noMaxSelection: parseBoolean(row['noMaxSelection']),
-    prefix: parseString(row['prefix']),
+    prefix: parsePrefix(row['prefix']),
     pizzaSelection: parseBoolean(row['pizzaSelection']),
     price: parseNumber(row['price']),
     parentModifierId: parseNumber(row['parentModifierId']),
@@ -438,10 +447,20 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         
-        // Helper to safely get a sheet (returns empty array if sheet doesn't exist)
-        const getSheet = (name: string): XLSX.WorkSheet | null => {
-          return workbook.Sheets[name] || null;
-        };
+        // Sheet lookup by exact name, falling back to a normalised match that
+        // ignores case and separators. Without the fallback a re-saved workbook
+        // whose tab reads "modifier option" or "Modifier  Option" resolves to
+        // nothing and its rows are silently dropped.
+        const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sheetsByNormalisedName = new Map<string, XLSX.WorkSheet>();
+        for (const sheetName of workbook.SheetNames) {
+          const key = normalise(sheetName);
+          if (!sheetsByNormalisedName.has(key)) {
+            sheetsByNormalisedName.set(key, workbook.Sheets[sheetName]);
+          }
+        }
+        const getSheet = (name: string): XLSX.WorkSheet | null =>
+          workbook.Sheets[name] || sheetsByNormalisedName.get(normalise(name)) || null;
         
         const result: ExcelMenuData = {
           menus: [],
@@ -470,6 +489,18 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         
         const itemSheet = getSheet(SHEET_NAMES.ITEM);
         if (itemSheet) result.items = parseItems(itemSheet);
+
+        // A workbook that resolves none of the three core sheets is not a menu
+        // export. Importing it would replace the open workspace with empty
+        // collections and report success, so refuse it instead.
+        if (!menuSheet && !categorySheet && !itemSheet) {
+          reject(new Error(
+            'This file does not look like a menu export — none of the Menu, ' +
+            'Category or Item sheets were found. Sheets in this file: ' +
+            (workbook.SheetNames.join(', ') || '(none)') + '.'
+          ));
+          return;
+        }
         
         const itemModifiersSheet = getSheet(SHEET_NAMES.ITEM_MODIFIERS);
         if (itemModifiersSheet) result.itemModifiers = parseItemModifiers(itemModifiersSheet);

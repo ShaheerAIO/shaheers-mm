@@ -215,10 +215,6 @@ const sortModifiersParentFirst = (mods: Modifier[], nesting: ModifierNesting): M
   return [...mods].sort((a, b) => Number(hasParent(a)) - Number(hasParent(b)));
 };
 
-// Default prefix for modifiers that have none — the app never sets one, but the
-// POS requires it non-empty. "Select any" matches real POS exports.
-const resolvePrefix = (s: string): string => ((s || '').trim() ? s : 'Select any');
-
 const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
   mods.map((m) => {
     // A nested child modifier is one attached under an addNested parent.
@@ -261,7 +257,7 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       // POS rule: a modifier's max selection must be >= 1 — the POS silently drops one exported with max 0.
       minSelector, maxSelector: m.noMaxSelection ? 1 : Math.max(1, m.maxSelector),
       noMaxSelection: m.noMaxSelection,
-      prefix: resolvePrefix(m.prefix), pizzaSelection: m.pizzaSelection, stockStatus: true,
+      prefix: m.prefix, pizzaSelection: m.pizzaSelection, stockStatus: true,
       price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
       // Nested modifiers must reference their parent; backfill from the parent's
       // modifierIds when the modifier's own parentModifierId wasn't set.
@@ -294,13 +290,16 @@ const buildModifierOptionRows = (opts: ModifierOption[], priceMap: Map<number, n
   }));
 
 // The POS join `maxLimit` is the per-option quantity cap (the app's
-// maxQtyPerOption). The surcharge lives on the option row (above). Emit blank
-// when there's no cap (0), matching real POS files.
+// maxQtyPerOption). The surcharge lives on the option row (above). Emit blank for
+// anything that isn't a real cap, matching real POS files: 0 is the app's
+// "unlimited" and 1 is its default "pick once" — neither is a cap. Writing 1 made
+// downstream importers read every modifier as a Quantity modifier, which silently
+// overrides Half & Half (pizzaSelection).
 const buildModifierModifierOptionRows = (joins: ModifierModifierOption[]) =>
   joins.map((j) => ({
     modifierId: j.modifierId, modifierOptionId: j.modifierOptionId,
     isDefaultSelected: j.isDefaultSelected,
-    maxLimit: j.maxQtyPerOption > 0 ? j.maxQtyPerOption : '',
+    maxLimit: j.maxQtyPerOption > 1 ? j.maxQtyPerOption : '',
     optionDisplayName: j.optionDisplayName, sortOrder: j.sortOrder,
   }));
 
@@ -387,7 +386,10 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
     data.itemModifiers.filter((im) => !nesting.nestedIds.has(im.modifierId)),
     (im) => im.itemId,
   );
-  const categoryModifiers = data.categoryModifiers.filter((cm) => !nesting.nestedIds.has(cm.modifierId));
+  const categoryModifiers = renumberSortOrder(
+    data.categoryModifiers.filter((cm) => !nesting.nestedIds.has(cm.modifierId)),
+    (cm) => cm.categoryId,
+  );
 
   // POS requires sortOrder unique across the WHOLE Menu/Category sheet (not per
   // menu/parent). Categories restart numbering per menu, so renumber sheet-wide
@@ -402,7 +404,7 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   append(orderedCategoryRows, HEADERS.CATEGORY, SHEET_NAMES.CATEGORY);
   append(buildItemRows(data.items, itemSid), HEADERS.ITEM, SHEET_NAMES.ITEM);
   append(itemModifiers, HEADERS.ITEM_MODIFIERS, SHEET_NAMES.ITEM_MODIFIERS);
-  append(data.categoryModifierGroups, HEADERS.CATEGORY_MODIFIER_GROUPS, SHEET_NAMES.CATEGORY_MODIFIER_GROUPS);
+  append(renumberSortOrder(data.categoryModifierGroups, (g) => g.categoryId), HEADERS.CATEGORY_MODIFIER_GROUPS, SHEET_NAMES.CATEGORY_MODIFIER_GROUPS);
   append(categoryModifiers, HEADERS.CATEGORY_MODIFIERS, SHEET_NAMES.CATEGORY_MODIFIERS);
   // The POS requires the join-row `id` to be unique within the Category Items
   // sheet. The store can reuse ids when an item is assigned to multiple
