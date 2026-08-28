@@ -1099,6 +1099,9 @@ export const useMenuStore = create<MenuState>()(
             categoryModifierGroups: state.categoryModifierGroups.filter(
               (g) => !deletedSet.has(g.categoryId),
             ),
+            categoryModifiers: state.categoryModifiers.filter(
+              (cm) => !deletedSet.has(cm.categoryId),
+            ),
             selectedMenuId,
             selectedCategoryId,
             selectedItemId: state.selectedItemId,
@@ -1115,6 +1118,10 @@ export const useMenuStore = create<MenuState>()(
       deleteCategory: (id) => set((state) => ({
         categories: state.categories.filter((c) => c.id !== id),
         categoryItems: state.categoryItems.filter((ci) => ci.categoryId !== id),
+        // Leaving these behind exports join rows pointing at a category that no
+        // longer exists, which fails POS foreign-key validation.
+        categoryModifiers: state.categoryModifiers.filter((cm) => cm.categoryId !== id),
+        categoryModifierGroups: state.categoryModifierGroups.filter((cmg) => cmg.categoryId !== id),
       })),
       reorderCategories: (parentId, fromIndex, toIndex, menuId) =>
         set((state) => {
@@ -1238,6 +1245,7 @@ export const useMenuStore = create<MenuState>()(
               (mmo) => mmo.modifierId !== id,
             ),
             itemModifierGroups: state.itemModifierGroups.filter((g) => g.modifierId !== id),
+            categoryModifiers: state.categoryModifiers.filter((cm) => cm.modifierId !== id),
             modifierGroups: state.modifierGroups.map((mg) => ({
               ...mg,
               modifierIds: strip(mg.modifierIds),
@@ -1523,6 +1531,7 @@ export const useMenuStore = create<MenuState>()(
 
       // Category Modifier Actions
       addCategoryModifier: (categoryId, modifierId) => set((state) => {
+        if (state.isReadOnly) return {};
         const exists = state.categoryModifiers.some(
           (cm) => cm.categoryId === categoryId && cm.modifierId === modifierId
         );
@@ -1537,12 +1546,16 @@ export const useMenuStore = create<MenuState>()(
           ],
         };
       }),
-      removeCategoryModifier: (categoryId, modifierId) => set((state) => ({
-        categoryModifiers: state.categoryModifiers.filter(
-          (cm) => !(cm.categoryId === categoryId && cm.modifierId === modifierId)
-        ),
-      })),
+      removeCategoryModifier: (categoryId, modifierId) => set((state) => {
+        if (state.isReadOnly) return {};
+        return {
+          categoryModifiers: state.categoryModifiers.filter(
+            (cm) => !(cm.categoryId === categoryId && cm.modifierId === modifierId)
+          ),
+        };
+      }),
       applyCategoryModifiersToOptInItems: (categoryId) => set((state) => {
+        if (state.isReadOnly) return {};
         const catMods = state.categoryModifiers.filter((cm) => cm.categoryId === categoryId);
         if (catMods.length === 0) return {};
         const itemIdsInCategory = state.categoryItems
@@ -1569,18 +1582,33 @@ export const useMenuStore = create<MenuState>()(
           }
         }
         if (newLinks.length === 0) return {};
-        return { itemModifiers: [...state.itemModifiers, ...newLinks] };
+        // Same invariant as the force-apply action: once a category's modifiers are
+        // materialised onto an item, that item is no longer inheriting them.
+        const linkedItemIds = new Set(newLinks.map((l) => l.itemId));
+        return {
+          items: state.items.map((item) =>
+            linkedItemIds.has(item.id)
+              ? { ...item, inheritModifiersFromCategory: false }
+              : item,
+          ),
+          itemModifiers: [...state.itemModifiers, ...newLinks],
+        };
       }),
       applyCategoryModifiersToAllItems: (categoryId) => set((state) => {
+        if (state.isReadOnly) return {};
         const catMods = state.categoryModifiers.filter((cm) => cm.categoryId === categoryId);
         if (catMods.length === 0) return {};
         const itemIdsInCategory = state.categoryItems
           .filter((ci) => ci.categoryId === categoryId)
           .map((ci) => ci.itemId);
         const newLinks: typeof state.itemModifiers = [];
+        // Materialising explicit ItemModifier rows while the item stays flagged as
+        // inheriting double-applies the modifier downstream — the POS gets it once
+        // from Item Modifiers and again by expanding Category Modifiers. An item is
+        // either explicit or inheriting, never both.
         const updatedItems = state.items.map((item) => {
           if (itemIdsInCategory.includes(item.id)) {
-            return { ...item, inheritModifiersFromCategory: true };
+            return { ...item, inheritModifiersFromCategory: false };
           }
           return item;
         });
@@ -1619,6 +1647,7 @@ export const useMenuStore = create<MenuState>()(
 
       // Category Modifier Group Actions
       addCategoryModifierGroup: (categoryId, groupId) => set((state) => {
+        if (state.isReadOnly) return {};
         const exists = state.categoryModifierGroups.some(
           (cmg) => cmg.categoryId === categoryId && cmg.modifierGroupId === groupId
         );
@@ -1633,11 +1662,14 @@ export const useMenuStore = create<MenuState>()(
           ],
         };
       }),
-      removeCategoryModifierGroup: (categoryId, groupId) => set((state) => ({
-        categoryModifierGroups: state.categoryModifierGroups.filter(
-          (cmg) => !(cmg.categoryId === categoryId && cmg.modifierGroupId === groupId)
-        ),
-      })),
+      removeCategoryModifierGroup: (categoryId, groupId) => set((state) => {
+        if (state.isReadOnly) return {};
+        return {
+          categoryModifierGroups: state.categoryModifierGroups.filter(
+            (cmg) => !(cmg.categoryId === categoryId && cmg.modifierGroupId === groupId)
+          ),
+        };
+      }),
 
       // Allergen Actions
       addAllergen: (allergen) => set((state) => ({ allergens: [...state.allergens, allergen] })),
