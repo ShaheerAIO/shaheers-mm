@@ -10,7 +10,14 @@ import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
 import { LoadingImage } from '@/components/ui/loading-image';
 import { LEVEL_COLORS, type BulkLevel, type useBulkSelection } from './useBulkSelection';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
+import { DEFAULT_SALE_CATEGORY_ID, resolveSaleCategory } from '@/lib/saleCategories';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  THREE_PO_PLATFORMS,
+  defaultThreePoPricing,
+  parseThreePoPricing,
+  serializeThreePoPricing,
+} from '@/lib/threePoPricing';
 
 const VIS_CHANNELS = [
   { key: 'visibilityPos' as const, label: 'POS' },
@@ -246,6 +253,80 @@ function applyPriceCalc(current: number, mode: PriceMode, value: number): number
 
 const priceModeLabel = (mode: PriceMode) => PRICE_MODES.find((m) => m.value === mode)?.label ?? '';
 
+// 'markup' is a percentage over the entity's own price; 'set' is a flat amount
+// (the only workable mode for the many options whose surcharge is 0); 'reset'
+// hands both prices back to the platform's inherit flag.
+type TpoMode = 'none' | 'markup' | 'set' | 'reset';
+
+/** Everything the 3PO section stages, for one level (items or options). */
+interface TpoDraft {
+  mode: TpoMode;
+  applyPickup: boolean;
+  applyDelivery: boolean;
+  pickup: string;
+  delivery: string;
+}
+
+const defaultTpoDraft = (): TpoDraft => ({
+  mode: 'none',
+  applyPickup: true,
+  applyDelivery: true,
+  pickup: '',
+  delivery: '',
+});
+
+/** Which of the two prices are actually staged (checked, with a valid number). */
+const resolveTpoDraft = (d: TpoDraft) => {
+  const pickup = parseFloat(d.pickup);
+  const delivery = parseFloat(d.delivery);
+  const setPickup = d.applyPickup && !isNaN(pickup);
+  const setDelivery = d.applyDelivery && !isNaN(delivery);
+  const priced = d.mode === 'markup' || d.mode === 'set';
+  return {
+    mode: d.mode, pickup, delivery, setPickup, setDelivery,
+    hasEdits: d.mode === 'reset' || (priced && (setPickup || setDelivery)),
+  };
+};
+
+/**
+ * Write one entity's 3PO pricing across every platform. `base` is the entity's
+ * own price (an item's price, an option's surcharge) — the markup percentage is
+ * over it, and it also backfills a price the operator left alone.
+ */
+const applyThreePoPrices = (
+  currentRaw: string | undefined,
+  base: number,
+  { mode, pickup, delivery, setPickup, setDelivery }: ReturnType<typeof resolveTpoDraft>,
+): string => {
+  const resolve = (v: number) =>
+    mode === 'markup' ? Math.round(base * (1 + v / 100) * 100) / 100 : Math.max(0, v);
+  const current = parseThreePoPricing(currentRaw);
+  const next = { ...current };
+  for (const { key } of THREE_PO_PLATFORMS) {
+    const prev = current[key];
+    // Flipping inherit off commits BOTH prices, so a kind left alone on a
+    // previously-inheriting platform falls back to the base price rather than
+    // the stored 0 (which the POS reads as free).
+    next[key] = {
+      inherit: false,
+      pickupPrice: setPickup ? resolve(pickup) : prev.inherit ? base : prev.pickupPrice,
+      deliveryPrice: setDelivery ? resolve(delivery) : prev.inherit ? base : prev.deliveryPrice,
+    };
+  }
+  return serializeThreePoPricing(next);
+};
+
+/** Summary lines for the review modal, for one level's 3PO draft. */
+const tpoOpLabels = (d: TpoDraft, baseLabel: string): string[] => {
+  if (d.mode === 'reset') return [`3PO prices → inherit ${baseLabel}`];
+  if (d.mode !== 'markup' && d.mode !== 'set') return [];
+  const describe = (v: string) => (d.mode === 'markup' ? `${baseLabel} +${v}%` : `$${v}`);
+  const out: string[] = [];
+  if (d.applyPickup && d.pickup) out.push(`3PO pickup price → ${describe(d.pickup)}`);
+  if (d.applyDelivery && d.delivery) out.push(`3PO delivery price → ${describe(d.delivery)}`);
+  return out;
+};
+
 // ---------------------------------------------------------------------------
 // Small reusable pieces
 // ---------------------------------------------------------------------------
@@ -439,6 +520,89 @@ function PriceCalcSection({
   );
 }
 
+/**
+ * 3PO pricing for the selected items or options. Pickup and delivery are
+ * separate prices per platform, so each carries its own markup and can be left
+ * alone independently; the inherit flag is per platform and covers both, so a
+ * reset always returns them together.
+ */
+function ThreePoSection({
+  draft,
+  setDraft,
+  baseLabel,
+}: {
+  draft: TpoDraft;
+  setDraft: (d: TpoDraft) => void;
+  /** What the price is relative to, e.g. "base price" / "surcharge". */
+  baseLabel: string;
+}) {
+  const kinds = [
+    { kind: 'Pickup', applyKey: 'applyPickup', valueKey: 'pickup' },
+    { kind: 'Delivery', applyKey: 'applyDelivery', valueKey: 'delivery' },
+  ] as const;
+  const isMarkup = draft.mode === 'markup';
+  const isPriced = isMarkup || draft.mode === 'set';
+
+  return (
+    <section>
+      <p className="section-header mb-1">3PO prices</p>
+      <p className="text-[10px] text-muted-foreground mb-2">
+        DoorDash, UberEats &amp; GrubHub — pickup and delivery set independently
+      </p>
+      <select
+        value={draft.mode}
+        onChange={(e) => setDraft({ ...draft, mode: e.target.value as TpoMode })}
+        className="input-field text-xs h-8 w-full"
+      >
+        <option value="none">No change</option>
+        <option value="markup">Markup % over {baseLabel}</option>
+        <option value="set">Set to $</option>
+        <option value="reset">Reset to {baseLabel} (inherit)</option>
+      </select>
+      {isPriced && (
+        <div className="mt-2 space-y-1.5">
+          {kinds.map(({ kind, applyKey, valueKey }) => (
+            <div key={kind} className="flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer w-24">
+                <input
+                  type="checkbox"
+                  checked={draft[applyKey]}
+                  onChange={(e) => setDraft({ ...draft, [applyKey]: e.target.checked })}
+                  className="accent-primary cursor-pointer"
+                />
+                <span className="text-xs">{kind}</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={isMarkup ? 1 : 0.01}
+                disabled={!draft[applyKey]}
+                value={draft[valueKey]}
+                onChange={(e) => setDraft({ ...draft, [valueKey]: e.target.value })}
+                placeholder={isMarkup ? '15' : '0.00'}
+                className="input-field w-20 text-xs h-8 disabled:opacity-40"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {isMarkup ? `% over ${baseLabel}` : 'flat price'}
+              </span>
+            </div>
+          ))}
+          <p className="text-[10px] text-muted-foreground">
+            An unchecked price is left as it was, or falls back to the {baseLabel} if the
+            platform was inheriting.
+          </p>
+        </div>
+      )}
+      {draft.mode === 'reset' && (
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Pickup and delivery both go back to inheriting the {baseLabel} — the POS keeps one
+          inherit flag per platform, covering both.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** Three-way segmented control (No change / two values). */
 function Segmented<T extends string>({
   title,
@@ -531,7 +695,7 @@ interface BulkEditPanelProps {
 export function BulkEditPanel({ selection, onClearSelection, captureUndo }: BulkEditPanelProps) {
   const { selected, selectedIdsAt, optionPairKeys } = selection;
   const {
-    tags, allergens, stations, modifiers, modifierOptions, customTaxes, taxRate,
+    tags, allergens, stations, modifiers, modifierOptions, customTaxes, taxRate, salesCategories,
     bulkUpdateMenus, bulkUpdateItems, bulkUpdateCategories, bulkUpdateModifiers,
     bulkUpdateModifierOptions, bulkUpdateOptionJoins, bulkAddModifiersToItems,
     bulkRemoveModifiersFromItems, bulkAddOptionsToModifiers, bulkRemoveOptionsFromModifiers,
@@ -619,10 +783,9 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [priceMode, setPriceMode] = useState<PriceMode>('set');
   const [priceValue, setPriceValue] = useState('');
   const [stockAction, setStockAction] = useState<'none' | 'inStock' | 'outOfStock'>('none');
-  const [tpoMode, setTpoMode] = useState<'none' | 'markup' | 'reset'>('none');
-  const [tpoValue, setTpoValue] = useState('');
+  const [tpo, setTpo] = useState<TpoDraft>(defaultTpoDraft());
   const [applySaleCategory, setApplySaleCategory] = useState(false);
-  const [saleCategoryValue, setSaleCategoryValue] = useState('Food Sales');
+  const [saleCategoryId, setSaleCategoryId] = useState<number>(DEFAULT_SALE_CATEGORY_ID);
   const [applyQtyLimit, setApplyQtyLimit] = useState(false);
   const [qtyLimitValue, setQtyLimitValue] = useState('');
   const [qtyLimitNoMax, setQtyLimitNoMax] = useState(false);
@@ -652,6 +815,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
   const [applyOptPrice, setApplyOptPrice] = useState(false);
   const [optPriceMode, setOptPriceMode] = useState<PriceMode>('set');
   const [optPriceValue, setOptPriceValue] = useState('');
+  const [optTpo, setOptTpo] = useState<TpoDraft>(defaultTpoDraft());
   const [applyOptVisibility, setApplyOptVisibility] = useState(false);
   const [optVis, setOptVis] = useState<VisDraft>(defaultVisDraft());
 
@@ -690,8 +854,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setInheritVisAction('none');
     setApplyPriceFlag(false); setPriceMode('set'); setPriceValue('');
     setStockAction('none');
-    setTpoMode('none'); setTpoValue('');
-    setApplySaleCategory(false); setSaleCategoryValue('Food Sales');
+    setTpo(defaultTpoDraft());
+    setApplySaleCategory(false); setSaleCategoryId(DEFAULT_SALE_CATEGORY_ID);
     setApplyQtyLimit(false); setQtyLimitValue(''); setQtyLimitNoMax(false);
     setApplyImage(false); setBulkSquareImageUrl(''); setBulkLandscapeImageUrl('');
     setTaxAction('none');
@@ -703,6 +867,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     setOptionAddIds(new Set()); setOptionRemoveIds(new Set());
     setOptStockAction('none');
     setApplyOptPrice(false); setOptPriceMode('set'); setOptPriceValue('');
+    setOptTpo(defaultTpoDraft());
     setApplyOptVisibility(false); setOptVis(defaultVisDraft());
     setApplyCatVisibility(false); setCatVis(defaultVisDraft());
     setApplyCatImage(false); setCatImageMode('all'); setBulkCatImageUrl(''); setCatSlotImages(emptyCatSlots());
@@ -717,9 +882,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     if (inheritVisAction !== 'none') t(`visibility → ${inheritVisAction === 'on' ? 'inherit from category' : 'override'}`);
     if (applyPriceSection && priceValue) t(`price ${priceModeLabel(priceMode)}${priceValue}`);
     if (stockAction !== 'none') t(`stock → ${stockAction === 'inStock' ? 'In Stock' : '86’ed'}`);
-    if (tpoMode === 'markup' && tpoValue) t(`3PO prices → base +${tpoValue}%`);
-    if (tpoMode === 'reset') t('3PO prices → reset to base');
-    if (applySaleCategory && saleCategoryValue.trim()) t(`sale category → ${saleCategoryValue.trim()}`);
+    tpoOpLabels(tpo, 'base price').forEach(t);
+    if (applySaleCategory) t(`sale category → ${resolveSaleCategory(salesCategories, saleCategoryId, undefined).name}`);
     if (applyQtyLimit) {
       if (qtyLimitNoMax) t('order qty limit → no maximum');
       else if (qtyLimitValue) t(`order qty limit → ${qtyLimitValue}`);
@@ -748,6 +912,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
     const t = (label: string) => ops.push({ scope: `${optionIds.length} option${optionIds.length !== 1 ? 's' : ''}`, label, color: LEVEL_COLORS.option });
     if (optStockAction !== 'none') t(`stock → ${optStockAction === 'inStock' ? 'In Stock' : '86’ed'}`);
     if (applyOptPrice && optPriceValue) t(`price ${priceModeLabel(optPriceMode)}${optPriceValue}`);
+    tpoOpLabels(optTpo, 'surcharge').forEach(t);
     if (applyOptVisibility) t('visibility channels');
   } else if (activeLevel === 'category') {
     const scope = `${categoryIds.length} categor${categoryIds.length !== 1 ? 'ies' : 'y'}`;
@@ -791,10 +956,11 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
     if (activeLevel === 'item') {
       const numericPrice = parseFloat(priceValue);
-      const tpoPct = parseFloat(tpoValue);
+      const tpoStaged = resolveTpoDraft(tpo);
+      const hasTpoEdits = tpoStaged.hasEdits;
       const hasItemFieldEdits =
         applyVisibility || inheritVisAction !== 'none' || (applyPriceSection && priceValue) || stockAction !== 'none' ||
-        tpoMode !== 'none' || (applySaleCategory && saleCategoryValue.trim()) ||
+        hasTpoEdits || applySaleCategory ||
         (applyQtyLimit && (qtyLimitValue || qtyLimitNoMax)) ||
         (applyImage && (!!bulkSquareImageUrl || !!bulkLandscapeImageUrl)) ||
         taxAction !== 'none' ||
@@ -810,21 +976,33 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
             updates.itemPrice = applyPriceCalc(item.itemPrice, priceMode, numericPrice);
           }
           if (stockAction !== 'none') updates.stockStatus = stockAction;
-          if (tpoMode === 'markup' && !isNaN(tpoPct)) {
+          // 3PO pricing lives in `threePoPricing` (the Item 3PO sheet): one
+          // inherit flag plus a Pickup and a Delivery price per platform. The
+          // legacy doordash/uberEats/grubHub columns are zeroed alongside it so a
+          // stale single price can't contradict the per-platform override.
+          if (tpo.mode !== 'none' && tpo.mode !== 'reset' && hasTpoEdits) {
             const base = applyPriceSection && priceValue && !isNaN(numericPrice)
               ? applyPriceCalc(item.itemPrice, priceMode, numericPrice)
               : item.itemPrice;
-            const marked = Math.round(base * (1 + tpoPct / 100) * 100) / 100;
-            updates.doordashPrice = marked;
-            updates.uberEatsPrice = marked;
-            updates.grubHubPrice = marked;
-          }
-          if (tpoMode === 'reset') {
+            updates.threePoPricing = applyThreePoPrices(item.threePoPricing, base, tpoStaged);
             updates.doordashPrice = 0;
             updates.uberEatsPrice = 0;
             updates.grubHubPrice = 0;
           }
-          if (applySaleCategory && saleCategoryValue.trim()) updates.saleCategory = saleCategoryValue.trim();
+          if (tpo.mode === 'reset') {
+            // inheritGeneralSettings is per platform and covers both prices, so a
+            // reset always returns pickup and delivery together.
+            updates.threePoPricing = serializeThreePoPricing(defaultThreePoPricing());
+            updates.doordashPrice = 0;
+            updates.uberEatsPrice = 0;
+            updates.grubHubPrice = 0;
+          }
+          if (applySaleCategory) {
+            // Both Item columns ship to the POS and must agree.
+            const sc = resolveSaleCategory(salesCategories, saleCategoryId, undefined);
+            updates.saleCategory = sc.name;
+            updates.saleCategoryId = sc.id;
+          }
           if (applyQtyLimit) {
             if (qtyLimitNoMax) {
               updates.orderQuantityLimit = true;
@@ -889,13 +1067,29 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
 
     if (activeLevel === 'option') {
       const numericOptPrice = parseFloat(optPriceValue);
-      if (optStockAction !== 'none' || applyOptVisibility || (applyOptPrice && optPriceValue)) {
+      const optTpoStaged = resolveTpoDraft(optTpo);
+      if (
+        optStockAction !== 'none' || applyOptVisibility ||
+        (applyOptPrice && optPriceValue) || optTpoStaged.hasEdits
+      ) {
         bulkUpdateModifierOptions(optionIds, (opt: ModifierOption): Partial<ModifierOption> => {
           const updates: Partial<ModifierOption> = {};
           if (optStockAction !== 'none') updates.isStockAvailable = optStockAction === 'inStock';
           if (applyOptVisibility) Object.assign(updates, optVis);
           if (applyOptPrice && optPriceValue && !isNaN(numericOptPrice)) {
             updates.price = applyPriceCalc(opt.price ?? 0, optPriceMode, numericOptPrice);
+          }
+          // 3PO pricing lives on the option row (the Modifier Option 3PO sheet),
+          // so the markup is over the option's surcharge — including a surcharge
+          // edit staged in the same pass.
+          if (optTpo.mode !== 'none' && optTpo.mode !== 'reset' && optTpoStaged.hasEdits) {
+            const base = applyOptPrice && optPriceValue && !isNaN(numericOptPrice)
+              ? applyPriceCalc(opt.price ?? 0, optPriceMode, numericOptPrice)
+              : opt.price ?? 0;
+            updates.threePoPricing = applyThreePoPrices(opt.threePoPricing, base, optTpoStaged);
+          }
+          if (optTpo.mode === 'reset') {
+            updates.threePoPricing = serializeThreePoPricing(defaultThreePoPricing());
           }
           return updates;
         });
@@ -1032,33 +1226,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 setValue={setPriceValue}
               />
 
-              {/* 3PO delivery prices */}
-              <section>
-                <p className="section-header mb-1">3PO delivery prices</p>
-                <p className="text-[10px] text-muted-foreground mb-2">DoorDash, UberEats &amp; GrubHub prices from a markup over base</p>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={tpoMode}
-                    onChange={(e) => setTpoMode(e.target.value as typeof tpoMode)}
-                    className="input-field text-xs h-8 flex-1"
-                  >
-                    <option value="none">No change</option>
-                    <option value="markup">Markup % over base</option>
-                    <option value="reset">Reset to base price</option>
-                  </select>
-                  {tpoMode === 'markup' && (
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={tpoValue}
-                      onChange={(e) => setTpoValue(e.target.value)}
-                      placeholder="15"
-                      className="input-field w-20 text-xs h-8"
-                    />
-                  )}
-                </div>
-              </section>
+              <ThreePoSection draft={tpo} setDraft={setTpo} baseLabel="base price" />
 
               <VisibilitySection apply={applyVisibility} setApply={setApplyVisibility} vis={vis} setVis={setVis} />
 
@@ -1119,8 +1287,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 {applySaleCategory && (
                   <div className="pl-5">
                     <SaleCategorySelect
-                      value={saleCategoryValue}
-                      onChange={setSaleCategoryValue}
+                      value={saleCategoryId}
+                      onChange={setSaleCategoryId}
                       triggerClassName="text-xs h-8"
                     />
                   </div>
@@ -1244,6 +1412,8 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 value={optPriceValue}
                 setValue={setOptPriceValue}
               />
+
+              <ThreePoSection draft={optTpo} setDraft={setOptTpo} baseLabel="surcharge" />
 
               <VisibilitySection
                 apply={applyOptVisibility}

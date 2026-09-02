@@ -7,6 +7,7 @@ import type {
 } from '@/types/menu';
 import type { ScraperMenuData } from './doordashApi';
 import { parseVisibilityFromScraper, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
+import { DEFAULT_SALE_CATEGORY } from '@/lib/saleCategories';
 
 // ---------------------------------------------------------------------------
 // Coerce helpers — handle null/undefined/wrong-type values from API
@@ -116,7 +117,9 @@ export function mapScraperToExcelData(data: ScraperMenuData): ExcelMenuData {
     calories: optNum(i.calories),
     tagIds: str(i.tagIds),
     inheritTagsFromCategory: bool(i.inheritTagsFromCategory, false),
-    saleCategory: str(i.saleCategory) || 'Food Sales',
+    // Scraped payloads carry no sale category; importData resolves the id
+    // from this name against the catalog.
+    saleCategory: str(i.saleCategory) || DEFAULT_SALE_CATEGORY,
     allergenIds: str(i.allergenIds),
     inheritModifiersFromCategory: bool(i.inheritModifiersFromCategory, false),
     addonIds: str(i.addonIds),

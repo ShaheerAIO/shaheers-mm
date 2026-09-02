@@ -34,6 +34,8 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
 import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
 import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
+import { OptionThreePoPricingDialog } from './OptionThreePoPricingDialog';
+import { hasThreePoOverride } from '@/lib/threePoPricing';
 import { countLabel, resolveOptionPrice } from '@/lib/optionPriceScope';
 import {
   VISIBILITY_CHANNELS,
@@ -754,6 +756,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
   const [optionSearch, setOptionSearch] = useState('');
   // A committed option price waiting on the operator's choice of scope.
   const [pendingOptionPrice, setPendingOptionPrice] = useState<PendingLibraryOptionPrice | null>(null);
+  // The option whose per-platform 3PO pricing is being edited, if any.
+  const [threePoOptionId, setThreePoOptionId] = useState<number | null>(null);
   const [optionSortMenuOpen, setOptionSortMenuOpen] = useState(false);
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [nestedModSortMenuOpen, setNestedModSortMenuOpen] = useState(false);
@@ -2184,6 +2188,14 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                             Out of Stock
                           </span>
                         )}
+                        {hasThreePoOverride(assignment.option?.threePoPricing) && (
+                          <span
+                            className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded"
+                            title="Has third-party price overrides"
+                          >
+                            3PO
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2.5 shrink-0">
@@ -2239,6 +2251,11 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem
+                          onClick={() => setThreePoOptionId(assignment.modifierOptionId)}
+                        >
+                          Third-party pricing…
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleRemoveOption(assignment.modifierOptionId)}
                         >
@@ -2696,6 +2713,25 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               setPendingOptionPrice(null);
             }}
             onCancel={() => setPendingOptionPrice(null)}
+          />
+        );
+      })()}
+
+      {threePoOptionId != null && (() => {
+        const assignment = modifierOptionAssignments.find(
+          (a) => a.modifierOptionId === threePoOptionId,
+        );
+        if (!assignment) return null;
+        const optionName = assignment.option?.optionName || assignment.optionDisplayName;
+        const basePrice = isNoCharge ? 0 : isGroup ? groupPrice : assignment.maxLimit;
+        return (
+          <OptionThreePoPricingDialog
+            isOpen
+            onClose={() => setThreePoOptionId(null)}
+            optionName={optionName}
+            basePrice={basePrice}
+            pricing={assignment.option?.threePoPricing}
+            onSave={(pricing) => updateModifierOption(threePoOptionId, { threePoPricing: pricing })}
           />
         );
       })()}

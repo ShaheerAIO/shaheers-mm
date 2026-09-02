@@ -10,15 +10,18 @@ import type {
   Allergen,
   Tag,
   Setting,
+  SalesCategory,
   CustomTax,
 } from '@/types/menu';
 import { serializeVisibility } from '@/lib/visibility';
 import { THREE_PO_PLATFORMS, THREE_PO_TYPE_EXCEL, parseThreePoPricing } from '@/lib/threePoPricing';
+import { freshSalesCategories, resolveSaleCategory } from '@/lib/saleCategories';
 
 // Sheet names — must match the POS import schema exactly (order included).
 const SHEET_NAMES = {
   MENU: 'Menu',
   CATEGORY: 'Category',
+  SALES_CATEGORY: 'Sales Category',
   ITEM: 'Item',
   ITEM_MODIFIERS: 'Item Modifiers',
   CATEGORY_MODIFIER_GROUPS: 'Category ModifierGroups',
@@ -34,12 +37,14 @@ const SHEET_NAMES = {
   CUSTOM_TAXES: 'CustomTaxes',
   SETTING: 'Setting',
   ITEM_3PO: 'Item 3PO',
+  MODIFIER_OPTION_3PO: 'Modifier Option 3PO',
 };
 
 // Column headers for each sheet — must match the POS import schema exactly
 // (names AND order). Derived from real POS export files (business-1289 / 1585 / 596).
 const HEADERS = {
   MENU: ['id', 'menuName', 'posDisplayName', 'posButtonColor', 'picture', 'sortOrder', 'settingId', 'visibility'],
+  SALES_CATEGORY: ['id', 'name', 'isDefault'],
   CATEGORY: ['id', 'categoryName', 'posDisplayName', 'kdsDisplayName', 'color', 'image', 'kioskImage', 'parentCategoryId', 'tagIds', 'menuIds', 'sortOrder', 'settingId', 'visibility'],
   ITEM: [
     'id', 'itemName', 'posDisplayName', 'kdsName', 'itemDescription', 'itemPicture',
@@ -47,7 +52,7 @@ const HEADERS = {
     'taxLinkedWithParentSetting', 'calculatePricesWithTaxIncluded', 'takeoutException',
     'stockStatus', 'stockValue', 'orderQuantityLimit', 'minLimit', 'maxLimit', 'noMaxLimit',
     'stationIds', 'preparationTime', 'calories', 'tagIds', 'inheritTagsFromCategory',
-    'saleCategory', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
+    'saleCategory', 'saleCategoryId', 'allergenIds', 'inheritModifiersFromCategory', 'addonIds', 'isSpecialRequest',
     'doordashPrice', 'uberEatsPrice', 'grubHubPrice', 'customTaxId', 'settingId', 'visibility',
   ],
   ITEM_MODIFIERS: ['itemId', 'modifierId', 'sortOrder'],
@@ -69,6 +74,7 @@ const HEADERS = {
   CUSTOM_TAXES: ['id', 'name', 'rate'],
   SETTING: ['id', 'type', 'status'],
   ITEM_3PO: ['id', 'itemId', 'pickupPrice', 'deliveryPrice', 'inheritGeneralSettings', 'tpoType'],
+  MODIFIER_OPTION_3PO: ['id', 'modifierOptionId', 'pickupPrice', 'deliveryPrice', 'inheritGeneralSettings', 'tpoType'],
 };
 
 // Convert data array to worksheet with headers (maps each row object by header key).
@@ -162,28 +168,37 @@ const buildCategoryRows = (cats: Category[], sid: Map<number, number>) =>
     sortOrder: c.sortOrder, settingId: sid.get(c.id) ?? '', visibility: serializeVisibility(c),
   }));
 
-const buildItemRows = (items: Item[], sid: Map<number, number>) =>
-  items.map((i) => ({
-    id: i.id, itemName: i.itemName, posDisplayName: i.posDisplayName, kdsName: i.kdsName,
-    itemDescription: i.itemDescription, itemPicture: i.itemPicture, onlineImage: i.onlineImage,
-    landscapeImage: i.landscapeImage, thirdPartyImage: i.thirdPartyImage, kioskItemImage: i.kioskItemImage,
-    itemPrice: i.itemPrice, taxLinkedWithParentSetting: i.taxLinkedWithParentSetting,
-    calculatePricesWithTaxIncluded: i.calculatePricesWithTaxIncluded, takeoutException: i.takeoutException,
-    stockStatus: i.stockStatus, stockValue: i.stockValue, orderQuantityLimit: i.orderQuantityLimit,
-    minLimit: i.minLimit, maxLimit: i.maxLimit || '', noMaxLimit: i.noMaxLimit, stationIds: i.stationIds,
-    preparationTime: i.preparationTime, calories: i.calories, tagIds: i.tagIds,
-    // saleCategory is required by the POS importer; default blanks to 'Food Sales'.
-    inheritTagsFromCategory: i.inheritTagsFromCategory, saleCategory: (i.saleCategory || '').trim() || 'Food Sales',
-    allergenIds: i.allergenIds, inheritModifiersFromCategory: i.inheritModifiersFromCategory,
-    // Special Instructions is on unless the operator turned it off; a blank cell
-    // would fail POS validation.
-    addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest ?? true,
-    // 3PO prices: blank (null) when unset, matching real POS files.
-    doordashPrice: i.doordashPrice || '', uberEatsPrice: i.uberEatsPrice || '', grubHubPrice: i.grubHubPrice || '',
-    // customTaxId: undefined when standard rate → absent cell (createSheet drops null/undefined).
-    customTaxId: i.customTaxId ?? null,
-    settingId: sid.get(i.id) ?? '', visibility: serializeVisibility(i),
-  }));
+const buildItemRows = (
+  items: Item[],
+  sid: Map<number, number>,
+  salesCategories: readonly SalesCategory[],
+) =>
+  items.map((i) => {
+    // saleCategory + saleCategoryId are both required by the POS importer and
+    // must agree. Resolve one catalog row and write both from it.
+    const sc = resolveSaleCategory(salesCategories, i.saleCategoryId, i.saleCategory);
+    return {
+      id: i.id, itemName: i.itemName, posDisplayName: i.posDisplayName, kdsName: i.kdsName,
+      itemDescription: i.itemDescription, itemPicture: i.itemPicture, onlineImage: i.onlineImage,
+      landscapeImage: i.landscapeImage, thirdPartyImage: i.thirdPartyImage, kioskItemImage: i.kioskItemImage,
+      itemPrice: i.itemPrice, taxLinkedWithParentSetting: i.taxLinkedWithParentSetting,
+      calculatePricesWithTaxIncluded: i.calculatePricesWithTaxIncluded, takeoutException: i.takeoutException,
+      stockStatus: i.stockStatus, stockValue: i.stockValue, orderQuantityLimit: i.orderQuantityLimit,
+      minLimit: i.minLimit, maxLimit: i.maxLimit || '', noMaxLimit: i.noMaxLimit, stationIds: i.stationIds,
+      preparationTime: i.preparationTime, calories: i.calories, tagIds: i.tagIds,
+      inheritTagsFromCategory: i.inheritTagsFromCategory,
+      saleCategory: sc.name, saleCategoryId: sc.id,
+      allergenIds: i.allergenIds, inheritModifiersFromCategory: i.inheritModifiersFromCategory,
+      // Special Instructions is on unless the operator turned it off; a blank cell
+      // would fail POS validation.
+      addonIds: i.addonIds, isSpecialRequest: i.isSpecialRequest ?? true,
+      // 3PO prices: blank (null) when unset, matching real POS files.
+      doordashPrice: i.doordashPrice || '', uberEatsPrice: i.uberEatsPrice || '', grubHubPrice: i.grubHubPrice || '',
+      // customTaxId: undefined when standard rate → absent cell (createSheet drops null/undefined).
+      customTaxId: i.customTaxId ?? null,
+      settingId: sid.get(i.id) ?? '', visibility: serializeVisibility(i),
+    };
+  });
 
 // Nested-modifier structure: a child→parent map derived from each modifier's
 // `modifierIds` list, plus the set of modifier ids that are nested children.
@@ -331,18 +346,24 @@ const buildTagRows = (tags: Tag[]) =>
     isDefault: t.isSystem === true,
   }));
 
-// One row per platform per item. When inherit=true, pickupPrice/deliveryPrice
-// stay empty since the platform uses the general settings, not an override.
-const buildItem3PORows = (items: Item[], sid: Map<number, number>) => {
-  const rows: { id: number; itemId: number; pickupPrice?: number; deliveryPrice?: number; inheritGeneralSettings: boolean; tpoType: string }[] = [];
+// One row per platform per owner (an item or a modifier option), keyed by
+// `idColumn`. Real POS exports key both 3PO sheets by the owner's own id — NOT
+// its settingId — so `itemId` here is `Item.id`. When inherit=true,
+// pickupPrice/deliveryPrice stay empty since the platform uses the general
+// settings, not an override.
+const build3PORows = (
+  owners: readonly { id: number; threePoPricing?: string }[],
+  idColumn: 'itemId' | 'modifierOptionId',
+): Record<string, unknown>[] => {
+  const rows: Record<string, unknown>[] = [];
   let id = 1;
-  for (const item of items) {
-    const pricing = parseThreePoPricing(item.threePoPricing);
+  for (const owner of owners) {
+    const pricing = parseThreePoPricing(owner.threePoPricing);
     for (const { key } of THREE_PO_PLATFORMS) {
       const p = pricing[key];
       rows.push({
         id: id++,
-        itemId: sid.get(item.id) ?? item.id,
+        [idColumn]: owner.id,
         pickupPrice: p.inherit ? undefined : p.pickupPrice,
         deliveryPrice: p.inherit ? undefined : p.deliveryPrice,
         inheritGeneralSettings: p.inherit,
@@ -402,7 +423,19 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   const orderedCategoryRows = buildCategoryRows(sortCategoriesParentFirst(data.categories), catSid)
     .map((row, i) => ({ ...row, sortOrder: i + 1 }));
   append(orderedCategoryRows, HEADERS.CATEGORY, SHEET_NAMES.CATEGORY);
-  append(buildItemRows(data.items, itemSid), HEADERS.ITEM, SHEET_NAMES.ITEM);
+  // Real POS exports place Sales Category between Category and Item. Fall back
+  // to the POS defaults so an older workspace blob still exports a valid sheet.
+  const salesCategories =
+    data.salesCategories && data.salesCategories.length > 0
+      ? data.salesCategories
+      : freshSalesCategories();
+  append(salesCategories, HEADERS.SALES_CATEGORY, SHEET_NAMES.SALES_CATEGORY);
+  append(buildItemRows(data.items, itemSid, salesCategories), HEADERS.ITEM, SHEET_NAMES.ITEM);
+  // Real POS exports place this sheet directly after Item.
+  append(
+    build3PORows(data.modifierOptions, 'modifierOptionId'),
+    HEADERS.MODIFIER_OPTION_3PO, SHEET_NAMES.MODIFIER_OPTION_3PO,
+  );
   append(itemModifiers, HEADERS.ITEM_MODIFIERS, SHEET_NAMES.ITEM_MODIFIERS);
   append(renumberSortOrder(data.categoryModifierGroups, (g) => g.categoryId), HEADERS.CATEGORY_MODIFIER_GROUPS, SHEET_NAMES.CATEGORY_MODIFIER_GROUPS);
   append(categoryModifiers, HEADERS.CATEGORY_MODIFIERS, SHEET_NAMES.CATEGORY_MODIFIERS);
@@ -429,7 +462,7 @@ const buildWorkbook = (data: ExcelMenuData): XLSX.WorkBook => {
   // CustomTax object keys (id/name/rate) already match the columns.
   append((data.customTaxes ?? []) as CustomTax[], HEADERS.CUSTOM_TAXES, SHEET_NAMES.CUSTOM_TAXES);
   append(settings, HEADERS.SETTING, SHEET_NAMES.SETTING);
-  append(buildItem3PORows(data.items, itemSid), HEADERS.ITEM_3PO, SHEET_NAMES.ITEM_3PO);
+  append(build3PORows(data.items, 'itemId'), HEADERS.ITEM_3PO, SHEET_NAMES.ITEM_3PO);
 
   return workbook;
 };

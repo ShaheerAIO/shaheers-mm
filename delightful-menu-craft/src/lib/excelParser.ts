@@ -14,6 +14,7 @@ import type {
   ItemModifierGroup,
   Allergen,
   Tag,
+  SalesCategory,
   CustomTax,
   ExcelMenuData,
 } from '@/types/menu';
@@ -30,6 +31,7 @@ import {
 const SHEET_NAMES = {
   MENU: 'Menu',
   CATEGORY: 'Category',
+  SALES_CATEGORY: 'Sales Category',
   ITEM: 'Item',
   ITEM_MODIFIERS: 'Item Modifiers',
   CATEGORY_MODIFIER_GROUPS: 'Category ModifierGroups',
@@ -44,6 +46,7 @@ const SHEET_NAMES = {
   TAG: 'Tag',
   CUSTOM_TAXES: 'CustomTaxes',
   ITEM_3PO: 'Item 3PO',
+  MODIFIER_OPTION_3PO: 'Modifier Option 3PO',
 };
 
 // Helper to safely parse boolean values from Excel
@@ -185,6 +188,9 @@ const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
     tagIds: parseString(row['tagIds']),
     inheritTagsFromCategory: parseBoolean(row['inheritTagsFromCategory']),
     saleCategory: parseString(row['saleCategory']),
+    // Blank/missing (files predating the Sales Category sheet) → undefined;
+    // importData resolves it from the name against the catalog.
+    saleCategoryId: (() => { const n = parseNumber(row['saleCategoryId']); return n > 0 ? n : undefined; })(),
     allergenIds: parseString(row['allergenIds']),
     inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
     addonIds: parseString(row['addonIds']),
@@ -394,6 +400,18 @@ const parseTags = (sheet: XLSX.WorkSheet): Tag[] => {
     .filter((t) => t.id > 0 && t.name.trim().length > 0);
 };
 
+// Parse Sales Category sheet
+const parseSalesCategories = (sheet: XLSX.WorkSheet): SalesCategory[] => {
+  const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  return data
+    .map((row) => ({
+      id: parseNumber(row['id']),
+      name: parseString(row['name'] ?? row['salesCategoryName'] ?? row['saleCategory']),
+      isDefault: parseBoolean(row['isDefault']),
+    }))
+    .filter((c) => c.id > 0 && c.name.trim().length > 0);
+};
+
 // Parse CustomTaxes sheet
 const parseCustomTaxes = (sheet: XLSX.WorkSheet): CustomTax[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
@@ -417,26 +435,26 @@ const EXCEL_TYPE_TO_KEY: Record<string, ThreePoPlatform> = (() => {
   return m;
 })();
 
-// Parse the Item 3PO sheet into a map of itemId (as written in the sheet) →
-// serialized ThreePoPricing. There is one row per platform per item; rows are
-// grouped back into a single per-item pricing blob.
-const parseItem3PO = (sheet: XLSX.WorkSheet): Map<number, string> => {
+// Parse a 3PO sheet (Item 3PO / Modifier Option 3PO) into a map of owner id (as
+// written in the sheet's `idColumn`) → serialized ThreePoPricing. There is one
+// row per platform per owner; rows are grouped back into a single pricing blob.
+const parse3POSheet = (sheet: XLSX.WorkSheet, idColumn: string): Map<number, string> => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-  const byItem = new Map<number, ThreePoPricing>();
+  const byOwner = new Map<number, ThreePoPricing>();
   data.forEach((row) => {
-    const itemId = parseNumber(row['itemId']);
+    const ownerId = parseNumber(row[idColumn]);
     const key = EXCEL_TYPE_TO_KEY[parseString(row['tpoType']).trim().toLowerCase()];
-    if (itemId <= 0 || !key) return;
-    const pricing = byItem.get(itemId) ?? defaultThreePoPricing();
+    if (ownerId <= 0 || !key) return;
+    const pricing = byOwner.get(ownerId) ?? defaultThreePoPricing();
     pricing[key] = {
       inherit: parseBoolean(row['inheritGeneralSettings']),
       pickupPrice: parseNumber(row['pickupPrice']),
       deliveryPrice: parseNumber(row['deliveryPrice']),
     };
-    byItem.set(itemId, pricing);
+    byOwner.set(ownerId, pricing);
   });
   const out = new Map<number, string>();
-  byItem.forEach((pricing, id) => out.set(id, serializeThreePoPricing(pricing)));
+  byOwner.forEach((pricing, id) => out.set(id, serializeThreePoPricing(pricing)));
   return out;
 };
 
@@ -482,6 +500,7 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
           modifierModifierOptions: [],
           allergens: [],
           tags: [],
+          salesCategories: [],
           customTaxes: [],
         };
         
@@ -492,6 +511,11 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
         const categorySheet = getSheet(SHEET_NAMES.CATEGORY);
         if (categorySheet) result.categories = parseCategories(categorySheet);
         
+        // Optional — files predating the sheet leave this []; importData then
+        // rebuilds the catalog from the POS defaults plus the item names.
+        const salesCategorySheet = getSheet(SHEET_NAMES.SALES_CATEGORY);
+        if (salesCategorySheet) result.salesCategories = parseSalesCategories(salesCategorySheet);
+
         const itemSheet = getSheet(SHEET_NAMES.ITEM);
         if (itemSheet) result.items = parseItems(itemSheet);
 
@@ -556,14 +580,13 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
           j.maxLimit ? j : { ...j, maxLimit: optionPrice.get(j.modifierOptionId) ?? 0 }
         );
 
-        // Item 3PO: attach per-platform pricing back onto items. The exporter
-        // keys these rows by the POS setting-id, while the app keys items by
-        // their raw id — so rebuild id → setting-id from the Item sheet and match
-        // through it. External files that key 3PO by the raw item id (no
-        // settingId column) fall through to a direct id match.
+        // Item 3PO: attach per-platform pricing back onto items. POS files key
+        // these rows by the raw item id, so match that first. Older app exports
+        // keyed them by the POS setting-id instead, so rebuild id → setting-id
+        // from the Item sheet and fall back to it for rows the direct match missed.
         const threePoSheet = getSheet(SHEET_NAMES.ITEM_3PO);
         if (threePoSheet) {
-          const pricingByKey = parseItem3PO(threePoSheet);
+          const pricingByKey = parse3POSheet(threePoSheet, 'itemId');
           if (pricingByKey.size) {
             const itemToSetting = new Map<number, number>();
             if (itemSheet) {
@@ -575,8 +598,21 @@ export const parseExcelFile = async (file: File): Promise<ExcelMenuData> => {
             }
             result.items = result.items.map((item) => {
               const pricing =
-                pricingByKey.get(itemToSetting.get(item.id) ?? -1) ?? pricingByKey.get(item.id);
+                pricingByKey.get(item.id) ?? pricingByKey.get(itemToSetting.get(item.id) ?? -1);
               return pricing ? { ...item, threePoPricing: pricing } : item;
+            });
+          }
+        }
+
+        // Modifier Option 3PO: same shape as Item 3PO, keyed by the option's own
+        // id (options have no settingId), so match directly.
+        const optionThreePoSheet = getSheet(SHEET_NAMES.MODIFIER_OPTION_3PO);
+        if (optionThreePoSheet) {
+          const pricingByOption = parse3POSheet(optionThreePoSheet, 'modifierOptionId');
+          if (pricingByOption.size) {
+            result.modifierOptions = result.modifierOptions.map((option) => {
+              const pricing = pricingByOption.get(option.id);
+              return pricing ? { ...option, threePoPricing: pricing } : option;
             });
           }
         }

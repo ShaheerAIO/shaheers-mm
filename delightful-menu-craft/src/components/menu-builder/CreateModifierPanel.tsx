@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMenuStore } from '@/store/menuStore';
-import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical, ArrowUpDown } from 'lucide-react';
+import { X, Plus, Trash2, Save, Check, GitBranch, List, Search, ChevronDown, GripVertical, ArrowUpDown, Sparkles } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -26,6 +26,8 @@ import { modifierSelectionCeiling } from '@/lib/posPricing';
 import { useClearableIntInput } from '@/hooks/useClearableIntInput';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { PriceStepperInput } from '@/components/ui/price-stepper-input';
+import { OptionThreePoPricingDialog } from '@/components/modifier-library/OptionThreePoPricingDialog';
+import { hasThreePoOverride } from '@/lib/threePoPricing';
 import {
   VISIBILITY_CHANNELS,
   defaultVisibility,
@@ -56,6 +58,8 @@ type OptionDraft = {
   price: number;
   isDefaultSelected: boolean;
   maxQtyPerOption: number; // 1 = once, 0 = unlimited, N = up to N
+  /** Serialized ThreePoPricing; undefined = every platform inherits the price. */
+  threePoPricing?: string;
 } & (
   | { type: 'existing'; existingOptionId: number }
   | { type: 'new'; isStockAvailable: boolean; isSizeModifier: boolean }
@@ -92,6 +96,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
     addModifier,
     updateModifier,
     addModifierOption,
+    updateModifierOption,
     addModifierModifierOption,
     addItemModifier,
     getNextId,
@@ -127,6 +132,8 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
   const optionSortMenuRef = useRef<HTMLDivElement>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Draft id of the option whose third-party pricing dialog is open (null = closed).
+  const [threePoOptionDraftId, setThreePoOptionDraftId] = useState<string | null>(null);
   const [bulkCreateText, setBulkCreateText] = useState('');
   const [bulkFromLibraryOpen, setBulkFromLibraryOpen] = useState(false);
   const [bulkLibrarySearch, setBulkLibrarySearch] = useState('');
@@ -285,6 +292,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         price: 0,
         isDefaultSelected: false,
         maxQtyPerOption: 1,
+        threePoPricing: option.threePoPricing,
       });
     }
     if (newDrafts.length > 0) setOptions((prev) => [...prev, ...newDrafts]);
@@ -467,6 +475,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
 
       if (opt.type === 'existing') {
         optionId = opt.existingOptionId;
+        // 3PO pricing lives on the option row, so an edit here applies to every
+        // modifier that already uses the library option.
+        const libraryOption = modifierOptions.find((o) => o.id === optionId);
+        if (libraryOption && opt.threePoPricing !== libraryOption.threePoPricing) {
+          updateModifierOption(optionId, { threePoPricing: opt.threePoPricing });
+        }
       } else {
         // Create new option
         optionId = getNextId('modifierOptions');
@@ -477,6 +491,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           parentModifierId: newModifierId,
           isStockAvailable: opt.isStockAvailable,
           isSizeModifier: opt.isSizeModifier,
+          threePoPricing: opt.threePoPricing,
           ...defaultVisibility(),
         };
         addModifierOption(newOption);
@@ -862,22 +877,23 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                   onDrop={(e) => handleOptionDrop(e, index)}
                   onDragEnd={handleOptionDragEnd}
                   className={cn(
-                    "flex items-center gap-3 p-3 bg-muted/50 rounded-lg group transition-opacity",
+                    "relative flex items-center gap-2 p-2.5 bg-muted/50 rounded-lg group transition-opacity",
                     dragIndex === index && "opacity-40",
                     dragOverIndex === index && dragIndex !== index && "ring-2 ring-primary ring-inset",
                   )}
                 >
                   <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
-                  <div className="flex-1">
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{option.optionName}</span>
-                        {option.type === 'new' && (
-                          <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">
-                            New
-                          </span>
-                        )}
-                      </div>
+                  {option.type === 'new' && (
+                    <span
+                      className="absolute top-1 right-1 text-green-600"
+                      title="New option — will be created when you save"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span className="sr-only">New option</span>
+                    </span>
+                  )}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="text"
                         value={option.posDisplayName}
@@ -886,31 +902,12 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                             o.id === option.id ? { ...o, posDisplayName: e.target.value } : o
                           ))
                         }
-                        placeholder={`Display name (default: ${option.optionName})`}
-                        className="input-field text-xs h-7 w-full max-w-[220px]"
-                        aria-label="Option display name"
+                        placeholder={option.optionName}
+                        title={`Display name (default: ${option.optionName})`}
+                        className="input-field text-xs h-7 flex-1 min-w-0"
+                        aria-label={`Display name for ${option.optionName}`}
                       />
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {isNoCharge ? (
-                        <span className="text-xs text-muted-foreground italic">Free</span>
-                      ) : isGroup ? (
-                        <span className="text-xs text-muted-foreground" title="Set by the group price above">
-                          ${groupPrice.toFixed(2)} · group
-                        </span>
-                      ) : (
-                        <PriceStepperInput
-                          value={option.price}
-                          onFocus={(e) => e.target.select()}
-                          onCommit={(v) => handleOptionPriceChange(option.id, v)}
-                          prefix={<span className="text-xs text-muted-foreground">$</span>}
-                          wrapperClassName="w-20 h-7"
-                          className="text-sm"
-                          placeholder="0.00"
-                        />
-                      )}
-                      <span className="text-xs text-muted-foreground" title="Max times a guest can select this option (0 = unlimited)">Qty</span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 shrink-0">
                         <NumberStepperInput
                           inputMode="numeric"
                           value={option.maxQtyPerOption}
@@ -929,13 +926,53 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                                 : o
                             ))
                           }
-                          wrapperClassName="w-14 h-7"
+                          prefix={<span className="text-[10px] text-muted-foreground shrink-0">Qty</span>}
+                          wrapperClassName="w-[4.75rem] h-7"
                           className="text-sm"
+                          title="Max times a guest can select this option (0 = unlimited)"
+                          aria-label={`Max quantity for ${option.optionName}`}
                         />
                         {option.maxQtyPerOption === 0 && (
                           <span className="text-[10px] text-primary font-semibold">∞</span>
                         )}
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isNoCharge ? (
+                        <span className="text-xs text-muted-foreground italic">Free</span>
+                      ) : isGroup ? (
+                        <span className="text-xs text-muted-foreground" title="Set by the group price above">
+                          ${groupPrice.toFixed(2)} · group
+                        </span>
+                      ) : (
+                        <PriceStepperInput
+                          value={option.price}
+                          onFocus={(e) => e.target.select()}
+                          onCommit={(v) => handleOptionPriceChange(option.id, v)}
+                          prefix={<span className="text-xs text-muted-foreground">$</span>}
+                          wrapperClassName="w-20 h-7"
+                          className="text-sm"
+                          placeholder="0.00"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setThreePoOptionDraftId(option.id)}
+                        className={cn(
+                          'text-[10px] font-semibold px-1.5 py-1 rounded border transition-colors',
+                          hasThreePoOverride(option.threePoPricing)
+                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            : 'border-border text-muted-foreground hover:bg-muted/60',
+                        )}
+                        title={
+                          hasThreePoOverride(option.threePoPricing)
+                            ? 'Third-party pricing — has overrides'
+                            : 'Third-party pricing'
+                        }
+                        aria-label={`Third-party pricing for ${option.optionName}`}
+                      >
+                        3PO
+                      </button>
                       <label className="flex items-center gap-1 text-xs text-muted-foreground">
                         <input
                           type="checkbox"
@@ -1521,6 +1558,25 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {threePoOptionDraftId !== null && (() => {
+        const draftOption = options.find((o) => o.id === threePoOptionDraftId);
+        if (!draftOption) return null;
+        return (
+          <OptionThreePoPricingDialog
+            isOpen
+            onClose={() => setThreePoOptionDraftId(null)}
+            optionName={draftOption.optionName}
+            basePrice={isNoCharge ? 0 : draftOption.price}
+            pricing={draftOption.threePoPricing}
+            onSave={(pricing) =>
+              setOptions((opts) =>
+                opts.map((o) => (o.id === draftOption.id ? { ...o, threePoPricing: pricing } : o)),
+              )
+            }
+          />
+        );
+      })()}
     </div>
   );
 }
