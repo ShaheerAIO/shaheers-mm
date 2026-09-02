@@ -16,6 +16,7 @@ import type {
   Allergen,
   Tag,
   Station,
+  SalesCategory,
   CustomTax,
   ExcelMenuData,
   TabType,
@@ -23,6 +24,13 @@ import type {
   AiPatch,
 } from '@/types/menu';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
+import {
+  DEFAULT_SALE_CATEGORY,
+  DEFAULT_SALE_CATEGORY_ID,
+  freshSalesCategories,
+  nextSaleCategoryId,
+  resolveSaleCategory,
+} from '@/lib/saleCategories';
 import { resolveOptionPriceScope } from '@/lib/optionPriceScope';
 
 // System tags are always present in the store and cannot be deleted.
@@ -94,6 +102,7 @@ interface MenuState {
   modifierModifierOptions: ModifierModifierOption[];
   allergens: Allergen[];
   tags: Tag[];
+  salesCategories: SalesCategory[];
   customTaxes: CustomTax[];
 
   // Derived / helper data (not part of Excel schema)
@@ -229,6 +238,11 @@ interface MenuState {
   deleteTag: (id: number) => void;
 
   // Actions - Custom Taxes
+  // Sales categories — returns the id of the created (or matched) row.
+  addSalesCategory: (name: string) => number;
+  updateSalesCategory: (id: number, updates: Partial<Omit<SalesCategory, 'id' | 'isDefault'>>) => void;
+  deleteSalesCategory: (id: number) => void;
+
   addCustomTax: (tax: CustomTax) => void;
   updateCustomTax: (id: number, updates: Partial<CustomTax>) => void;
   deleteCustomTax: (id: number) => void;
@@ -361,14 +375,14 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 20;
+export const STORE_VERSION = 21;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
   'menus', 'categories', 'items', 'itemModifiers', 'categoryModifierGroups',
   'categoryModifiers', 'categoryItems', 'itemModifierGroups', 'modifierGroups',
   'modifiers', 'modifierOptions', 'modifierModifierOptions', 'allergens', 'tags',
-  'customTaxes', 'stations', 'taxRate',
+  'salesCategories', 'customTaxes', 'stations', 'taxRate',
 ] as const;
 
 export type WorkspaceData = Pick<MenuState, typeof WORKSPACE_DATA_KEYS[number]>;
@@ -397,6 +411,7 @@ export function createFreshWorkspaceData(): WorkspaceData {
     modifierModifierOptions: [],
     allergens: [],
     tags: [...SYSTEM_TAGS],
+    salesCategories: freshSalesCategories(),
     customTaxes: [],
     stations: [],
     taxRate: 10,
@@ -758,6 +773,29 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     }
   }
 
+  if (fromVersion < 21) {
+    // Sale categories became an id-bearing catalog (they were free text before).
+    // Seed the POS defaults, promote any name items already use into a custom
+    // row, then stamp every item with the matching saleCategoryId.
+    const catalog = freshSalesCategories();
+    const items = Array.isArray(state.items) ? (state.items as Record<string, unknown>[]) : [];
+    for (const item of items) {
+      const name = typeof item.saleCategory === 'string' ? item.saleCategory.trim() : '';
+      if (!name) continue;
+      if (catalog.some((c) => c.name.toLowerCase() === name.toLowerCase())) continue;
+      catalog.push({ id: nextSaleCategoryId(catalog), name, isDefault: false });
+    }
+    state.salesCategories = catalog;
+    state.items = items.map((item) => {
+      const match = resolveSaleCategory(
+        catalog,
+        undefined,
+        typeof item.saleCategory === 'string' ? item.saleCategory : undefined,
+      );
+      return { ...item, saleCategory: match.name, saleCategoryId: match.id };
+    });
+  }
+
   return persisted as MenuState;
 }
 
@@ -827,6 +865,7 @@ export const useMenuStore = create<MenuState>()(
       modifierModifierOptions: [],
       allergens: [],
       tags: [...SYSTEM_TAGS],
+      salesCategories: freshSalesCategories(),
       customTaxes: [],
       stations: [],
       taxRate: 10,
@@ -898,10 +937,27 @@ export const useMenuStore = create<MenuState>()(
           .sort((a, b) => a - b)
           .map((id) => ({ id }));
 
+        // Sale categories: start from the imported catalog (POS defaults when the
+        // file predates the sheet), then promote any item sale-category name the
+        // catalog is missing so no item points at a non-existent id.
+        const salesCategories: SalesCategory[] =
+          data.salesCategories && data.salesCategories.length > 0
+            ? data.salesCategories.map((c) => ({ ...c }))
+            : freshSalesCategories();
+        for (const item of data.items) {
+          const name = (item.saleCategory || '').trim();
+          if (!name) continue;
+          if (salesCategories.some((c) => c.name.toLowerCase() === name.toLowerCase())) continue;
+          salesCategories.push({ id: nextSaleCategoryId(salesCategories), name, isDefault: false });
+        }
+        const reconciledItems = data.items.map((item) => {
+          const match = resolveSaleCategory(salesCategories, item.saleCategoryId, item.saleCategory);
+          return { ...item, saleCategory: match.name, saleCategoryId: match.id };
+        });
+
         set({
           menus: data.menus,
           categories: data.categories,
-          items: data.items,
           itemModifiers: data.itemModifiers,
           categoryModifierGroups: data.categoryModifierGroups,
           categoryModifiers: data.categoryModifiers,
@@ -917,6 +973,8 @@ export const useMenuStore = create<MenuState>()(
             const missing = SYSTEM_TAGS.filter((st) => !importedIds.has(st.id));
             return [...data.tags, ...missing];
           })(),
+          salesCategories,
+          items: reconciledItems,
           customTaxes: data.customTaxes ?? [],
           stations,
           isDataLoaded: true,
@@ -942,6 +1000,7 @@ export const useMenuStore = create<MenuState>()(
           modifierModifierOptions: state.modifierModifierOptions,
           allergens: state.allergens,
           tags: state.tags,
+          salesCategories: state.salesCategories,
           customTaxes: state.customTaxes,
         };
       },
@@ -996,6 +1055,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        salesCategories: freshSalesCategories(),
         customTaxes: [],
         stations: [],
         isDataLoaded: false,
@@ -1031,6 +1091,7 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: [],
         allergens: [],
         tags: [],
+        salesCategories: freshSalesCategories(),
         customTaxes: [],
         stations: [],
         isDataLoaded: true,
@@ -1715,6 +1776,46 @@ export const useMenuStore = create<MenuState>()(
               ? cat.tagIds.split(',').map((s) => s.trim()).filter((s) => s !== idStr).join(',')
               : cat.tagIds,
           })),
+        };
+      }),
+
+      // Sales Category Actions
+      addSalesCategory: (name) => {
+        const trimmed = name.trim();
+        const existing = get().salesCategories.find(
+          (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (existing) return existing.id;
+        const id = nextSaleCategoryId(get().salesCategories);
+        set((state) => ({
+          salesCategories: [...state.salesCategories, { id, name: trimmed, isDefault: false }],
+        }));
+        return id;
+      },
+      updateSalesCategory: (id, updates) => set((state) => {
+        const next = state.salesCategories.map((c) =>
+          c.id === id && !c.isDefault ? { ...c, ...updates } : c,
+        );
+        const renamed = next.find((c) => c.id === id);
+        return {
+          salesCategories: next,
+          // The Item sheet carries the name too — keep assigned items in sync.
+          items: renamed
+            ? state.items.map((i) => (i.saleCategoryId === id ? { ...i, saleCategory: renamed.name } : i))
+            : state.items,
+        };
+      }),
+      deleteSalesCategory: (id) => set((state) => {
+        const target = state.salesCategories.find((c) => c.id === id);
+        if (!target || target.isDefault) return {};
+        return {
+          salesCategories: state.salesCategories.filter((c) => c.id !== id),
+          // Assigned items fall back to the default rather than dangling.
+          items: state.items.map((i) =>
+            i.saleCategoryId === id
+              ? { ...i, saleCategoryId: DEFAULT_SALE_CATEGORY_ID, saleCategory: DEFAULT_SALE_CATEGORY }
+              : i,
+          ),
         };
       }),
 

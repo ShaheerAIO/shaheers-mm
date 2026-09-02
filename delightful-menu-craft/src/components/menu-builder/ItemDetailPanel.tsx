@@ -14,12 +14,14 @@ import { LoadingImage } from '@/components/ui/loading-image';
 import { TagIconPicker } from '@/components/tags/TagIconPicker';
 import { resolveTagIcon } from '@/lib/tagIcons';
 import { SaleCategorySelect } from '@/components/menu-builder/SaleCategorySelect';
+import { resolveSaleCategory } from '@/lib/saleCategories';
 import { getModTypeBarClasses, getModTypeDotClasses, getModTypeLabel, getModTypeLabelClasses } from '@/components/menu-builder/pos-preview/ModifierPanel';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Item } from '@/types/menu';
 import {
   THREE_PO_PLATFORMS,
+  hasThreePoOverride,
   parseThreePoPricing,
   serializeThreePoPricing,
   type ThreePoPlatform,
@@ -52,6 +54,7 @@ import { effectiveItemTaxRate } from '@/lib/tax';
 import { resolveOptionPriceScope, countLabel, type OptionPriceScope } from '@/lib/optionPriceScope';
 import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
 import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
+import { OptionThreePoPricingDialog } from '@/components/modifier-library/OptionThreePoPricingDialog';
 import { cn } from '@/lib/utils';
 
 interface ItemDetailPanelProps {
@@ -117,7 +120,7 @@ interface DraftState {
   inheritVisibilityFromCategory: boolean;
   preparationTime: number | null;
   calories: number | null;
-  saleCategory: string;
+  saleCategoryId: number | undefined;
   visibilityPos: boolean;
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
@@ -205,6 +208,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     updateModifier,
     modifierGroups,
     modifierOptions,
+    updateModifierOption,
     modifierModifierOptions,
     itemModifiers,
     categoryModifiers,
@@ -230,6 +234,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     forkOptionPriceForItem,
     taxRate,
     customTaxes,
+    salesCategories,
     setActiveTab,
   } = useMenuStore();
 
@@ -300,7 +305,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     inheritModifiersFromCategory: item.inheritModifiersFromCategory,
     preparationTime: item.preparationTime,
     calories: item.calories,
-    saleCategory: item.saleCategory ?? '',
+    saleCategoryId: item.saleCategoryId,
     ...defaultVisibility(),
     visibilityPos: item.visibilityPos ?? true,
     visibilityKiosk: item.visibilityKiosk ?? true,
@@ -346,6 +351,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [newStationName, setNewStationName] = useState('');
   // A committed price waiting on the operator's choice of scope.
   const [pendingOptionPrice, setPendingOptionPrice] = useState<PendingOptionPrice | null>(null);
+  // The option whose third-party pricing dialog is open (null = closed).
+  const [threePoOption, setThreePoOption] = useState<{
+    optionId: number;
+    optionName: string;
+    basePrice: number;
+  } | null>(null);
   const [optionDragState, setOptionDragState] = useState<{ modifierId: number; index: number } | null>(null);
   const [optionDragOverState, setOptionDragOverState] = useState<{ modifierId: number; index: number } | null>(null);
   const [modDragId, setModDragId] = useState<number | null>(null);
@@ -400,7 +411,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritVisibilityFromCategory: item.inheritVisibilityFromCategory === true,
       preparationTime: item.preparationTime,
       calories: item.calories,
-      saleCategory: item.saleCategory ?? '',
+      saleCategoryId: item.saleCategoryId,
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
@@ -535,7 +546,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.inheritVisibilityFromCategory !== (item.inheritVisibilityFromCategory === true) ||
       draft.preparationTime !== item.preparationTime ||
       draft.calories !== item.calories ||
-      draft.saleCategory !== (item.saleCategory ?? '') ||
+      draft.saleCategoryId !== item.saleCategoryId ||
       draft.visibilityPos !== (item.visibilityPos ?? true) ||
       draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
       draft.visibilityMenuBoard !== (item.visibilityMenuBoard ?? true) ||
@@ -553,7 +564,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     );
   }, [draft, item, pendingModifierIds, pendingRemovedModifierIds, originalStationIds, stationDraft, originalAddonIds, addonDraft]);
 
-  const saleCategoryValid = draft.saleCategory.trim() !== '';
+  const saleCategoryValid = draft.saleCategoryId != null;
+  const draftSaleCategory = resolveSaleCategory(salesCategories, draft.saleCategoryId, item.saleCategory);
   const maxLimitValid = draft.noMaxLimit || !draft.orderQuantityLimit || draft.maxLimit >= draft.minLimit;
 
   const itemNameError = getItemNameError(draft.itemName);
@@ -605,7 +617,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritVisibilityFromCategory: draft.inheritVisibilityFromCategory,
       preparationTime: draft.preparationTime,
       calories: draft.calories,
-      saleCategory: draft.saleCategory.trim() || 'Food Sales',
+      saleCategory: draftSaleCategory.name,
+      saleCategoryId: draftSaleCategory.id,
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
       addonIds: serializeIds(addonDraft),
       visibilityPos: draft.visibilityPos,
@@ -676,7 +689,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       inheritVisibilityFromCategory: item.inheritVisibilityFromCategory === true,
       preparationTime: item.preparationTime,
       calories: item.calories,
-      saleCategory: item.saleCategory ?? '',
+      saleCategoryId: item.saleCategoryId,
       ...defaultVisibility(),
       visibilityPos: item.visibilityPos ?? true,
       visibilityKiosk: item.visibilityKiosk ?? true,
@@ -1487,8 +1500,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             <Label htmlFor="saleCategory" className="text-xs text-muted-foreground">Sale category*</Label>
             <SaleCategorySelect
               id="saleCategory"
-              value={draft.saleCategory}
-              onChange={(v) => setDraft(d => ({ ...d, saleCategory: v }))}
+              value={draft.saleCategoryId}
+              onChange={(v) => setDraft(d => ({ ...d, saleCategoryId: v }))}
               triggerClassName="input-field"
             />
             {!saleCategoryValid && (
@@ -1990,50 +2003,76 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             {(() => {
                               const priceType = modifier.modifierOptionPriceType ?? 'NoCharge';
                               const committed = opt.maxLimit > 0 ? opt.maxLimit : 0;
+                              const optionLabel = opt.option?.optionName || opt.optionDisplayName;
+                              const hasOverride = hasThreePoOverride(opt.option?.threePoPricing);
                               // NoCharge pins every option to 0 and Group prices them
                               // as a set, so neither is editable per option here.
-                              if (priceType === 'NoCharge') {
-                                return (
-                                  <span className="text-xs text-muted-foreground italic shrink-0">Free</span>
-                                );
-                              }
-                              if (priceType === 'Group') {
-                                return (
+                              const priceCell =
+                                priceType === 'NoCharge' ? (
+                                  <span className="text-xs text-muted-foreground italic">Free</span>
+                                ) : priceType === 'Group' ? (
                                   <span
-                                    className="text-xs text-muted-foreground shrink-0"
+                                    className="text-xs text-muted-foreground"
                                     title="Set by the modifier's group price"
                                   >
                                     ${committed.toFixed(2)} · group
                                   </span>
+                                ) : (
+                                  <div
+                                    className="flex items-center gap-1"
+                                    // The row itself is draggable, so a press inside
+                                    // the input would start a reorder drag instead of
+                                    // placing the caret. Cancel the native drag and
+                                    // keep it from reaching the row's handler.
+                                    draggable={false}
+                                    onDragStart={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                    }}
+                                  >
+                                    <DeferredPriceInput
+                                      value={committed}
+                                      onCommit={(price) => handleCommitOptionPrice(modifier, opt, price)}
+                                      placeholder="0.00"
+                                      prefix={<span className="text-muted-foreground text-xs">$</span>}
+                                      wrapperClassName="w-20 h-7"
+                                      className="text-xs"
+                                      aria-label={`Price for ${optionLabel}`}
+                                    />
+                                    {modifier.isSizeModifier && effectiveTaxRate > 0 && (
+                                      <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
+                                        (${(committed * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
+                                      </span>
+                                    )}
+                                  </div>
                                 );
-                              }
                               return (
-                                <div
-                                  className="flex items-center gap-1 shrink-0"
-                                  // The row itself is draggable, so a press inside
-                                  // the input would start a reorder drag instead of
-                                  // placing the caret. Cancel the native drag and
-                                  // keep it from reaching the row's handler.
-                                  draggable={false}
-                                  onDragStart={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  }}
-                                >
-                                  <DeferredPriceInput
-                                    value={committed}
-                                    onCommit={(price) => handleCommitOptionPrice(modifier, opt, price)}
-                                    placeholder="0.00"
-                                    prefix={<span className="text-muted-foreground text-xs">$</span>}
-                                    wrapperClassName="w-20 h-7"
-                                    className="text-xs"
-                                    aria-label={`Price for ${opt.option?.optionName || opt.optionDisplayName}`}
-                                  />
-                                  {modifier.isSizeModifier && effectiveTaxRate > 0 && (
-                                    <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
-                                      (${(committed * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
-                                    </span>
-                                  )}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {priceCell}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setThreePoOption({
+                                        optionId: opt.modifierOptionId,
+                                        optionName: optionLabel,
+                                        basePrice: priceType === 'NoCharge' ? 0 : committed,
+                                      })
+                                    }
+                                    className={cn(
+                                      'shrink-0 text-[10px] font-semibold px-1.5 py-1 rounded border transition-colors',
+                                      hasOverride
+                                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                        : 'border-border text-muted-foreground hover:bg-muted/60',
+                                    )}
+                                    title={
+                                      hasOverride
+                                        ? 'Third-party pricing — has overrides'
+                                        : 'Third-party pricing'
+                                    }
+                                    aria-label={`Third-party pricing for ${optionLabel}`}
+                                  >
+                                    3PO
+                                  </button>
                                 </div>
                               );
                             })()}
@@ -3051,6 +3090,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           />
         );
       })()}
+
+      {threePoOption && (
+        <OptionThreePoPricingDialog
+          isOpen
+          onClose={() => setThreePoOption(null)}
+          optionName={threePoOption.optionName}
+          basePrice={threePoOption.basePrice}
+          pricing={modifierOptions.find((o) => o.id === threePoOption.optionId)?.threePoPricing}
+          onSave={(pricing) =>
+            updateModifierOption(threePoOption.optionId, { threePoPricing: pricing })
+          }
+        />
+      )}
 
       {/* Save Confirmation Notification */}
       {showSaveNotification && (

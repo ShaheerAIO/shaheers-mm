@@ -87,6 +87,9 @@ export interface Item {
   tagIds: string; // comma-separated IDs
   inheritTagsFromCategory: boolean;
   saleCategory: string;
+  // Foreign key into the Sales Category catalog. The `saleCategory` name above is
+  // kept in sync with it (both columns ship in the Item sheet).
+  saleCategoryId?: number;
   allergenIds: string; // comma-separated IDs
   inheritAllergensFromCategory?: boolean; // when true, category-level allergens cascade to this item (default true)
   inheritModifiersFromCategory: boolean;
@@ -212,6 +215,10 @@ export interface ModifierOption {
   /** Option surcharge — POS keeps this on the option row (`price`); the app's UI
    *  edits it via the join's `maxLimit`. Bridged on import/export. */
   price?: number;
+  // Per-platform 3PO pricing (inherit toggle + Pickup/Delivery). JSON-encoded
+  // ThreePoPricing (see lib/threePoPricing.ts). Round-trips via the
+  // "Modifier Option 3PO" sheet.
+  threePoPricing?: string;
   // Channel visibility
   visibilityPos: boolean;
   visibilityKiosk: boolean;
@@ -249,6 +256,14 @@ export interface Tag {
   icon?: string;     // lucide icon name, e.g. "Wine"
   color?: string;    // hex color, e.g. "#ef4444"
   isSystem?: boolean; // true = seeded by the app, cannot be deleted
+}
+
+// Sales Category — the POS revenue bucket an item reports into. Ships as its own
+// sheet; ids 1-9 are POS defaults (isDefault), operator-created ones start at 34.
+export interface SalesCategory {
+  id: number;
+  name: string;
+  isDefault: boolean;
 }
 
 // Custom tax — a named rate that overrides the standard rate on assigned items.
@@ -301,6 +316,7 @@ export interface ExcelMenuData {
   modifierModifierOptions: ModifierModifierOption[];
   allergens: Allergen[];
   tags: Tag[];
+  salesCategories?: SalesCategory[];
   customTaxes?: CustomTax[];
 }
 

@@ -2,9 +2,11 @@
 // Third-party ordering (3PO) per-platform pricing
 // =============================================================================
 // Per platform (DoorDash / Uber Eats / GrubHub) an operator can either inherit
-// pricing from the item's base price, or set independent fixed Pickup and
-// Delivery prices. Stored on Item as a JSON-encoded string (`threePoPricing`).
-// Excel export maps this to the "Item 3PO" sheet (see excelExporter).
+// pricing from the base price, or set independent fixed Pickup and Delivery
+// prices. Stored as a JSON-encoded string (`threePoPricing`) on both Item and
+// ModifierOption — items inherit their `itemPrice`, options their surcharge.
+// Excel export maps these to the "Item 3PO" and "Modifier Option 3PO" sheets
+// (see excelExporter).
 
 export const THREE_PO_PLATFORMS = [
   { key: 'doordash', label: 'DoorDash' },
@@ -69,4 +71,11 @@ export function parseThreePoPricing(raw: string | undefined): ThreePoPricing {
 
 export function serializeThreePoPricing(pricing: ThreePoPricing): string {
   return JSON.stringify(pricing);
+}
+
+/** True when at least one platform overrides the base price. */
+export function hasThreePoOverride(raw: string | undefined): boolean {
+  if (!raw?.trim()) return false;
+  const pricing = parseThreePoPricing(raw);
+  return THREE_PO_PLATFORMS.some(({ key }) => !pricing[key].inherit);
 }

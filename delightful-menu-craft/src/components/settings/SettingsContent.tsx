@@ -11,6 +11,7 @@ import {
   Ban,
   UtensilsCrossed,
   Receipt,
+  Tags,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -79,6 +80,17 @@ function IssueRow({ label, sub }: { label: string; sub?: string }) {
   );
 }
 
+/** Distinct placeholder name so clicking Add twice creates two rows, not one. */
+const nextUntitledSalesCategory = (existing: readonly { name: string }[]): string => {
+  const base = 'New sales category';
+  const taken = new Set(existing.map(c => c.name.trim().toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function SettingsContent() {
@@ -98,6 +110,10 @@ export function SettingsContent() {
     addCustomTax,
     updateCustomTax,
     deleteCustomTax,
+    salesCategories,
+    addSalesCategory,
+    updateSalesCategory,
+    deleteSalesCategory,
     getNextId,
   } = useMenuStore();
 
@@ -273,6 +289,60 @@ export function SettingsContent() {
             >
               <Plus className="w-4 h-4" />
               Add tax
+            </button>
+          </div>
+        </section>
+
+        {/* ── Sales categories ───────────────────────────────────────────────── */}
+        <section className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+              <Tags className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">Sales categories</h2>
+              <p className="text-xs text-muted-foreground">Revenue buckets items report into. The POS defaults are fixed; custom ones are yours to edit</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {salesCategories.map(sc => (
+              <div key={sc.id} className="flex items-center gap-2">
+                <span className="w-10 shrink-0 text-xs tabular-nums text-muted-foreground text-right">{sc.id}</span>
+                {sc.isDefault ? (
+                  <span className="flex-1 text-sm px-3 py-2 rounded-lg bg-muted/40 text-muted-foreground">{sc.name}</span>
+                ) : (
+                  <input
+                    type="text"
+                    value={sc.name}
+                    placeholder="Sales category name"
+                    onChange={(e) => updateSalesCategory(sc.id, { name: e.target.value })}
+                    className={cn('input-field flex-1 text-sm', !sc.name.trim() && 'border-destructive')}
+                  />
+                )}
+                <button
+                  onClick={() => deleteSalesCategory(sc.id)}
+                  disabled={sc.isDefault}
+                  aria-label={sc.isDefault ? 'POS default — cannot be deleted' : `Delete ${sc.name}`}
+                  title={sc.isDefault ? 'POS default — cannot be deleted' : undefined}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent transition-colors shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground pt-1">
+              Deleting a custom category moves its items to Food Sales.
+              {salesCategories.some(sc => !sc.isDefault && !sc.name.trim()) && (
+                <span className="text-destructive"> Unnamed categories export as Food Sales.</span>
+              )}
+            </p>
+            <button
+              onClick={() => addSalesCategory(nextUntitledSalesCategory(salesCategories))}
+              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline pt-1"
+            >
+              <Plus className="w-4 h-4" />
+              Add sales category
             </button>
           </div>
         </section>

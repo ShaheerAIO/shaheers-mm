@@ -11,6 +11,7 @@ import { ColorPalettePicker } from '@/components/ColorPalettePicker';
 import { CATEGORY_COLOR_PALETTE, DEFAULT_CATEGORY_COLOR, pickUnusedCategoryColor } from '@/lib/posColors';
 import { defaultVisibility, defaultDaySchedules, serializeDaySchedules } from '@/lib/visibility';
 import { canAddSubcategory, MAX_CATEGORY_TIERS } from '@/lib/categoryTree';
+import { DEFAULT_SALE_CATEGORY, DEFAULT_SALE_CATEGORY_ID } from '@/lib/saleCategories';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -331,7 +332,8 @@ export function CategoryColumn({
       calories: null,
       tagIds: '',
       inheritTagsFromCategory: true,
-      saleCategory: 'Food Sales',
+      saleCategory: DEFAULT_SALE_CATEGORY,
+      saleCategoryId: DEFAULT_SALE_CATEGORY_ID,
       allergenIds: '',
       inheritModifiersFromCategory: true,
       addonIds: '',
