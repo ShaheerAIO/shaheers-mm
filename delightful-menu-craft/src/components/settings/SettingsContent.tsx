@@ -35,11 +35,11 @@ const CHANNELS = [
 type Severity = 'red' | 'orange' | 'yellow' | 'blue' | 'slate';
 
 const SEVERITY_STYLES: Record<Severity, { border: string; bg: string; badge: string; icon: string }> = {
-  red:    { border: 'border-l-red-500',    bg: 'bg-red-500/5',    badge: 'bg-red-500/15 text-red-500',       icon: 'text-red-500' },
-  orange: { border: 'border-l-orange-500', bg: 'bg-orange-500/5', badge: 'bg-orange-500/15 text-orange-500', icon: 'text-orange-500' },
-  yellow: { border: 'border-l-yellow-500', bg: 'bg-yellow-500/5', badge: 'bg-yellow-500/15 text-yellow-600', icon: 'text-yellow-600' },
-  blue:   { border: 'border-l-blue-500',   bg: 'bg-blue-500/5',   badge: 'bg-blue-500/15 text-blue-500',     icon: 'text-blue-500' },
-  slate:  { border: 'border-l-slate-400',  bg: 'bg-muted/40',     badge: 'bg-muted text-muted-foreground',   icon: 'text-muted-foreground' },
+  red:    { border: 'border-l-danger',    bg: 'bg-danger-bg',    badge: 'bg-danger-bg text-danger',       icon: 'text-danger' },
+  orange: { border: 'border-l-primary', bg: 'bg-[var(--aio-accent-soft)]', badge: 'bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)]', icon: 'text-[var(--aio-accent-text)]' },
+  yellow: { border: 'border-l-warn', bg: 'bg-warn-bg', badge: 'bg-warn-bg text-warn', icon: 'text-warn' },
+  blue:   { border: 'border-l-[var(--aio-info)]',   bg: 'bg-[var(--aio-info-bg)]',   badge: 'bg-[var(--aio-info-bg)] text-[var(--aio-info)]',     icon: 'text-[var(--aio-info)]' },
+  slate:  { border: 'border-l-rule-2',  bg: 'bg-muted/40',     badge: 'bg-muted text-muted-foreground',   icon: 'text-muted-foreground' },
 };
 
 interface IssueGroupProps {
@@ -276,7 +276,7 @@ export function SettingsContent() {
                   <button
                     onClick={() => deleteCustomTax(tax.id)}
                     aria-label="Delete tax"
-                    className="p-2 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                    className="p-2 rounded-lg text-muted-foreground hover:text-danger hover:bg-danger-bg transition-colors shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -325,7 +325,7 @@ export function SettingsContent() {
                   disabled={sc.isDefault}
                   aria-label={sc.isDefault ? 'POS default — cannot be deleted' : `Delete ${sc.name}`}
                   title={sc.isDefault ? 'POS default — cannot be deleted' : undefined}
-                  className="p-2 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent transition-colors shrink-0"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-danger hover:bg-danger-bg disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent transition-colors shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -358,8 +358,8 @@ export function SettingsContent() {
             <div className="flex items-center gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Menu health</h2>
               {totalIssues > 0
-                ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-500">{totalIssues} issues</span>
-                : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-600">All clear</span>}
+                ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-danger-bg text-danger">{totalIssues} issues</span>
+                : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-ok-bg text-ok">All clear</span>}
             </div>
 
             {/* Inline counts */}
@@ -375,7 +375,7 @@ export function SettingsContent() {
 
             {/* Issues */}
             {totalIssues === 0 ? (
-              <div className="flex items-center gap-2 p-3 bg-green-500/5 border border-green-500/20 rounded-lg text-sm text-green-700 dark:text-green-400">
+              <div className="flex items-center gap-2 p-3 bg-ok-bg border border-ok-edge rounded-lg text-sm text-ok">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 No configuration issues detected.
               </div>
@@ -422,7 +422,7 @@ export function SettingsContent() {
             <div className="flex flex-wrap gap-x-4 text-sm">
               <span className="text-muted-foreground font-medium">Pricing:</span>
               <span>avg <span className="font-medium">${avgPrice}</span></span>
-              <span>low <span className="font-medium text-green-600">${minPrice}</span></span>
+              <span>low <span className="font-medium text-ok">${minPrice}</span></span>
               <span>high <span className="font-medium text-primary">${maxPrice}</span></span>
             </div>
           </section>

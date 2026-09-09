@@ -23,19 +23,19 @@ const KIND_META: Record<
   AiPatch['kind'],
   { label: string; color: string }
 > = {
-  item_station: { label: 'Station', color: 'bg-sky-500/20 text-sky-300 ring-sky-500/30' },
-  item_rename: { label: 'Rename', color: 'bg-orange-500/20 text-orange-300 ring-orange-500/30' },
-  item_description: { label: 'Description', color: 'bg-violet-500/20 text-violet-300 ring-violet-500/30' },
-  category_rename: { label: 'Category', color: 'bg-teal-500/20 text-teal-300 ring-teal-500/30' },
+  item_station: { label: 'Station', color: 'bg-[var(--aio-info-bg)] text-[var(--aio-info)] ring-[var(--aio-info-edge)]' },
+  item_rename: { label: 'Rename', color: 'bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)] ring-[var(--aio-accent-edge)]' },
+  item_description: { label: 'Description', color: 'bg-accent2-soft text-accent2 ring-accent2' },
+  category_rename: { label: 'Category', color: 'bg-ok-bg text-ok ring-ok-edge' },
 };
 
 const CONF_META: Record<
   AiPatch['confidence'],
   { label: string; color: string }
 > = {
-  high: { label: 'High', color: 'text-emerald-400' },
-  medium: { label: 'Med', color: 'text-yellow-400' },
-  low: { label: 'Low', color: 'text-red-400' },
+  high: { label: 'High', color: 'text-ok' },
+  medium: { label: 'Med', color: 'text-warn' },
+  low: { label: 'Low', color: 'text-danger' },
 };
 
 function kindCounts(patches: AiPatch[]) {
@@ -87,14 +87,16 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col gap-0 p-0 bg-[hsl(var(--pos-shell-elevated))] border-[hsl(var(--pos-shell-border))]">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col gap-0 p-0 bg-card border-[var(--aio-border)]">
         {/* Header */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-[hsl(var(--pos-shell-border))] shrink-0">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-[var(--aio-border)] shrink-0">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-orange-400 shrink-0" />
-            <DialogTitle className="text-zinc-100">AI Menu Enhancement</DialogTitle>
+            <span className="ai-orb" aria-hidden="true">
+              <Sparkles />
+            </span>
+            <DialogTitle className="text-ink">AI Menu Enhancement</DialogTitle>
           </div>
-          <DialogDescription className="text-zinc-400 text-sm mt-1">
+          <DialogDescription className="text-ink-muted text-sm mt-1">
             {status === 'loading' && 'Analysing your menu with Claude Haiku…'}
             {status === 'reviewing' && result?.summary}
             {status === 'error' && 'Something went wrong.'}
@@ -106,21 +108,21 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
         <div className="flex-1 overflow-y-auto min-h-0">
           {/* Loading */}
           {status === 'loading' && (
-            <div className="flex flex-col items-center justify-center py-20 gap-4 text-zinc-400">
-              <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-ink-muted">
+              <Loader2 className="w-10 h-10 animate-spin text-[var(--aio-accent-text)]" />
               <p className="text-sm">This usually takes 5–15 seconds for large menus…</p>
             </div>
           )}
 
           {/* Error */}
           {status === 'error' && (
-            <div className="flex flex-col items-center justify-center py-16 gap-4 text-zinc-400 px-6">
-              <AlertTriangle className="w-10 h-10 text-red-400" />
-              <p className="text-sm font-medium text-red-300">Enhancement failed</p>
-              <p className="text-xs text-zinc-500 text-center max-w-sm break-words">{error}</p>
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-ink-muted px-6">
+              <AlertTriangle className="w-10 h-10 text-danger" />
+              <p className="text-sm font-medium text-danger">Enhancement failed</p>
+              <p className="text-xs text-ink-faint text-center max-w-sm break-words">{error}</p>
               <button
                 onClick={() => run()}
-                className="mt-2 px-4 py-2 text-sm rounded-lg bg-orange-600 hover:bg-orange-500 text-white transition-colors"
+                className="mt-2 px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary text-white transition-colors"
               >
                 Try again
               </button>
@@ -131,7 +133,7 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
           {status === 'reviewing' && result && (
             <div>
               {/* Stats row */}
-              <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-b border-[hsl(var(--pos-shell-border))] text-xs text-zinc-400">
+              <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-b border-[var(--aio-border)] text-xs text-ink-muted">
                 {Object.entries(counts).map(([kind, n]) => {
                   const meta = KIND_META[kind as AiPatch['kind']];
                   return (
@@ -144,27 +146,27 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
                   );
                 })}
                 {result.newStations.length > 0 && (
-                  <span className="text-zinc-500">
+                  <span className="text-ink-faint">
                     New stations: {result.newStations.join(', ')}
                   </span>
                 )}
               </div>
 
               {/* Controls */}
-              <div className="flex items-center justify-between px-6 py-2 border-b border-[hsl(var(--pos-shell-border))] text-xs">
-                <span className="text-zinc-500">
+              <div className="flex items-center justify-between px-6 py-2 border-b border-[var(--aio-border)] text-xs">
+                <span className="text-ink-faint">
                   {acceptedCount} / {totalPatches} proposals selected
                 </span>
                 <div className="flex gap-3">
                   <button
                     onClick={acceptAll}
-                    className="text-orange-400 hover:text-orange-300 transition-colors"
+                    className="text-[var(--aio-accent-text)] hover:text-[var(--aio-accent-text)] transition-colors"
                   >
                     Accept all
                   </button>
                   <button
                     onClick={rejectAll}
-                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-ink-faint hover:text-ink transition-colors"
                   >
                     Reject all
                   </button>
@@ -172,7 +174,7 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
               </div>
 
               {/* Patch rows */}
-              <div className="divide-y divide-[hsl(var(--pos-shell-border))]">
+              <div className="divide-y divide-[var(--aio-border)]">
                 {result.patches.map((patch) => {
                   const isAccepted = accepted.has(patch.id);
                   const kindMeta = KIND_META[patch.kind];
@@ -190,7 +192,7 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
                       <Checkbox
                         checked={isAccepted}
                         onCheckedChange={() => togglePatch(patch.id)}
-                        className="mt-0.5 shrink-0 border-zinc-600 data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
+                        className="mt-0.5 shrink-0 border-rule-2 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                       />
 
                       {/* Kind badge */}
@@ -205,22 +207,22 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
 
                       {/* Change */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-zinc-200 font-medium truncate">{patch.label}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5 line-clamp-1">
+                        <p className="text-sm text-ink font-medium truncate">{patch.label}</p>
+                        <p className="text-xs text-ink-faint mt-0.5 line-clamp-1">
                           {patch.from ? (
                             <>
-                              <span className="line-through text-zinc-600">{patch.from}</span>
-                              <span className="mx-1.5 text-zinc-700">→</span>
-                              <span className="text-zinc-300">{patch.to}</span>
+                              <span className="line-through text-ink-faint">{patch.from}</span>
+                              <span className="mx-1.5 text-ink-faint">→</span>
+                              <span className="text-ink-2">{patch.to}</span>
                             </>
                           ) : (
-                            <span className="text-zinc-300">{patch.to}</span>
+                            <span className="text-ink-2">{patch.to}</span>
                           )}
                         </p>
                       </div>
 
                       {/* Reason */}
-                      <p className="hidden sm:block text-xs text-zinc-500 max-w-[220px] line-clamp-2 shrink-0 text-right">
+                      <p className="hidden sm:block text-xs text-ink-faint max-w-[220px] line-clamp-2 shrink-0 text-right">
                         {patch.reason}
                       </p>
 
@@ -243,10 +245,10 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
 
         {/* Footer */}
         {status === 'reviewing' && (
-          <DialogFooter className="px-6 py-4 border-t border-[hsl(var(--pos-shell-border))] shrink-0 flex items-center justify-between gap-2">
+          <DialogFooter className="px-6 py-4 border-t border-[var(--aio-border)] shrink-0 flex items-center justify-between gap-2">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-sm rounded-lg border border-zinc-700 text-zinc-300 hover:bg-white/5 transition-colors"
+              className="px-4 py-2 text-sm rounded-lg border border-rule text-ink-2 hover:bg-[var(--aio-hover)] transition-colors"
             >
               Cancel
             </button>
@@ -256,8 +258,8 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
               className={cn(
                 'px-5 py-2 text-sm font-semibold rounded-lg transition-colors',
                 acceptedCount > 0
-                  ? 'bg-orange-500 hover:bg-orange-400 text-white'
-                  : 'bg-zinc-700 text-zinc-500 cursor-not-allowed',
+                  ? 'bg-primary hover:bg-primary text-white'
+                  : 'bg-surface-2 text-ink-faint cursor-not-allowed',
               )}
             >
               Apply {acceptedCount > 0 ? `${acceptedCount} change${acceptedCount !== 1 ? 's' : ''}` : 'changes'}

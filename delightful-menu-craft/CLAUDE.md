@@ -71,3 +71,36 @@ All channel-visibility sections use the same collapsible dropdown UI pattern: a 
 ## AI enhancement
 
 `src/lib/aiEnhance.ts` calls Claude Haiku with a compact payload (item names + existing station map). The hook `src/hooks/useAiEnhance.ts` manages the load → review → accept/reject → apply state machine. The review UI is in `AiEnhanceModal.tsx`. Patches are applied via `applyAiPatches()` in the store.
+
+## UI language (AIO console)
+
+The app's visual language is ported from the AIO MDM console (`udm.aioapp.com`). It lives in two
+layers, both in `src/index.css`:
+
+1. **`--aio-*`** — the AIO tokens at their raw values (surface tiers, rules, status washes, brand
+   gradient, shadows, motion, radii). Use these for anything the shadcn slots don't cover. Tailwind
+   exposes the useful ones as colours: `surface`/`surface-2`/`surface-3`, `rule`/`rule-2`,
+   `ink`/`ink-2`/`ink-muted`/`ink-faint`, `accent2`, and `ok`/`warn`/`danger` each with `-bg` and
+   `-edge` variants, plus `shadow-sm|md|lg|pop`, `bg-brand`, `ease-aio`, `rounded-pill`.
+2. **shadcn tokens** (`--background`, `--primary`, …) — HSL triples remapped onto the AIO palette, so
+   existing components inherit the language without being touched.
+
+Conventions carried over from the console:
+
+- **Accent is coral, not orange**: `#f9674e` light / `#f9805f` dark, with `--aio-accent-2` (indigo)
+  as the second accent. The wordmark gradient is `.brand-aio`.
+- **Semantic modifiers, not raw palette classes.** Status is `ok` / `warn` / `danger` / `info` with a
+  matching `-bg` wash and `-edge` border — never `text-green-600` or `bg-amber-500/10`. The only
+  exceptions are the POS and kiosk preview components, which deliberately mirror the POS device UI
+  (purple shell, orange tiles) and keep their own `--pos-*` tokens.
+- **Reds are washed, not filled.** `Button variant="destructive"` is a `danger-bg` chip with a
+  `danger-edge`; filled red is reserved for dialog confirmations.
+- **Type**: Poppins (self-hosted via `@fontsource`, imported in `src/main.tsx`), JetBrains Mono for
+  IDs and build names. 13px is the body size; metrics get `.tnum` (tabular figures).
+- **Radius 12px** (`--radius`), 8px for controls, 24px for cards, pill for chips/badges.
+- **Narrative headers**: `.aio-eyebrow` (uppercase accent label) + `.aio-h1` (a sentence, with the
+  number or subject in `<b>` and accent-coloured) + `.aio-sub`. Copy reads as sentences, not labels.
+- **Empty states are first-class**: a tinted circular icon, a bold line, then one plain-language line
+  saying what to do next.
+- **Motion**: 140ms on `--aio-ease`; buttons take a 1px press.
+- Dark mode is a full second token set, not a filter. The theme toggle lives in the appbar (`TopBar`).

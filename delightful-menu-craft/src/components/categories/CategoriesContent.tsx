@@ -288,7 +288,7 @@ export function CategoriesContent() {
                 <button
                   type="button"
                   onClick={() => quickStock(true)}
-                  className="px-2 py-1 rounded border border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400 font-medium transition-colors hover:bg-green-500/20"
+                  className="px-2 py-1 rounded border border-ok-edge bg-ok-bg text-ok font-medium transition-colors hover:bg-ok-bg"
                 >
                   Mark In Stock
                 </button>

@@ -363,7 +363,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                           <div className="col-span-1 flex justify-end gap-1">
                             <button
                               onClick={saveEdit}
-                              className="p-1 text-green-600 hover:bg-green-500/10 rounded"
+                              className="p-1 text-ok hover:bg-ok-bg rounded"
                             >
                               <Check className="w-4 h-4" />
                             </button>
@@ -385,11 +385,11 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                           </div>
                           <div className="col-span-2 flex justify-center">
                             {option.isStockAvailable ? (
-                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-ok-bg text-ok px-2 py-0.5 rounded">
                                 In Stock
                               </span>
                             ) : (
-                              <span className="text-xs bg-red-500/10 text-red-500 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-danger-bg text-danger px-2 py-0.5 rounded">
                                 Out
                               </span>
                             )}
@@ -397,7 +397,7 @@ export function OptionsLibraryModal({ isOpen, onClose }: OptionsLibraryModalProp
                           <div className="col-span-2 text-center">
                             <span className={cn(
                               "text-xs px-2 py-0.5 rounded",
-                              usageCount > 0 ? "bg-blue-500/10 text-blue-600" : "bg-muted text-muted-foreground"
+                              usageCount > 0 ? "bg-[var(--aio-info-bg)] text-[var(--aio-info)]" : "bg-muted text-muted-foreground"
                             )}>
                               {usageCount} modifier{usageCount !== 1 ? 's' : ''}
                             </span>

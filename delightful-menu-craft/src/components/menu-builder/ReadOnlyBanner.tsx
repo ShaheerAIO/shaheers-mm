@@ -41,7 +41,7 @@ export function ReadOnlyBanner() {
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+    <div className="flex items-center justify-between gap-3 border-b border-warn-edge bg-warn-bg px-4 py-2 text-[13px] text-warn">
       <span className="flex items-center gap-2">
         <Lock className="h-4 w-4 shrink-0" />
         <span>

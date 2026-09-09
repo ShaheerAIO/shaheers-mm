@@ -99,7 +99,7 @@ export function AddItemsModal({ isOpen, onClose, categoryId, categoryName }: Add
 
         {/* Validation Error */}
         {hasSubcategories && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm text-amber-700">
+          <div className="bg-warn-bg border border-warn-edge rounded-lg p-3 text-sm text-warn">
             <p className="font-medium">Cannot add items to this category</p>
             <p className="text-xs mt-1">This category has subcategories. Items can only be added to leaf categories (categories without subcategories).</p>
           </div>

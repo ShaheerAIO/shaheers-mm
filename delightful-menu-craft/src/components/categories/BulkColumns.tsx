@@ -74,7 +74,7 @@ function InlineStock({ inStock, onToggle }: { inStock: boolean; onToggle: () => 
       className={cn(
         'inline-block text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 transition-colors',
         inStock
-          ? 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
+          ? 'bg-ok-bg text-ok hover:bg-ok-bg'
           : 'bg-destructive/10 text-destructive hover:bg-destructive/20',
       )}
     >
@@ -369,7 +369,7 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
       meta: (
         <>
           {m.modType === 'Required' && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--aio-info-bg)] text-[var(--aio-info)] shrink-0">
               Req
             </span>
           )}
@@ -405,7 +405,7 @@ export function BulkColumns({ selection, search, filters }: BulkColumnsProps) {
       meta: (
         <>
           {mod.modType === 'Required' && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--aio-info-bg)] text-[var(--aio-info)] shrink-0">
               Req
             </span>
           )}

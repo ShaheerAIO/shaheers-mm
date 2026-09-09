@@ -108,18 +108,23 @@ export default function Team() {
       <div className="mx-auto max-w-2xl">
         <button
           onClick={() => navigate('/workspaces')}
-          className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-4 w-4" /> Back to projects
         </button>
 
-        <h1 className="mb-1 text-2xl font-semibold">Team</h1>
-        <p className="mb-6 text-sm text-muted-foreground">
-          Create accounts and manage access. Admins set the email + password directly
-          (no email sent) and share the credentials with the teammate.
+        <span className="aio-eyebrow">Access</span>
+        <h1 className="aio-h1 mt-1">
+          {rows === null ? 'Loading the team…' : (
+            <><b>{rows.length} {rows.length === 1 ? 'person' : 'people'}</b> can sign in</>
+          )}
+        </h1>
+        <p className="aio-sub mb-6 mt-1">
+          Accounts are created here, not by invite email — set the email and password, then pass the
+          credentials to your teammate.
         </p>
 
-        <Card className="mb-6 p-4">
+        <Card className="mb-6 p-4 aio-card-hover">
           <form onSubmit={handleCreate} className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Input
               type="email"
@@ -141,7 +146,7 @@ export default function Team() {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-9 rounded-[var(--aio-r-2)] border border-[var(--aio-border)] bg-surface px-3 text-[13px] font-medium text-ink transition-colors hover:border-rule-2"
             >
               <option value="member">Member</option>
               <option value="admin">Admin</option>
@@ -153,23 +158,24 @@ export default function Team() {
         </Card>
 
         {rows === null ? (
-          <div className="flex justify-center py-12 text-muted-foreground">
+          <div className="flex justify-center py-12 text-ink-faint">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : (
           <div className="space-y-2">
             {rows.map((r) => (
-              <Card key={r.id} className="flex items-center justify-between p-4">
+              <Card key={r.id} className="flex items-center justify-between p-4 aio-card-hover">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 font-medium">
+                  <div className="flex items-center gap-2 text-[14px] font-medium text-ink">
                     <span className="truncate">{r.email ?? '(no email)'}</span>
-                    {r.id === user?.id && (
-                      <span className="text-xs text-muted-foreground">(you)</span>
-                    )}
+                    {r.id === user?.id && <span className="text-[11px] text-ink-faint">(you)</span>}
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    {r.role === 'admin' && <Shield className="h-3 w-3 text-primary" />}
-                    {r.role}
+                  <div className="mt-1">
+                    {r.role === 'admin' ? (
+                      <span className="aio-chip accent"><Shield className="h-3 w-3" /> Admin</span>
+                    ) : (
+                      <span className="aio-chip">Member</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
@@ -183,7 +189,7 @@ export default function Team() {
                       onClick={() => void handleRemove(r)}
                       aria-label={`Remove ${r.email ?? 'user'}`}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-4 w-4 text-danger" />
                     </Button>
                   )}
                 </div>

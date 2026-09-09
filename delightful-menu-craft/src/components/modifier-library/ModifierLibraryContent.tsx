@@ -448,7 +448,7 @@ export function ModifierLibraryContent() {
                       Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
                     </span>
                     {usedByCount > 0 && (
-                      <span className="bg-blue-500/10 text-blue-600 px-1 rounded">
+                      <span className="bg-[var(--aio-info-bg)] text-[var(--aio-info)] px-1 rounded">
                         used by {usedByCount}
                       </span>
                     )}
@@ -461,10 +461,10 @@ export function ModifierLibraryContent() {
                     {modifier.isNested && (
                       <span className="bg-primary/10 text-primary px-1 rounded">child</span>
                     )}
-                    {modifier.pizzaSelection && <span className="bg-orange-500/10 text-orange-600 px-1 rounded">Pizza</span>}
-                    {modifier.isSizeModifier && <span className="bg-purple-500/10 text-purple-600 px-1 rounded">Size</span>}
+                    {modifier.pizzaSelection && <span className="bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)] px-1 rounded">Pizza</span>}
+                    {modifier.isSizeModifier && <span className="bg-accent2-soft text-accent2 px-1 rounded">Size</span>}
                     {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
-                      <span className="bg-amber-500/10 text-amber-600 px-1 rounded text-[10px]">
+                      <span className="bg-warn-bg text-warn px-1 rounded text-[10px]">
                         {VISIBILITY_CHANNELS.filter(ch => (modifier as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
                       </span>
                     )}
@@ -1619,7 +1619,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       <div className="flex flex-col h-full">
         {/* Unsaved changes indicator */}
         {hasChanges && (
-          <div className="px-6 py-2 bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-600 text-xs font-medium">
+          <div className="px-6 py-2 bg-warn-bg border-b border-warn-edge text-warn text-xs font-medium">
             You have unsaved changes
           </div>
         )}
@@ -1893,7 +1893,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                           <span>{optCount} options</span>
                           {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length < VISIBILITY_CHANNELS.length && (
-                            <span className="bg-amber-500/10 text-amber-600 px-1 rounded">
+                            <span className="bg-warn-bg text-warn px-1 rounded">
                               {VISIBILITY_CHANNELS.filter(ch => (child as Record<string, unknown>)[ch.key] !== false).length}/{VISIBILITY_CHANNELS.length} ch
                             </span>
                           )}
@@ -2184,13 +2184,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
                           {assignment.isDefaultSelected ? 'Default' : 'Set default'}
                         </button>
                         {assignment.option && !assignment.option.isStockAvailable && (
-                          <span className="text-xs bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded">
+                          <span className="text-xs bg-danger-bg text-danger px-1.5 py-0.5 rounded">
                             Out of Stock
                           </span>
                         )}
                         {hasThreePoOverride(assignment.option?.threePoPricing) && (
                           <span
-                            className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded"
+                            className="text-xs bg-warn-bg text-warn px-1.5 py-0.5 rounded"
                             title="Has third-party price overrides"
                           >
                             3PO

@@ -1209,7 +1209,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     <div className="flex flex-col h-full">
       {/* Unsaved changes indicator */}
       {hasChanges && (
-        <div className="px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-600 text-xs font-medium">
+        <div className="px-4 py-2 bg-warn-bg border-b border-warn-edge text-warn text-xs font-medium">
           You have unsaved changes
         </div>
       )}
@@ -1349,7 +1349,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
               ) : (
                 <span
                   title="No image set"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-600"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-warn-edge bg-warn-bg text-warn"
                 >
                   <AlertTriangle className="h-3.5 w-3.5" />
                 </span>
@@ -1858,7 +1858,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                     value={modifier.id.toString()}
                     className={cn(
                       "border rounded-md overflow-hidden",
-                      isPending && "border-green-500/50",
+                      isPending && "border-ok-edge",
                       isPendingRemoval && "opacity-50"
                     )}
                   >
@@ -1880,7 +1880,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             <span className="text-xs text-muted-foreground/60 font-normal shrink-0">#{modifier.id}</span>
                           </span>
                           {isPending && (
-                            <span className="text-xs bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-xs bg-ok-bg text-ok px-1.5 py-0.5 rounded shrink-0">
                               New
                             </span>
                           )}
@@ -1923,10 +1923,10 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               Min: {modifier.minSelector} / Max: {modifier.noMaxSelection ? '∞' : modifier.maxSelector}
                             </span>
                             {modifier.pizzaSelection && (
-                              <span className="bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded font-medium">Pizza</span>
+                              <span className="bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)] px-1.5 py-0.5 rounded font-medium">Pizza</span>
                             )}
                             {modifier.isSizeModifier && (
-                              <span className="bg-purple-500/10 text-purple-600 px-1.5 py-0.5 rounded font-medium">Size</span>
+                              <span className="bg-accent2-soft text-accent2 px-1.5 py-0.5 rounded font-medium">Size</span>
                             )}
                           </div>
                           {options.length > 1 && (
@@ -2061,7 +2061,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                     className={cn(
                                       'shrink-0 text-[10px] font-semibold px-1.5 py-1 rounded border transition-colors',
                                       hasOverride
-                                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                        ? 'border-warn-edge bg-warn-bg text-warn'
                                         : 'border-border text-muted-foreground hover:bg-muted/60',
                                     )}
                                     title={
@@ -3107,7 +3107,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       {/* Save Confirmation Notification */}
       {showSaveNotification && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-          <div className="flex items-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg shadow-lg animate-slide-up">
+          <div className="flex items-center gap-2 px-4 py-3 bg-ok text-white rounded-lg shadow-lg animate-slide-up">
             <Check className="w-5 h-5" />
             <span className="font-medium">Changes saved successfully</span>
           </div>

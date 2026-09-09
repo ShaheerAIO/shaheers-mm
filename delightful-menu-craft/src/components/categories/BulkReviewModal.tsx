@@ -61,7 +61,7 @@ export function BulkReviewModal({
         </div>
 
         {warnings.length > 0 && (
-          <div className="flex gap-2 px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-600 dark:text-amber-400">
+          <div className="flex gap-2 px-3 py-2 rounded-lg border border-warn-edge bg-warn-bg text-xs text-warn">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold mb-0.5">

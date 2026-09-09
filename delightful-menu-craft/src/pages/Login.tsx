@@ -43,14 +43,22 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+      <div className="w-full max-w-sm">
+        <div className="mb-5 flex flex-col gap-1.5">
+          <div className="text-[18px] tracking-tight">
+            <span className="brand-aio">AIO</span>{' '}
+            <span className="font-semibold text-ink">Menu Manager</span>
+          </div>
+          <p className="aio-sub">Build a menu once, ship it to every channel.</p>
+        </div>
+        <Card>
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>Menu Manager — access is invite-only.</CardDescription>
+          <CardDescription>Access is invite-only — an admin creates your account.</CardDescription>
         </CardHeader>
         <CardContent>
           {!isSupabaseConfigured && (
-            <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <p className="mb-4 rounded-[var(--aio-r-2)] border border-danger-edge bg-danger-bg p-3 text-[13px] text-danger">
               Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and{' '}
               <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
             </p>
@@ -84,13 +92,14 @@ export default function Login() {
             <button
               type="button"
               onClick={handleReset}
-              className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+              className="w-full text-center text-xs text-ink-faint transition-colors hover:text-ink"
             >
               Forgot password?
             </button>
           </form>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

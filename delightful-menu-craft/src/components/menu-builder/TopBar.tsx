@@ -5,7 +5,8 @@ import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import { toast } from 'sonner';
-import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle, Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaceSession, closeWorkspace, useIsReadOnly, renameWorkspace } from '@/lib/workspaceSync';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +22,17 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
+
+/* AIO appbar control language: 1px rule edge on a surface fill, ink-2 label,
+   edge + ink darken on hover. Popovers sit on --shadow-pop. */
+const APPBAR_BTN =
+  'inline-flex items-center gap-2 h-9 px-3 rounded-[var(--aio-r-2)] border border-rule bg-surface text-[13px] font-medium text-ink-2 transition-colors duration-[140ms] ease-aio hover:border-ink-2 hover:text-ink';
+const APPBAR_ICON =
+  'inline-flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] border border-rule bg-surface text-ink-muted transition-colors duration-[140ms] ease-aio hover:border-ink-2 hover:text-ink';
+const APPBAR_POP =
+  'absolute top-full mt-1.5 z-50 rounded-[var(--aio-r-3)] border border-[var(--aio-border)] bg-popover p-1 shadow-pop overflow-hidden';
+const APPBAR_POP_ITEM =
+  'w-full flex items-center gap-2 px-2.5 py-2 text-[13px] rounded-[var(--aio-r-1)] transition-colors duration-[140ms] ease-aio';
 
 export function TopBar() {
   const { 
@@ -53,6 +65,7 @@ export function TopBar() {
   const { currentId, currentName, status } = useWorkspaceSession();
   const isReadOnly = useIsReadOnly();
   const { signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   const handleSwitchProject = () => {
     closeWorkspace();
@@ -210,7 +223,7 @@ export function TopBar() {
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-3 border-b border-panel-border bg-panel-bg transition-[padding] duration-300"
+      className="appbar transition-[padding] duration-300"
       style={{ paddingRight: `calc(1rem + ${panelWidth}px)` }}
     >
       <div className="flex items-center gap-3 flex-shrink-0">
@@ -228,7 +241,7 @@ export function TopBar() {
                 if (e.key === 'Enter') void commitRenameProject();
                 if (e.key === 'Escape') cancelRenameProject();
               }}
-              className="h-8 max-w-[200px] rounded-md border border-ring bg-background px-2 text-sm font-medium outline-none ring-1 ring-ring"
+              className="h-9 max-w-[200px] rounded-[var(--aio-r-2)] border border-primary bg-surface px-2.5 text-[13px] font-medium text-ink outline-none shadow-[var(--aio-focus-ring)]"
             />
           </div>
         ) : (
@@ -237,9 +250,9 @@ export function TopBar() {
               type="button"
               onClick={handleSwitchProject}
               title="Switch project"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors max-w-[200px]"
+              className={cn(APPBAR_BTN, 'max-w-[200px]')}
             >
-              <FolderOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <FolderOpen className="w-4 h-4 shrink-0 text-ink-faint" />
               <span className="truncate">{currentName ?? 'Projects'}</span>
             </button>
             {currentId && !isReadOnly && (
@@ -247,7 +260,7 @@ export function TopBar() {
                 type="button"
                 onClick={startRenameProject}
                 title="Rename project"
-                className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] text-ink-faint hover:bg-accent hover:text-accent-foreground transition-colors duration-[140ms] ease-aio"
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
@@ -255,19 +268,19 @@ export function TopBar() {
           </div>
         )}
         {isReadOnly ? (
-          <span className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <span className="aio-chip warn">
             <Eye className="w-3 h-3" /> View only
           </span>
         ) : (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground w-[64px]">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-ink-muted w-[70px]">
             {status === 'saving' && (<><Loader2 className="w-3 h-3 animate-spin" /> Saving</>)}
-            {status === 'saved' && (<><Check className="w-3 h-3 text-green-500" /> Saved</>)}
-            {status === 'error' && (<><AlertTriangle className="w-3 h-3 text-destructive" /> Error</>)}
-            {status === 'conflict' && (<><AlertTriangle className="w-3 h-3 text-amber-500" /> Conflict</>)}
+            {status === 'saved' && (<><Check className="w-3 h-3 text-ok" /> Saved</>)}
+            {status === 'error' && (<><AlertTriangle className="w-3 h-3 text-danger" /> Error</>)}
+            {status === 'conflict' && (<><AlertTriangle className="w-3 h-3 text-warn" /> Conflict</>)}
           </span>
         )}
 
-        <div className="w-px h-6 bg-border" />
+        <div className="w-px h-5 bg-[var(--aio-rule)]" />
 
         {/* File Dropdown (New / Import / Export) */}
         <div ref={fileDropdownRef} className="relative">
@@ -281,27 +294,24 @@ export function TopBar() {
           <button
             type="button"
             onClick={() => setFileDropdownOpen((o) => !o)}
-            className={cn(
-              'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border hover:bg-accent hover:text-accent-foreground transition-colors',
-              fileDropdownOpen && 'border-ring ring-1 ring-ring',
-            )}
+            className={cn(APPBAR_BTN, fileDropdownOpen && 'border-primary text-ink')}
           >
             File
-            <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', fileDropdownOpen && 'rotate-180')} />
+            <ChevronDown className={cn('w-4 h-4 text-ink-faint transition-transform duration-[140ms] ease-aio', fileDropdownOpen && 'rotate-180')} />
           </button>
 
           {fileDropdownOpen && (
-            <div className="absolute top-full mt-1 left-0 z-50 min-w-[160px] bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+            <div className={cn(APPBAR_POP, 'left-0 min-w-[170px]')}>
               <button
                 type="button"
                 disabled={isReadOnly}
                 onClick={() => { setFileDropdownOpen(false); handleNewClick(); }}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-                  isReadOnly ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground hover:bg-muted',
+                  APPBAR_POP_ITEM,
+                  isReadOnly ? 'text-ink-faint cursor-not-allowed' : 'text-ink hover:bg-[var(--aio-hover)]',
                 )}
               >
-                <FilePlus className="w-4 h-4 text-muted-foreground" />
+                <FilePlus className="w-4 h-4 text-ink-faint" />
                 New
               </button>
               <button
@@ -309,11 +319,11 @@ export function TopBar() {
                 disabled={isReadOnly}
                 onClick={() => { setFileDropdownOpen(false); handleImportClick(); }}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-                  isReadOnly ? 'text-muted-foreground cursor-not-allowed' : 'text-foreground hover:bg-muted',
+                  APPBAR_POP_ITEM,
+                  isReadOnly ? 'text-ink-faint cursor-not-allowed' : 'text-ink hover:bg-[var(--aio-hover)]',
                 )}
               >
-                <Upload className="w-4 h-4 text-muted-foreground" />
+                <Upload className="w-4 h-4 text-ink-faint" />
                 Import
               </button>
               <button
@@ -321,23 +331,21 @@ export function TopBar() {
                 disabled={!isDataLoaded}
                 onClick={() => { setFileDropdownOpen(false); handleExport(); }}
                 className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-                  isDataLoaded
-                    ? 'text-foreground hover:bg-muted'
-                    : 'text-muted-foreground cursor-not-allowed',
+                  APPBAR_POP_ITEM,
+                  isDataLoaded ? 'text-ink hover:bg-[var(--aio-hover)]' : 'text-ink-faint cursor-not-allowed',
                 )}
               >
-                <Download className="w-4 h-4 text-muted-foreground" />
+                <Download className="w-4 h-4 text-ink-faint" />
                 Export
               </button>
             </div>
           )}
         </div>
 
-        <div className="w-px h-6 bg-border mx-2" />
+        <div className="w-px h-5 bg-[var(--aio-rule)] mx-1" />
 
         {/* View Toggle */}
-        <div className="flex rounded-lg bg-muted p-1">
+        <div className="flex gap-0.5 rounded-[var(--aio-r-2)] bg-surface-2 p-1">
           <button
             onClick={() => setViewMode('tree')}
             className={cn('toggle-button', viewMode === 'tree' && 'active')}
@@ -368,11 +376,10 @@ export function TopBar() {
             disabled={!isDataLoaded}
             onClick={() => setMenuDropdownOpen((o) => !o)}
             className={cn(
-              'flex items-center gap-2 h-9 px-3 rounded-md border border-border text-sm transition-colors min-w-[160px] max-w-[240px]',
-              isDataLoaded
-                ? 'bg-background hover:bg-accent hover:text-accent-foreground cursor-pointer'
-                : 'bg-muted text-muted-foreground cursor-not-allowed',
-              menuDropdownOpen && 'border-ring ring-1 ring-ring',
+              APPBAR_BTN,
+              'min-w-[160px] max-w-[240px]',
+              !isDataLoaded && 'bg-surface-2 text-ink-faint cursor-not-allowed hover:border-rule hover:text-ink-faint',
+              menuDropdownOpen && 'border-primary text-ink',
             )}
           >
             <span className="flex-1 text-left truncate">
@@ -380,11 +387,11 @@ export function TopBar() {
                 ? (menus.find((m) => m.id === selectedMenuId)?.menuName ?? 'Select menu')
                 : isDataLoaded ? 'Select menu' : 'Import data first'}
             </span>
-            <ChevronDown className={cn('w-4 h-4 shrink-0 text-muted-foreground transition-transform', menuDropdownOpen && 'rotate-180')} />
+            <ChevronDown className={cn('w-4 h-4 shrink-0 text-ink-faint transition-transform duration-[140ms] ease-aio', menuDropdownOpen && 'rotate-180')} />
           </button>
 
           {menuDropdownOpen && isDataLoaded && (
-            <div className="absolute top-full mt-1 right-0 z-50 min-w-[220px] bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+            <div className={cn(APPBAR_POP, 'right-0 min-w-[230px]')}>
               {menus.sort((a, b) => a.sortOrder - b.sortOrder).map((menu) => {
                 const isSelected = menu.id === selectedMenuId;
                 const isEditing = menu.id === editingMenuId;
@@ -392,8 +399,10 @@ export function TopBar() {
                   <div
                     key={menu.id}
                     className={cn(
-                      'flex items-center gap-1 px-3 py-2 text-sm',
-                      isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground',
+                      'flex items-center gap-1 px-2.5 py-2 text-[13px] rounded-[var(--aio-r-1)]',
+                      isSelected
+                        ? 'bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)] font-medium'
+                        : 'text-ink hover:bg-[var(--aio-hover)]',
                     )}
                   >
                     <button
@@ -407,10 +416,8 @@ export function TopBar() {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setEditingMenu(isEditing ? null : menu.id); setMenuDropdownOpen(false); }}
                       className={cn(
-                        'shrink-0 p-1 rounded transition-colors',
-                        isEditing
-                          ? 'text-primary'
-                          : 'text-muted-foreground hover:text-foreground',
+                        'shrink-0 p-1 rounded-[var(--aio-r-1)] transition-colors',
+                        isEditing ? 'text-[var(--aio-accent-text)]' : 'text-ink-faint hover:text-ink',
                       )}
                       title="Menu settings"
                     >
@@ -420,7 +427,7 @@ export function TopBar() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setSelectedMenu(menu.id); setMenuDropdownOpen(false); setConfirmDeleteMenuOpen(true); }}
-                        className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                        className="shrink-0 p-1 rounded-[var(--aio-r-1)] text-ink-faint hover:text-danger transition-colors"
                         title="Delete menu"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -430,11 +437,11 @@ export function TopBar() {
                 );
               })}
               {!isReadOnly && (
-                <div className="border-t border-border">
+                <div className="mt-1 border-t border-[var(--aio-border)] pt-1">
                   <button
                     type="button"
                     onClick={() => { handleAddMenu(); setMenuDropdownOpen(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className={cn(APPBAR_POP_ITEM, 'text-ink-muted hover:text-ink hover:bg-[var(--aio-hover)]')}
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add menu
@@ -447,9 +454,18 @@ export function TopBar() {
 
         <button
           type="button"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+          className={APPBAR_ICON}
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
+
+        <button
+          type="button"
           onClick={() => void signOut()}
           title="Sign out"
-          className="flex items-center justify-center h-9 w-9 rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          className={cn(APPBAR_ICON, 'hover:border-danger-edge hover:text-danger')}
         >
           <LogOut className="w-4 h-4" />
         </button>

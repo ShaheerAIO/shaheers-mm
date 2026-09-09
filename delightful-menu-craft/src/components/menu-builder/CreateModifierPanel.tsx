@@ -885,7 +885,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                   <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0" />
                   {option.type === 'new' && (
                     <span
-                      className="absolute top-1 right-1 text-green-600"
+                      className="absolute top-1 right-1 text-ok"
                       title="New option — will be created when you save"
                     >
                       <Sparkles className="w-3 h-3" />
@@ -961,7 +961,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
                         className={cn(
                           'text-[10px] font-semibold px-1.5 py-1 rounded border transition-colors',
                           hasThreePoOverride(option.threePoPricing)
-                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            ? 'border-warn-edge bg-warn-bg text-warn'
                             : 'border-border text-muted-foreground hover:bg-muted/60',
                         )}
                         title={
@@ -1456,7 +1456,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
       {/* Save Confirmation Notification */}
       {showSaveNotification && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-          <div className="flex items-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg shadow-lg animate-slide-up">
+          <div className="flex items-center gap-2 px-4 py-3 bg-ok text-white rounded-lg shadow-lg animate-slide-up">
             <Check className="w-5 h-5" />
             <span className="font-medium">Modifier saved and added to item</span>
           </div>

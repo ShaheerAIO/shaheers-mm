@@ -155,7 +155,7 @@ export function MenuDetailPanel({ menu }: Props) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {isDirty && (
-        <div className="px-4 py-1.5 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs font-medium shrink-0">
+        <div className="px-4 py-1.5 bg-warn-bg border-b border-warn-edge text-warn text-xs font-medium shrink-0">
           Unsaved changes
         </div>
       )}
@@ -223,7 +223,7 @@ export function MenuDetailPanel({ menu }: Props) {
                 ) : (
                   <span
                     title="No image set"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-amber-500/60 bg-amber-500/10 text-amber-600"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-warn-edge bg-warn-bg text-warn"
                   >
                     <AlertTriangle className="h-3 w-3" />
                   </span>

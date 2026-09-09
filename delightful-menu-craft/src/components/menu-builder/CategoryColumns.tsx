@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { useIsReadOnly } from '@/lib/workspaceSync';
 import { CategoryColumn } from './CategoryColumn';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, LayoutList } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 import { DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
@@ -127,14 +127,19 @@ export function CategoryColumns() {
     }
   };
 
+  // Empty states are first-class in the AIO language: a tinted icon, a bold
+  // line, then one plain-language line telling you what to do next.
   if (!isDataLoaded) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No Data Loaded</h3>
-          <p className="text-sm text-muted-foreground">
-            Import an Excel file to get started
+      <div className="flex h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--aio-accent-soft)] text-[var(--aio-accent-text)]">
+            <Upload className="h-5 w-5" />
+          </span>
+          <h3 className="text-[15px] font-semibold text-ink">Nothing loaded yet</h3>
+          <p className="aio-sub max-w-xs">
+            Import an Excel workbook from <b className="font-medium text-ink-2">File → Import</b>, or
+            start fresh to build a menu by hand.
           </p>
         </div>
       </div>
@@ -143,9 +148,13 @@ export function CategoryColumns() {
 
   if (!selectedMenuId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-muted-foreground">
-          <p>Select a menu to view categories</p>
+      <div className="flex h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-3 text-ink-faint">
+            <LayoutList className="h-5 w-5" />
+          </span>
+          <h3 className="text-[15px] font-semibold text-ink">Pick a menu to start</h3>
+          <p className="aio-sub max-w-xs">Choose one from the menu selector, top right.</p>
         </div>
       </div>
     );

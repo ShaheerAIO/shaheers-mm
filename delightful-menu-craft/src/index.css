@@ -1,11 +1,84 @@
-/* Google Fonts removed - using system fonts instead */
+/* Fonts are self-hosted via @fontsource — imported in src/main.tsx */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   AIO design language
+   Ported from the AIO MDM console (udm.aioapp.com). Two layers:
+
+   1. `--aio-*` — the AIO tokens themselves, raw values, used directly in CSS
+      for the things Tailwind/shadcn has no slot for (surface tiers, rules,
+      status washes, brand gradient, shadows, motion).
+   2. shadcn tokens (`--background`, `--primary`, …) — HSL triples remapped
+      onto the AIO palette, so every existing component inherits the language.
+
+   Deviation from the source: AIO switches on `html[data-theme]`; this app is
+   class-based (`.dark`) via next-themes, so the dark set lives under `.dark`.
+--------------------------------------------------------------------------- */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    /* ---- AIO raw tokens — light ---- */
+    --aio-bg: #f7f7f7;
+    --aio-surface: #ffffff;
+    --aio-surface-2: #f1f1f3;
+    --aio-surface-3: #e6e6ea;
+    --aio-overlay: rgba(17, 20, 24, 0.45);
+    --aio-border: #e9e9ed;
+    --aio-border-soft: #f0f0f3;
+    --aio-rule: #dcdce1;
+    --aio-rule-2: #c9c9d0;
+    --aio-text: #1a1a1a;
+    --aio-text-2: #4f4f4f;
+    --aio-muted: #5f5f66;
+    --aio-text-faint: #74747c;
+
+    --aio-accent: #f9674e;
+    --aio-accent-h: #ec4f33;
+    --aio-accent-soft: rgba(249, 103, 78, 0.1);
+    --aio-accent-edge: rgba(249, 103, 78, 0.34);
+    --aio-accent-ink: #ffffff;
+    --aio-accent-text: #cf4529;
+    --aio-accent-2: #7a80f6;
+    --aio-accent-2-soft: rgba(122, 128, 246, 0.12);
+    --aio-brand-grad: linear-gradient(90deg, #f9674e 0%, #7a80f6 100%);
+
+    --aio-ok: #0f6d33;
+    --aio-warn: #8f4209;
+    --aio-danger: #b42318;
+    --aio-info: #1a63c0;
+    --aio-ok-bg: rgba(21, 127, 60, 0.1);
+    --aio-warn-bg: rgba(180, 83, 9, 0.1);
+    --aio-danger-bg: rgba(180, 35, 24, 0.1);
+    --aio-info-bg: rgba(29, 111, 216, 0.1);
+    --aio-ok-edge: rgba(21, 127, 60, 0.3);
+    --aio-warn-edge: rgba(180, 83, 9, 0.28);
+    --aio-danger-edge: rgba(180, 35, 24, 0.3);
+    --aio-info-edge: rgba(29, 111, 216, 0.28);
+
+    --aio-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.04);
+    --aio-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.06);
+    --aio-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08);
+    --aio-shadow-pop: 0 30px 80px rgba(0, 0, 0, 0.18);
+    --aio-hover: rgba(16, 24, 40, 0.04);
+    --aio-selected: var(--aio-accent-soft);
+    --aio-focus-ring: 0 0 0 3px rgba(249, 103, 78, 0.3);
+
+    /* Scales are theme-independent */
+    --aio-r-1: 4px;
+    --aio-r-2: 8px;
+    --aio-r-3: 12px;
+    --aio-r-4: 24px;
+    --aio-dur-fast: 100ms;
+    --aio-dur: 140ms;
+    --aio-dur-slow: 220ms;
+    --aio-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+    --aio-font: 'Poppins', 'IBM Plex Sans', system-ui, sans-serif;
+    --aio-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace;
+
+    /* ---- shadcn tokens mapped onto AIO — light ---- */
+    --background: 0 0% 97%;
     --foreground: 0 0% 10%;
 
     --card: 0 0% 100%;
@@ -14,48 +87,48 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    --primary: 25 95% 53%;
+    --primary: 9 93% 64%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 20%;
+    --secondary: 240 8% 95%;
+    --secondary-foreground: 0 0% 31%;
 
-    --muted: 0 0% 98%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 240 8% 95%;
+    --muted-foreground: 240 4% 39%;
 
-    --accent: 25 90% 95%;
-    --accent-foreground: 25 95% 40%;
+    --accent: 10 100% 97%;
+    --accent-foreground: 10 63% 49%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 4 76% 40%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 25 95% 53%;
+    --border: 240 10% 92%;
+    --input: 240 8% 87%;
+    --ring: 9 93% 64%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    /* Custom tokens */
+    /* Custom app tokens */
     --sidebar-width: 60px;
-    --sidebar-bg: 25 95% 53%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-active: 0 0% 100%;
-    --sidebar-hover: 25 95% 48%;
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-foreground: 240 4% 39%;
+    --sidebar-active: 10 63% 49%;
+    --sidebar-hover: 240 8% 95%;
 
     --panel-bg: 0 0% 100%;
-    --panel-border: 0 0% 90%;
+    --panel-border: 240 10% 92%;
 
-    --column-minimized: 0 0% 97%;
+    --column-minimized: 240 8% 95%;
     --column-active: 0 0% 100%;
     --column-header: 0 0% 10%;
 
-    --item-hover: 25 90% 97%;
-    --item-selected: 25 85% 95%;
-    --item-86: 0 72% 95%;
+    --item-hover: 240 10% 96%;
+    --item-selected: 10 100% 97%;
+    --item-86: 9 62% 94%;
 
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --info: 210 100% 52%;
+    --success: 143 76% 24%;
+    --warning: 26 88% 30%;
+    --info: 214 76% 43%;
 
     /* POS Preview — light fallback; dark purple + orange via .pos-preview-dark / .dark */
     --pos-bg: 0 0% 100%;
@@ -77,56 +150,103 @@
     --pos-pay-hover: 262 83% 52%;
   }
 
-  /* App shell + shadcn tokens aligned with POS Preview (dark zinc shell, orange primary) */
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 96%;
+    /* ---- AIO raw tokens — dark (a full second set, not a filter) ---- */
+    --aio-bg: #0d0d12;
+    --aio-surface: #16161d;
+    --aio-surface-2: #1e1e27;
+    --aio-surface-3: #262633;
+    --aio-overlay: rgba(0, 0, 0, 0.58);
+    --aio-border: #2a2a35;
+    --aio-border-soft: #202029;
+    --aio-rule: #33333f;
+    --aio-rule-2: #44444f;
+    --aio-text: #f4f4f6;
+    --aio-text-2: #b3b4bd;
+    --aio-muted: #a0a1ab;
+    --aio-text-faint: #8a8b95;
 
-    --card: 0 0% 12%;
-    --card-foreground: 0 0% 96%;
+    --aio-accent: #f9805f;
+    --aio-accent-h: #ffa088;
+    --aio-accent-soft: rgba(249, 128, 95, 0.14);
+    --aio-accent-edge: rgba(249, 128, 95, 0.36);
+    --aio-accent-ink: #ffffff;
+    --aio-accent-text: #f9805f;
+    --aio-accent-2: #99a1f2;
+    --aio-accent-2-soft: rgba(153, 161, 242, 0.16);
+    --aio-brand-grad: linear-gradient(92deg, #f9805f 0%, #99a1f2 100%);
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 96%;
+    --aio-ok: #55bd75;
+    --aio-warn: #dba33a;
+    --aio-danger: #e07575;
+    --aio-info: #6ba3f0;
+    --aio-ok-bg: rgba(85, 189, 117, 0.12);
+    --aio-warn-bg: rgba(219, 163, 58, 0.12);
+    --aio-danger-bg: rgba(224, 117, 117, 0.12);
+    --aio-info-bg: rgba(107, 163, 240, 0.12);
+    --aio-ok-edge: rgba(85, 189, 117, 0.32);
+    --aio-warn-edge: rgba(219, 163, 58, 0.32);
+    --aio-danger-edge: rgba(224, 117, 117, 0.32);
+    --aio-info-edge: rgba(107, 163, 240, 0.32);
 
-    --primary: 25 95% 53%;
+    --aio-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.3);
+    --aio-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+    --aio-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+    --aio-shadow-pop: 0 30px 80px rgba(0, 0, 0, 0.6);
+    --aio-hover: rgba(255, 255, 255, 0.05);
+    --aio-selected: var(--aio-accent-soft);
+    --aio-focus-ring: 0 0 0 2px rgba(249, 128, 95, 0.45);
+
+    /* ---- shadcn tokens mapped onto AIO — dark ---- */
+    --background: 240 16% 6%;
+    --foreground: 240 10% 96%;
+
+    --card: 240 14% 10%;
+    --card-foreground: 240 10% 96%;
+
+    --popover: 240 13% 14%;
+    --popover-foreground: 240 10% 96%;
+
+    --primary: 13 93% 67%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 16%;
-    --secondary-foreground: 0 0% 92%;
+    --secondary: 240 13% 14%;
+    --secondary-foreground: 234 7% 72%;
 
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 55%;
+    --muted: 240 13% 14%;
+    --muted-foreground: 235 6% 65%;
 
-    --accent: 25 35% 18%;
-    --accent-foreground: 25 90% 78%;
+    --accent: 357 19% 18%;
+    --accent-foreground: 13 93% 67%;
 
-    --destructive: 0 62% 50%;
+    /* AIO's dark --danger (#e07575) is a text/chip colour; darkened here so a
+       filled destructive button still carries white label text. */
+    --destructive: 0 63% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 20%;
-    --input: 0 0% 18%;
-    --ring: 25 95% 53%;
+    --border: 240 12% 19%;
+    --input: 240 11% 22%;
+    --ring: 13 93% 67%;
 
-    /* Match Tailwind orange-500 / POS category default #f97316 */
-    --sidebar-bg: 25 95% 53%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-active: 0 0% 100%;
-    --sidebar-hover: 25 95% 44%;
+    --sidebar-bg: 240 14% 10%;
+    --sidebar-foreground: 235 6% 65%;
+    --sidebar-active: 13 93% 67%;
+    --sidebar-hover: 240 15% 17%;
 
-    --panel-bg: 0 0% 8%;
-    --panel-border: 0 0% 20%;
+    --panel-bg: 240 14% 10%;
+    --panel-border: 240 12% 19%;
 
-    --column-minimized: 0 0% 11%;
-    --column-active: 0 0% 9%;
-    --column-header: 0 0% 94%;
+    --column-minimized: 240 13% 14%;
+    --column-active: 240 14% 10%;
+    --column-header: 240 10% 96%;
 
-    --item-hover: 0 0% 16%;
-    --item-selected: 25 38% 22%;
-    --item-86: 0 45% 18%;
+    --item-hover: 240 15% 17%;
+    --item-selected: 357 19% 18%;
+    --item-86: 328 16% 15%;
 
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --info: 210 100% 52%;
+    --success: 138 44% 54%;
+    --warning: 39 69% 54%;
+    --info: 215 82% 68%;
 
     /* POS tokens — purple shell + orange accent (aligned with .pos-preview-dark) */
     --pos-bg: 265 24% 8%;
@@ -149,7 +269,8 @@
   }
 }
 
-/* POS Preview — purple main chrome, orange accents (category strips, prices, modifier picks) */
+/* POS Preview — purple main chrome, orange accents (category strips, prices, modifier picks).
+   This mirrors the real POS device UI, not the AIO console, so it is left as-is. */
 .pos-preview-dark {
   --pos-bg: 265 24% 8%;
   --pos-card: 265 22% 14%;
@@ -180,43 +301,217 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv11';
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    @apply font-semibold tracking-tight;
+    @apply font-sans font-semibold tracking-tight;
+  }
+
+  /* AIO focus treatment: a soft accent halo rather than an offset ring.
+     Scoped to native controls — components that ship their own ring (shadcn's
+     focus-visible:ring-*) win, since utilities cascade after this layer. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible {
+    outline: none;
+    box-shadow: var(--aio-focus-ring);
+  }
+
+  ::selection {
+    background: var(--aio-accent-soft);
   }
 }
 
 @layer components {
+  /* ---- App chrome ------------------------------------------------------- */
+
   .sidebar-nav {
-    @apply flex flex-col items-center py-4 gap-1;
+    @apply flex flex-col items-center py-2 gap-1;
   }
 
+  /* AIO dock item: quiet by default, accent-tinted pill when active */
   .sidebar-tab {
-    @apply flex flex-col items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all duration-200;
-    @apply text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-hover))];
+    @apply flex flex-col items-center justify-center w-12 h-12 rounded-[10px] cursor-pointer;
+    @apply text-[hsl(var(--sidebar-foreground))];
+    transition: background-color var(--aio-dur) var(--aio-ease),
+      color var(--aio-dur) var(--aio-ease);
+  }
+
+  .sidebar-tab:hover {
+    background: var(--aio-hover);
+    color: var(--aio-text);
   }
 
   .sidebar-tab.active {
-    @apply bg-[hsl(var(--sidebar-hover))] text-[hsl(var(--sidebar-active))];
+    background: var(--aio-accent-soft);
+    color: hsl(var(--sidebar-active));
   }
 
   .sidebar-tab-icon {
-    @apply w-5 h-5;
+    @apply w-[18px] h-[18px];
   }
 
   .sidebar-tab-label {
     @apply text-[9px] mt-1 font-medium tracking-wide uppercase;
   }
 
+  /* Gradient wordmark — "AIO" in the brand gradient, the rest in plain ink */
+  .brand-aio {
+    background: var(--aio-brand-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    @apply font-bold;
+  }
+
+  .appbar {
+    @apply flex items-center justify-between px-4 py-2.5;
+    background: var(--aio-surface);
+    border-bottom: 1px solid var(--aio-border);
+  }
+
   .panel {
     @apply bg-[hsl(var(--panel-bg))] border-[hsl(var(--panel-border))];
   }
 
+  /* ---- AI surfaces ------------------------------------------------------ */
+
+  /* The console marks anything Claude produced with a gradient orb */
+  .ai-orb {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: linear-gradient(135deg, var(--aio-accent), var(--aio-accent-2));
+    box-shadow: 0 4px 13px rgba(249, 103, 78, 0.28);
+  }
+
+  .ai-orb svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ai-orb::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 13px;
+    border: 1.5px solid var(--aio-accent-soft);
+    animation: ai-orbpulse 2.6s ease-out infinite;
+  }
+
+  @keyframes ai-orbpulse {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.7;
+    }
+    70% {
+      transform: scale(1.35);
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-orb::after {
+      animation: none;
+    }
+  }
+
+  /* ---- Cards ------------------------------------------------------------ */
+
+  .aio-card {
+    background: var(--aio-surface);
+    border: 1px solid var(--aio-border);
+    border-radius: var(--aio-r-3);
+    box-shadow: var(--aio-shadow-sm);
+  }
+
+  .aio-card-hover {
+    transition: box-shadow var(--aio-dur) var(--aio-ease),
+      border-color var(--aio-dur) var(--aio-ease);
+  }
+
+  .aio-card-hover:hover {
+    box-shadow: var(--aio-shadow-md);
+    border-color: var(--aio-rule);
+  }
+
+  /* ---- Narrative header (AIO writes headings as sentences) -------------- */
+
+  .aio-eyebrow {
+    @apply text-[11px] font-semibold uppercase;
+    letter-spacing: 0.08em;
+    color: var(--aio-accent-text);
+  }
+
+  .aio-h1 {
+    @apply text-[22px] font-semibold leading-tight;
+    color: var(--aio-text);
+  }
+
+  .aio-h1 b, .aio-h1 strong {
+    color: var(--aio-accent-text);
+    @apply font-semibold;
+  }
+
+  .aio-sub {
+    @apply text-[13px];
+    color: var(--aio-muted);
+    line-height: 1.45;
+  }
+
+  /* ---- Chips / pills ---------------------------------------------------- */
+
+  .aio-chip {
+    @apply inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium;
+    border-radius: 999px;
+    border: 1px solid var(--aio-border);
+    background: var(--aio-surface-2);
+    color: var(--aio-text-2);
+  }
+
+  .aio-chip.ok {
+    background: var(--aio-ok-bg);
+    border-color: var(--aio-ok-edge);
+    color: var(--aio-ok);
+  }
+
+  .aio-chip.warn {
+    background: var(--aio-warn-bg);
+    border-color: var(--aio-warn-edge);
+    color: var(--aio-warn);
+  }
+
+  .aio-chip.bad {
+    background: var(--aio-danger-bg);
+    border-color: var(--aio-danger-edge);
+    color: var(--aio-danger);
+  }
+
+  .aio-chip.accent {
+    background: var(--aio-accent-soft);
+    border-color: var(--aio-accent-edge);
+    color: var(--aio-accent-text);
+  }
+
+  /* ---- Menu builder columns / rows -------------------------------------- */
+
   .category-column {
-    @apply flex flex-col h-full border-r border-[hsl(var(--panel-border))] transition-all duration-200 ease-out;
+    @apply flex flex-col h-full border-r border-[hsl(var(--panel-border))];
+    transition: width var(--aio-dur-slow) var(--aio-ease),
+      background-color var(--aio-dur) var(--aio-ease);
   }
 
   .category-column.minimized {
@@ -225,21 +520,26 @@
 
   .category-column.expanded {
     @apply w-[464px] flex-shrink-0 bg-[hsl(var(--column-active))];
-    border-left: 2px solid hsl(var(--primary));
-    border-right: 2px solid hsl(var(--primary));
+    border-left: 2px solid var(--aio-accent);
+    border-right: 2px solid var(--aio-accent);
   }
 
   .category-header {
-    @apply px-3 py-3 font-semibold text-sm border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
+    @apply px-3 py-3 font-semibold text-[13px] border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
   }
 
   .item-row {
-    @apply px-3 py-2.5 cursor-pointer transition-all duration-150 text-sm border-b border-[hsl(var(--panel-border))] border-opacity-50;
-    @apply hover:bg-[hsl(var(--item-hover))];
+    @apply px-3 py-2.5 cursor-pointer text-[13px] border-b border-[hsl(var(--panel-border))] border-opacity-50;
+    transition: background-color var(--aio-dur-fast) var(--aio-ease);
+  }
+
+  .item-row:hover {
+    background: hsl(var(--item-hover));
   }
 
   .item-row.selected {
-    @apply bg-[hsl(var(--item-selected))] border-l-2 border-l-[hsl(var(--primary))];
+    @apply bg-[hsl(var(--item-selected))] border-l-2;
+    border-left-color: var(--aio-accent);
   }
 
   .item-row.is-86 {
@@ -256,28 +556,63 @@
   }
 
   .section-header {
-    @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2;
+    @apply text-[11px] font-semibold uppercase mb-2;
+    letter-spacing: 0.06em;
+    color: var(--aio-text-faint);
   }
 
+  /* ---- Controls --------------------------------------------------------- */
+
   .btn-add {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors;
-    @apply bg-primary/10 text-primary hover:bg-primary/20;
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium;
+    border-radius: var(--aio-r-2);
+    background: var(--aio-accent-soft);
+    border: 1px solid var(--aio-accent-edge);
+    color: var(--aio-accent-text);
+    transition: background-color var(--aio-dur) var(--aio-ease);
+  }
+
+  .btn-add:hover {
+    background: var(--aio-accent-2-soft);
   }
 
   .input-field {
-    @apply w-full px-3 py-2 text-sm rounded-md border border-input bg-background;
-    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1;
-    @apply placeholder:text-muted-foreground;
+    @apply w-full px-3 py-2 text-[13px];
+    border-radius: var(--aio-r-2);
+    border: 1px solid hsl(var(--input));
+    background: var(--aio-surface);
+    color: var(--aio-text);
+    transition: border-color var(--aio-dur) var(--aio-ease),
+      box-shadow var(--aio-dur) var(--aio-ease);
+    @apply placeholder:text-[hsl(var(--muted-foreground))];
   }
 
+  .input-field:focus {
+    outline: none;
+    border-color: var(--aio-accent);
+    box-shadow: var(--aio-focus-ring);
+  }
+
+  /* Segmented control (AIO uses these for view switches) */
   .toggle-button {
-    @apply px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150;
-    @apply bg-secondary text-secondary-foreground;
+    @apply px-3 py-1.5 text-xs font-medium;
+    border-radius: var(--aio-r-2);
+    color: var(--aio-muted);
+    transition: background-color var(--aio-dur) var(--aio-ease),
+      color var(--aio-dur) var(--aio-ease);
+  }
+
+  .toggle-button:hover {
+    color: var(--aio-text);
   }
 
   .toggle-button.active {
-    @apply bg-primary text-primary-foreground shadow-sm;
+    background: var(--aio-surface);
+    color: var(--aio-accent-text);
+    box-shadow: var(--aio-shadow-sm);
   }
+
+  /* ---- POS preview tiles (device UI, kept on its own palette) ----------- */
 
   .pos-button {
     @apply flex flex-col items-center justify-center p-3 rounded-lg border border-border bg-card;
@@ -299,6 +634,11 @@
 }
 
 @layer utilities {
+  /* Tabular figures — AIO sets every metric in them */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted)) transparent;
@@ -313,7 +653,7 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted));
+    background-color: var(--aio-rule);
     border-radius: 3px;
   }
 
@@ -322,11 +662,11 @@
   }
 
   .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: hsl(0 0% 32%);
+    background-color: var(--aio-rule-2);
   }
 
   .animate-slide-in-right {
-    animation: slideInRight 0.3s ease-out;
+    animation: slideInRight 0.3s var(--aio-ease);
   }
 
   @keyframes slideInRight {
@@ -341,7 +681,7 @@
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.2s var(--aio-ease);
   }
 
   @keyframes fadeIn {
@@ -354,7 +694,7 @@
   }
 
   .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.3s var(--aio-ease);
   }
 
   @keyframes slideUp {

@@ -35,33 +35,26 @@ export function LeftSidebar() {
   };
 
   return (
-    <aside className="w-[60px] h-screen bg-sidebar-bg flex flex-col items-center py-4 border-r border-sidebar-hover">
-      <div className="mb-8">
-        <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-primary-foreground font-bold text-sm">AIO</span>
-        </div>
+    <aside className="w-[60px] h-screen bg-[hsl(var(--sidebar-bg))] flex flex-col items-center py-3 border-r border-[var(--aio-border)]">
+      {/* Brand mark — "AIO" in the brand gradient, per the console wordmark */}
+      <div className="mb-4 h-9 flex items-center justify-center">
+        <span className="brand-aio text-[15px] tracking-tight">AIO</span>
       </div>
 
-      <div className="pb-3 mb-1 border-b border-sidebar-hover">
-        <button
-          onClick={handleSwitchProject}
-          className="sidebar-tab"
-          title="Projects"
-        >
+      <div className="pb-2 mb-2 border-b border-[var(--aio-border)]">
+        <button onClick={handleSwitchProject} className="sidebar-tab" title="Projects">
           <FolderOpen className="sidebar-tab-icon" />
           <span className="sidebar-tab-label">Projects</span>
         </button>
       </div>
 
-      <nav className="sidebar-nav flex-1">
+      <nav className="sidebar-nav flex-1" aria-label="Primary navigation">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'sidebar-tab',
-              activeTab === tab.id && 'active'
-            )}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
+            className={cn('sidebar-tab', activeTab === tab.id && 'active')}
           >
             <tab.icon className="sidebar-tab-icon" />
             <span className="sidebar-tab-label">{tab.label}</span>
@@ -70,11 +63,7 @@ export function LeftSidebar() {
       </nav>
 
       {isAdmin && (
-        <button
-          onClick={() => navigate('/team')}
-          className="sidebar-tab"
-          title="Team"
-        >
+        <button onClick={() => navigate('/team')} className="sidebar-tab" title="Team">
           <Users className="sidebar-tab-icon" />
           <span className="sidebar-tab-label">Team</span>
         </button>

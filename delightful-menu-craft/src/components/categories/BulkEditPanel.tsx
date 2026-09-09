@@ -403,10 +403,10 @@ function ChipPicker({
               onClick={() => cycle(e.id)}
               className={cn(
                 'inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors',
-                isAdd ? 'bg-green-500/10 border-green-500/40 text-green-600 dark:text-green-400'
+                isAdd ? 'bg-ok-bg border-ok-edge text-ok'
                   : isRemove ? 'bg-destructive/10 border-destructive/40 text-destructive'
                   : st === 'all' ? 'bg-primary/10 border-primary/40 text-primary'
-                  : st === 'some' ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400'
+                  : st === 'some' ? 'bg-warn-bg border-warn-edge text-warn'
                   : 'bg-muted/40 border-border text-muted-foreground hover:border-primary/30',
               )}
             >
@@ -630,7 +630,7 @@ function Segmented<T extends string>({
                 ? opt.tone === 'red'
                   ? 'bg-destructive/10 border-destructive/40 text-destructive'
                   : opt.tone === 'green'
-                    ? 'bg-green-500/10 border-green-500/40 text-green-600 dark:text-green-400'
+                    ? 'bg-ok-bg border-ok-edge text-ok'
                     : 'bg-muted border-border text-foreground'
                 : 'border-border text-muted-foreground hover:bg-muted',
             )}

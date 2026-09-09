@@ -28,7 +28,7 @@ function BulkCheckbox({
         checked
           ? 'bg-primary border-primary text-primary-foreground'
           : indeterminate
-            ? 'bg-blue-500/15 border-blue-500 text-blue-500 dark:text-blue-400'
+            ? 'bg-[var(--aio-info-bg)] border-[var(--aio-info-edge)] text-[var(--aio-info)]'
             : 'border-input bg-transparent hover:border-primary/50',
       )}
     >
@@ -131,7 +131,7 @@ export function BulkColumn({
                     : isDrilled
                       ? 'bg-muted'
                       : inCascade
-                        ? 'bg-blue-500/10'
+                        ? 'bg-[var(--aio-info-bg)]'
                         : 'hover:bg-muted/50',
                 )}
                 style={row.depth ? { paddingLeft: 12 + row.depth * 14 } : undefined}
