@@ -19,16 +19,19 @@
 
 @layer base {
   :root {
-    /* ---- AIO raw tokens — light ---- */
-    --aio-bg: #f7f7f7;
+    /* ---- AIO raw tokens — light ----
+       The neutral family is warm (the cream the console declares as its light
+       theme-color), not grey: it gives white cards something to sit on and
+       keeps the coral accent from reading as the only warm thing on screen. */
+    --aio-bg: #faf8f5;
     --aio-surface: #ffffff;
-    --aio-surface-2: #f1f1f3;
-    --aio-surface-3: #e6e6ea;
+    --aio-surface-2: #f4f1ec;
+    --aio-surface-3: #ece7e0;
     --aio-overlay: rgba(17, 20, 24, 0.45);
-    --aio-border: #e9e9ed;
-    --aio-border-soft: #f0f0f3;
-    --aio-rule: #dcdce1;
-    --aio-rule-2: #c9c9d0;
+    --aio-border: #ece9e4;
+    --aio-border-soft: #f3f0eb;
+    --aio-rule: #e0dbd3;
+    --aio-rule-2: #cdc7bd;
     --aio-text: #1a1a1a;
     --aio-text-2: #4f4f4f;
     --aio-muted: #5f5f66;
@@ -57,11 +60,12 @@
     --aio-danger-edge: rgba(180, 35, 24, 0.3);
     --aio-info-edge: rgba(29, 111, 216, 0.28);
 
-    --aio-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.04);
-    --aio-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.06);
-    --aio-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08);
-    --aio-shadow-pop: 0 30px 80px rgba(0, 0, 0, 0.18);
-    --aio-hover: rgba(16, 24, 40, 0.04);
+    /* Warm-tinted shadows and hover, so depth doesn't grey the cream out */
+    --aio-shadow-sm: 0 2px 10px rgba(70, 50, 38, 0.05);
+    --aio-shadow-md: 0 6px 20px rgba(70, 50, 38, 0.07);
+    --aio-shadow-lg: 0 12px 40px rgba(70, 50, 38, 0.09);
+    --aio-shadow-pop: 0 30px 80px rgba(45, 32, 24, 0.2);
+    --aio-hover: rgba(249, 103, 78, 0.06);
     --aio-selected: var(--aio-accent-soft);
     --aio-focus-ring: 0 0 0 3px rgba(249, 103, 78, 0.3);
 
@@ -78,7 +82,7 @@
     --aio-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace;
 
     /* ---- shadcn tokens mapped onto AIO — light ---- */
-    --background: 0 0% 97%;
+    --background: 36 33% 97%;
     --foreground: 0 0% 10%;
 
     --card: 0 0% 100%;
@@ -90,11 +94,11 @@
     --primary: 9 93% 64%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 8% 95%;
+    --secondary: 38 27% 94%;
     --secondary-foreground: 0 0% 31%;
 
-    --muted: 240 8% 95%;
-    --muted-foreground: 240 4% 39%;
+    --muted: 38 27% 94%;
+    --muted-foreground: 30 4% 39%;
 
     --accent: 10 100% 97%;
     --accent-foreground: 10 63% 49%;
@@ -102,8 +106,8 @@
     --destructive: 4 76% 40%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 10% 92%;
-    --input: 240 8% 87%;
+    --border: 38 17% 91%;
+    --input: 37 17% 85%;
     --ring: 9 93% 64%;
 
     --radius: 0.75rem;
@@ -113,16 +117,16 @@
     --sidebar-bg: 0 0% 100%;
     --sidebar-foreground: 240 4% 39%;
     --sidebar-active: 10 63% 49%;
-    --sidebar-hover: 240 8% 95%;
+    --sidebar-hover: 38 27% 94%;
 
     --panel-bg: 0 0% 100%;
-    --panel-border: 240 10% 92%;
+    --panel-border: 38 17% 91%;
 
-    --column-minimized: 240 8% 95%;
+    --column-minimized: 38 27% 94%;
     --column-active: 0 0% 100%;
     --column-header: 0 0% 10%;
 
-    --item-hover: 240 10% 96%;
+    --item-hover: 36 30% 96%;
     --item-selected: 10 100% 97%;
     --item-86: 9 62% 94%;
 
@@ -368,10 +372,47 @@
     @apply font-bold;
   }
 
+  /* A whisper of brand: the rail's outer edge is a vertical brand-gradient
+     hairline rather than a flat rule, fading out toward the bottom. */
+  .sidebar-rail {
+    position: relative;
+    border-right: 1px solid var(--aio-border);
+  }
+
+  .sidebar-rail::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      var(--aio-accent) 0%,
+      var(--aio-accent-2) 52%,
+      transparent 100%
+    );
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
   .appbar {
-    @apply flex items-center justify-between px-4 py-2.5;
+    @apply relative flex items-center justify-between px-4 py-2.5;
     background: var(--aio-surface);
-    border-bottom: 1px solid var(--aio-border);
+  }
+
+  /* The appbar's bottom edge is the brand gradient rather than a grey rule —
+     with the rail hairline it frames the app in one continuous stroke. */
+  .appbar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--aio-brand-grad);
+    opacity: 0.6;
+    pointer-events: none;
   }
 
   .panel {
@@ -445,7 +486,7 @@
 
   .aio-card-hover:hover {
     box-shadow: var(--aio-shadow-md);
-    border-color: var(--aio-rule);
+    border-color: var(--aio-accent-edge);
   }
 
   /* ---- Narrative header (AIO writes headings as sentences) -------------- */
@@ -526,6 +567,7 @@
 
   .category-header {
     @apply px-3 py-3 font-semibold text-[13px] border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
+    background: var(--aio-surface-2);
   }
 
   .item-row {
@@ -555,10 +597,12 @@
     @apply w-0 opacity-0;
   }
 
+  /* Same treatment as .aio-eyebrow — small-caps labels carry the accent, which
+     puts colour in every detail panel without raising its intensity. */
   .section-header {
     @apply text-[11px] font-semibold uppercase mb-2;
     letter-spacing: 0.06em;
-    color: var(--aio-text-faint);
+    color: var(--aio-accent-text);
   }
 
   /* ---- Controls --------------------------------------------------------- */

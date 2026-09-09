@@ -89,6 +89,13 @@ Conventions carried over from the console:
 
 - **Accent is coral, not orange**: `#f9674e` light / `#f9805f` dark, with `--aio-accent-2` (indigo)
   as the second accent. The wordmark gradient is `.brand-aio`.
+- **Light neutrals are warm, not grey.** The light background is the cream the console declares as
+  its light `theme-color` (`#faf8f5`), with surfaces, borders, hover and shadows tinted the same way,
+  so white cards separate from the page and the coral accent isn't the only warm thing on screen.
+- **Colour comes in volume, not intensity.** Add it by giving another element the existing soft
+  tokens, not by deepening them: the brand gradient on the appbar's bottom edge (`.appbar::after`)
+  and the rail's outer hairline (`.sidebar-rail`), `surface-2` bands on column headers, `accent-edge`
+  on card hover, `accent-text` on `.section-header` / `.aio-eyebrow` labels.
 - **Semantic modifiers, not raw palette classes.** Status is `ok` / `warn` / `danger` / `info` with a
   matching `-bg` wash and `-edge` border — never `text-green-600` or `bg-amber-500/10`. The only
   exceptions are the POS and kiosk preview components, which deliberately mirror the POS device UI

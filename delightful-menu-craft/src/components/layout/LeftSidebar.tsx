@@ -35,7 +35,7 @@ export function LeftSidebar() {
   };
 
   return (
-    <aside className="w-[60px] h-screen bg-[hsl(var(--sidebar-bg))] flex flex-col items-center py-3 border-r border-[var(--aio-border)]">
+    <aside className="sidebar-rail w-[60px] h-screen bg-[hsl(var(--sidebar-bg))] flex flex-col items-center py-3">
       {/* Brand mark — "AIO" in the brand gradient, per the console wordmark */}
       <div className="mb-4 h-9 flex items-center justify-center">
         <span className="brand-aio text-[15px] tracking-tight">AIO</span>
