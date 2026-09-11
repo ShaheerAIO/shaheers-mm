@@ -823,7 +823,7 @@ export function CategoryColumn({
           <div className="w-36 flex-shrink-0 flex flex-col border-r border-[hsl(var(--panel-border))] bg-[hsl(var(--panel-bg))]/40">
             {rootSubcats.length > 0 && (
               <div className="flex items-center justify-between px-2 pt-2">
-                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/60">
+                <span className="text-[9px] font-medium text-muted-foreground/60">
                   Subcategories
                 </span>
                 <DropdownMenu>

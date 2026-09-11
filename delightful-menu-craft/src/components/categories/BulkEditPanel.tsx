@@ -1188,7 +1188,7 @@ export function BulkEditPanel({ selection, onClearSelection, captureUndo }: Bulk
                 className={cn(
                   'flex-1 flex items-center justify-center gap-1 py-1 rounded-md text-[11px] font-medium transition-colors',
                   activeLevel === l
-                    ? 'bg-background shadow-sm text-foreground'
+                    ? 'bg-background text-foreground'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >

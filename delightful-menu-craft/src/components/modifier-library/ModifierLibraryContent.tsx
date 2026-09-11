@@ -2877,7 +2877,7 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
       <div className="p-4 space-y-4">
         {/* POS Display Name */}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">
             POS Display Name
           </p>
           {editingPosName ? (
@@ -2916,7 +2916,7 @@ function ModifierGroupDetail({ group, modifiers, updateModifierGroup, onDelete }
 
         {/* Modifiers in this group */}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+          <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
             Modifiers ({groupModifiers.length})
           </p>
           {groupModifiers.length === 0 && (

@@ -72,42 +72,52 @@ All channel-visibility sections use the same collapsible dropdown UI pattern: a 
 
 `src/lib/aiEnhance.ts` calls Claude Haiku with a compact payload (item names + existing station map). The hook `src/hooks/useAiEnhance.ts` manages the load → review → accept/reject → apply state machine. The review UI is in `AiEnhanceModal.tsx`. Patches are applied via `applyAiPatches()` in the store.
 
-## UI language (AIO console)
+## UI language (AIO design system)
 
-The app's visual language is ported from the AIO MDM console (`udm.aioapp.com`). It lives in two
-layers, both in `src/index.css`:
+Source of truth is the **`aio-design-system` skill** (`~/.claude/skills/aio-design-system/`),
+reverse-engineered from `AIOApp/zeus` -> `apps/portal/web-dash` and verified against its source.
+`references/tokens.css` holds every value; `CHECKLIST.md` is the pre-ship pass. When this file and
+the skill disagree, the skill is right.
 
-1. **`--aio-*`** — the AIO tokens at their raw values (surface tiers, rules, status washes, brand
-   gradient, shadows, motion, radii). Use these for anything the shadcn slots don't cover. Tailwind
-   exposes the useful ones as colours: `surface`/`surface-2`/`surface-3`, `rule`/`rule-2`,
-   `ink`/`ink-2`/`ink-muted`/`ink-faint`, `accent2`, and `ok`/`warn`/`danger` each with `-bg` and
-   `-edge` variants, plus `shadow-sm|md|lg|pop`, `bg-brand`, `ease-aio`, `rounded-pill`.
-2. **shadcn tokens** (`--background`, `--primary`, …) — HSL triples remapped onto the AIO palette, so
+The values live in two layers in `src/index.css`:
+
+1. **`--aio-*`** - the skill's hexes at raw values. Tailwind exposes the useful ones as colours:
+   `surface`/`surface-2`/`surface-3`, `rule`/`rule-2`, `ink`/`ink-2`/`ink-muted`/`ink-faint`,
+   `accent2`, and `ok`/`warn`/`danger` each with `-bg` and `-edge`, plus `shadow-sm|md|lg|pop`,
+   `ease-aio`, `rounded-btn|chip|pill`.
+2. **shadcn tokens** (`--background`, `--primary`, ...) - the same hexes converted to HSL triples, so
    existing components inherit the language without being touched.
 
-Conventions carried over from the console:
+The rules that are easiest to break:
 
-- **Accent is coral, not orange**: `#f9674e` light / `#f9805f` dark, with `--aio-accent-2` (indigo)
-  as the second accent. The wordmark gradient is `.brand-aio`.
-- **Light neutrals are warm, not grey.** The light background is the cream the console declares as
-  its light `theme-color` (`#faf8f5`), with surfaces, borders, hover and shadows tinted the same way,
-  so white cards separate from the page and the coral accent isn't the only warm thing on screen.
-- **Colour comes in volume, not intensity.** Add it by giving another element the existing soft
-  tokens, not by deepening them: the brand gradient on the appbar's bottom edge (`.appbar::after`)
-  and the rail's outer hairline (`.sidebar-rail`), `surface-2` bands on column headers, `accent-edge`
-  on card hover, `accent-text` on `.section-header` / `.aio-eyebrow` labels.
-- **Semantic modifiers, not raw palette classes.** Status is `ok` / `warn` / `danger` / `info` with a
-  matching `-bg` wash and `-edge` border — never `text-green-600` or `bg-amber-500/10`. The only
-  exceptions are the POS and kiosk preview components, which deliberately mirror the POS device UI
-  (purple shell, orange tiles) and keep their own `--pos-*` tokens.
-- **Reds are washed, not filled.** `Button variant="destructive"` is a `danger-bg` chip with a
-  `danger-edge`; filled red is reserved for dialog confirmations.
-- **Type**: Poppins (self-hosted via `@fontsource`, imported in `src/main.tsx`), JetBrains Mono for
-  IDs and build names. 13px is the body size; metrics get `.tnum` (tabular figures).
-- **Radius 12px** (`--radius`), 8px for controls, 24px for cards, pill for chips/badges.
-- **Narrative headers**: `.aio-eyebrow` (uppercase accent label) + `.aio-h1` (a sentence, with the
-  number or subject in `<b>` and accent-coloured) + `.aio-sub`. Copy reads as sentences, not labels.
-- **Empty states are first-class**: a tinted circular icon, a bold line, then one plain-language line
-  saying what to do next.
-- **Motion**: 140ms on `--aio-ease`; buttons take a 1px press.
-- Dark mode is a full second token set, not a filter. The theme toggle lives in the appbar (`TopBar`).
+- **Surface ladder**: `#F3F5F7` canvas -> `#FFFFFF` card -> `#F6F6F6` recessed tile. Never put a
+  white tile on a grey card - that inversion is the most recognisable AIO trait.
+- **Flat, not floating.** Depth is a 1px `#ECECF5` border. Shadows are only for things that genuinely
+  float: dropdowns, popovers, modals, toasts. Cards get no shadow.
+- **One brand colour.** Coral `#F9674E`, used as a tint (`#FFDFD7` selected, `#FEE4DE` hover,
+  `#FFE5E0` emphasis) far more than as a fill. No second accent, no gradients. `--aio-accent-2` is
+  the chart palette's categorical indigo, for telling two tags apart - not a brand colour.
+- **Destructive is coral**, not red. `#D5381D` is validation feedback only, never a button fill.
+- **Sentence case everywhere.** No uppercase, no letter-spaced labels. `-0.02em` tracking on
+  everything >=16px, `0` below.
+- **Weight 500 is the default UI weight.** 600 for titles, 700 for display only.
+- **Radii come off the scale**: 4 / 8 / 9 (nav pill) / 10 (buttons) / 12 (cards, dialogs) / 16
+  (chips) / 20 / 999. Never invent one.
+- **Motion** is 150/200/250ms on `cubic-bezier(.4,0,.2,1)`. No decorative animation.
+
+Deliberate deviations:
+
+- **Layout, density and IA are this app's own** and were explicitly excluded from the conformance
+  pass - the 60px icon rail, 13px type, compact rows and the multi-column builder stay. The skill
+  describes a 283px labelled sidebar and 60px table rows for six dashboard archetypes; the menu
+  builder is not one of them.
+- **Icons are `lucide-react`**; the skill calls for `@mui/icons-material` `*Outlined` or Material
+  Symbols. Swapping the library is a separate job.
+- **Dark mode** stays (the skill's source app is light-only). Surfaces, text and accent use the
+  skill's dormant dark palette; anything marked `(inferred)` in `index.css` had no token there.
+- **`ghost` buttons stay neutral** - in this codebase that variant is the icon affordance, not the
+  skill's coral `tertiary`.
+- Two skill-prescribed bug fixes are applied: a real `--aio-accent-h` (`#E04A30`) so the primary
+  hover does something, and a visible `:focus-visible` ring.
+- POS and kiosk previews keep their own `--pos-*` tokens - they mirror the POS device, not the
+  console.

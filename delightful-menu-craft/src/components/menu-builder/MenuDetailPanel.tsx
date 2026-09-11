@@ -165,7 +165,7 @@ export function MenuDetailPanel({ menu }: Props) {
 
           {/* Names */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Names</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Names</p>
             <div className="space-y-1">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[10px] text-muted-foreground shrink-0 w-[3.5rem]">Name</span>
@@ -190,7 +190,7 @@ export function MenuDetailPanel({ menu }: Props) {
 
           {/* Button color */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">POS Button Color</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">POS Button Color</p>
             <div className="flex items-center gap-3">
               <ColorPalettePicker
                 palette={MENU_COLOR_PALETTE}
@@ -215,7 +215,7 @@ export function MenuDetailPanel({ menu }: Props) {
               onClick={() => setImageOpen((o) => !o)}
               className="mb-1.5 flex w-full items-center justify-between gap-2"
             >
-              <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
                 {draft.picture ? (
                   <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded border border-border">
                     <LoadingImage src={draft.picture} alt="Menu preview" className="h-full w-full object-cover" />
@@ -276,7 +276,7 @@ export function MenuDetailPanel({ menu }: Props) {
 
           {/* Availability */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Availability</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Availability</p>
             <p className="text-[10px] text-muted-foreground mb-2 leading-snug">{buildAvailabilitySummary(draft)}</p>
 
             {/* Channel dropdowns — schedule editor lives inside each expanded group */}
@@ -334,7 +334,7 @@ export function MenuDetailPanel({ menu }: Props) {
                           {/* Bulk hours */}
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                              <p className="text-[10px] font-medium text-muted-foreground">Hours (all days)</p>
                               {(bulkStart || bulkEnd) && (
                                 <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>
                               )}
@@ -364,7 +364,7 @@ export function MenuDetailPanel({ menu }: Props) {
                           {/* Day toggles */}
                           <div>
                             <div className="flex items-center justify-between mb-1">
-                              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                              <p className="text-[10px] font-medium text-muted-foreground">Days</p>
                               <button
                                 type="button"
                                 className="text-[10px] text-primary hover:underline"

@@ -1530,7 +1530,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           className="rounded-lg border border-border bg-muted/10 overflow-hidden"
         >
           <AccordionItem value="third-party" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               Third-party pricing
             </AccordionTrigger>
             <AccordionContent>
@@ -1593,7 +1593,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="stations" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
                 Stations
                 {stationDraft.length > 0 && (
@@ -1652,7 +1652,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="item-modifiers" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
                 Modifiers
                 {attachedModifiers.length > 0 && (
@@ -1824,7 +1824,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
                 {inheritedCategoryModifiers.length > 0 && (
                   <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/70">
+                    <p className="text-[10px] font-medium text-primary/70">
                       Inherited from category
                     </p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
@@ -2254,7 +2254,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           <AccordionItem value="availability" className="border-b border-border px-3">
             <AccordionTrigger className="px-0 py-3 hover:no-underline items-start gap-2 [&>svg]:mt-1">
               <div className="flex-1 min-w-0 text-left">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Availability</div>
+                <div className="text-xs font-medium text-muted-foreground">Availability</div>
                 <div className="text-[10px] font-normal normal-case text-muted-foreground truncate mt-0.5 pr-2">
                   {draft.inheritVisibilityFromCategory
                     ? `Inherited · ${inheritedVisibilitySummary}`
@@ -2340,7 +2340,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               {/* Bulk hours */}
                               <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                                  <p className="text-xs font-medium text-muted-foreground">Hours (all days)</p>
                                   {(bulkStart || bulkEnd) && (
                                     <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>
                                   )}
@@ -2374,7 +2374,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               {/* Per-day toggles */}
                               <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                                  <p className="text-xs font-medium text-muted-foreground">Days</p>
                                   <button type="button" className="text-xs text-primary hover:underline"
                                     onClick={() => {
                                       const allEnabled = SCHEDULE_DAYS.every(d => groupSched[d].enabled);
@@ -2466,7 +2466,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="taxes" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               Taxes
             </AccordionTrigger>
             <AccordionContent>
@@ -2533,7 +2533,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="tags" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
                 Tags
                 <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
@@ -2695,7 +2695,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="allergens" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
                 Allergens
                 <span className="text-[10px] font-normal normal-case tabular-nums text-muted-foreground/80">
@@ -2728,7 +2728,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                         className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-dashed bg-destructive/5 border-destructive/30 text-destructive/80"
                       >
                         <span>{allergen.name}</span>
-                        <span className="text-[9px] uppercase tracking-wide opacity-70">cat</span>
+                        <span className="text-[9px] opacity-70">cat</span>
                       </span>
                     ))}
                   </div>
@@ -2824,7 +2824,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="addons" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               <span className="flex items-center gap-2">
                 Add-Ons
                 {addonDraft.length > 0 && (
@@ -2878,7 +2878,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="order-quantity" className="border-b border-border px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               Order quantity
             </AccordionTrigger>
             <AccordionContent>
@@ -2953,7 +2953,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           </AccordionItem>
 
           <AccordionItem value="kitchen-details" className="border-b-0 px-3">
-            <AccordionTrigger className="py-3 hover:no-underline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <AccordionTrigger className="py-3 hover:no-underline text-xs font-medium text-muted-foreground">
               Kitchen & details
             </AccordionTrigger>
             <AccordionContent>

@@ -116,6 +116,8 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
         pill: "999px",
+        btn: "var(--aio-r-btn)",
+        chip: "var(--aio-r-chip)",
       },
       boxShadow: {
         sm: "var(--aio-shadow-sm)",
@@ -124,11 +126,8 @@ export default {
         lg: "var(--aio-shadow-lg)",
         pop: "var(--aio-shadow-pop)",
       },
-      backgroundImage: {
-        brand: "var(--aio-brand-grad)",
-      },
       transitionTimingFunction: {
-        aio: "cubic-bezier(.2,.6,.2,1)",
+        aio: "cubic-bezier(0.4, 0, 0.2, 1)",
       },
       keyframes: {
         "accordion-down": {

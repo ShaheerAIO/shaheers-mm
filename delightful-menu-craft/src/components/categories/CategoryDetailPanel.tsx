@@ -388,7 +388,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Names — compact inline-label rows */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Names</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Names</p>
             <div className="space-y-1">
               <div>
                 <div className="flex items-center gap-2 min-w-0">
@@ -456,7 +456,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Color — inline with label */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Color</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Color</p>
             <div className="flex items-center gap-3">
               <ColorPalettePicker
                 palette={CATEGORY_COLOR_PALETTE}
@@ -481,7 +481,7 @@ export function CategoryDetailPanel({ category }: Props) {
               onClick={() => setImagesOpen((o) => !o)}
               className="mb-1.5 flex w-full items-center justify-between gap-2"
             >
-              <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
                 {draft.image || draft.kioskImage ? (
                   <span className="relative h-6 w-6 shrink-0 overflow-hidden rounded border border-border">
                     <LoadingImage src={draft.image || draft.kioskImage} alt="Category preview" className="h-full w-full object-cover" />
@@ -568,7 +568,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Category Modifiers */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
               Modifiers ({assignedCatMods.length})
             </p>
             <div className="space-y-2">
@@ -686,7 +686,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Category Modifier Groups */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
               Modifier Groups ({assignedCatGroups.length})
             </p>
             <div className="space-y-2">
@@ -794,7 +794,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Availability — channels + per-group schedule */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Availability</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Availability</p>
             <p className="text-[10px] text-muted-foreground mb-2 leading-snug">{buildAvailabilitySummary(draft)}</p>
 
             {/* Channel dropdowns — schedule editor lives inside each expanded group */}
@@ -842,7 +842,7 @@ export function CategoryDetailPanel({ category }: Props) {
                             <div className="border-t border-border px-3 py-2 space-y-2 bg-muted/20">
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Hours (all days)</p>
+                                  <p className="text-[10px] font-medium text-muted-foreground">Hours (all days)</p>
                                   {(bulkStart || bulkEnd) && <button type="button" className="text-[10px] text-muted-foreground hover:underline" onClick={() => { setBulkStart(''); setBulkEnd(''); }}>Clear</button>}
                                 </div>
                                 <div className="flex items-center gap-1.5">
@@ -857,7 +857,7 @@ export function CategoryDetailPanel({ category }: Props) {
                               </div>
                               <div>
                                 <div className="flex items-center justify-between mb-1">
-                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Days</p>
+                                  <p className="text-[10px] font-medium text-muted-foreground">Days</p>
                                   <button type="button" className="text-[10px] text-primary hover:underline"
                                     onClick={() => { const allEnabled = DAYS.every((d) => groupSched[d].enabled); setDraft((prev) => { const next = { ...prev.daySchedulesByGroup[groupKey] }; for (const d of DAYS) next[d] = { ...next[d], enabled: !allEnabled }; return { ...prev, daySchedulesByGroup: { ...prev.daySchedulesByGroup, [groupKey]: next } }; }); }}>
                                     {DAYS.every((d) => groupSched[d].enabled) ? 'All days' : 'Select all'}
@@ -917,7 +917,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Tags */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
               Tags ({[...tagIds].filter((id) => validTags.some((t) => t.id === id)).length}/{validTags.length})
             </p>
             <div className="space-y-1.5">
@@ -1033,7 +1033,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Allergens — cascade to items that inherit from category */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">
               Allergens ({[...allergenIds].filter((id) => validAllergens.some((a) => a.id === id)).length}/{validAllergens.length})
             </p>
             <p className="text-[10px] text-muted-foreground/80 mb-1.5">
@@ -1091,7 +1091,7 @@ export function CategoryDetailPanel({ category }: Props) {
 
           {/* Menus */}
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Menus</p>
+            <p className="text-[10px] font-medium text-muted-foreground mb-1.5">Menus</p>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {menus.map((menu) => {
                 const assigned = menuIds.has(menu.id);
