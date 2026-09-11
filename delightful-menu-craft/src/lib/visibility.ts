@@ -452,21 +452,33 @@ export function defaultGroupSchedules(): ChannelGroupSchedules {
  * Parse a ChannelGroupSchedules from the `daySchedulesByGroup` JSON string.
  * If that field is absent/invalid, falls back to copying the legacy single
  * `daySchedules` value to both groups so old data migrates transparently.
+ *
+ * Group keys are matched loosely (`On-Prem`, `OnPrem`, `on prem`, …) so the
+ * POS token spelling emitted by `serializeVisibility` is accepted too. A group
+ * the JSON omits falls back to the legacy single schedule rather than being
+ * reset to "all days, all hours".
  */
 export function parseGroupSchedules(
   raw: string | undefined | null,
   fallbackSingle?: string | undefined,
 ): ChannelGroupSchedules {
+  // Called per group so the two groups never share DaySchedule objects.
+  const single = () => parseDaySchedules(fallbackSingle);
   if (raw && raw.trim()) {
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (typeof parsed === 'object' && parsed !== null) {
-        const onPrem  = parsed['On-Prem'];
-        const offPrem = parsed['Off-Prem'];
+        let onPrem: unknown;
+        let offPrem: unknown;
+        for (const [key, value] of Object.entries(parsed)) {
+          const norm = normalizePlatformName(key);
+          if (norm === 'onprem') onPrem = value;
+          else if (norm === 'offprem') offPrem = value;
+        }
         if (onPrem !== undefined || offPrem !== undefined) {
           return {
-            'On-Prem':  parseDaySchedules(onPrem  !== undefined ? JSON.stringify(onPrem)  : undefined),
-            'Off-Prem': parseDaySchedules(offPrem !== undefined ? JSON.stringify(offPrem) : undefined),
+            'On-Prem':  onPrem  !== undefined ? parseDaySchedules(JSON.stringify(onPrem))  : single(),
+            'Off-Prem': offPrem !== undefined ? parseDaySchedules(JSON.stringify(offPrem)) : single(),
           };
         }
       }
@@ -474,8 +486,7 @@ export function parseGroupSchedules(
       // fall through
     }
   }
-  const single = parseDaySchedules(fallbackSingle);
-  return { 'On-Prem': single, 'Off-Prem': { ...single } };
+  return { 'On-Prem': single(), 'Off-Prem': single() };
 }
 
 export function serializeGroupSchedules(map: ChannelGroupSchedules): string {
