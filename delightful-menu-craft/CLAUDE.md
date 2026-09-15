@@ -90,9 +90,10 @@ The values live in two layers in `src/index.css`:
 
 The rules that are easiest to break:
 
-- **Surface ladder**: `#F3F5F7` canvas -> `#FFFFFF` card -> `#F6F6F6` recessed tile. Never put a
-  white tile on a grey card - that inversion is the most recognisable AIO trait.
-- **Flat, not floating.** Depth is a 1px `#ECECF5` border. Shadows are only for things that genuinely
+- **Surface ladder**: `#EFE9DE` canvas -> `#FCF8F1` card -> `#F2ECE0` recessed tile. The ordering is
+  the skill's and must never invert - a lighter tile inside a darker card is the one thing it is
+  emphatic about. The hue is this app's (see deviations).
+- **Flat, not floating.** Depth is a 1px `#E2DACB` border. Shadows are only for things that genuinely
   float: dropdowns, popovers, modals, toasts. Cards get no shadow.
 - **One brand colour.** Coral `#F9674E`, used as a tint (`#FFDFD7` selected, `#FEE4DE` hover,
   `#FFE5E0` emphasis) far more than as a fill. No second accent, no gradients. `--aio-accent-2` is
@@ -113,6 +114,12 @@ Deliberate deviations:
   builder is not one of them.
 - **Icons are `lucide-react`**; the skill calls for `@mui/icons-material` `*Outlined` or Material
   Symbols. Swapping the library is a separate job.
+- **Light neutrals are a cream, not the skill's cool greys.** Its card is pure `#FFFFFF` on a
+  `#F3F5F7` canvas, which reads too bright here. The whole family is warmed and the steps widened:
+  canvas/card separation is 12.3 lightness points against the skill's 8.9, and the ink ramp is
+  `#1C1B18` / `#43413B` / `#57544B` / `#736F61` (16.3 / 9.6 / 7.2 / 4.8 : 1 on the card). Warming the
+  card alone would have made it darker than a cool canvas and inverted the ladder, so the tiers move
+  together. `index.html`'s light `theme-color` tracks the canvas.
 - **Dark mode is this app's own near-black**, not the skill's navy (`#091121` / `#132037`). The
   skill's source app renders light-only with no toggle and no reference screenshots, so there is
   nothing to be consistent with; a blue-cast near-black (`#0d0d12` / `#16161d` / `#1e1e27`) is what

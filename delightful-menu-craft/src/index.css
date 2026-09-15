@@ -20,26 +20,30 @@
 @layer base {
   :root {
     /* ---- AIO raw tokens — light ----
-       Values come from the aio-design-system skill (references/tokens.css),
-       which encodes apps/portal/web-dash. The surface ladder is the backbone:
-       #F3F5F7 canvas -> #FFFFFF card -> #F6F6F6 recessed tile. Never invert it. */
-    --aio-bg: #f3f5f7;
-    --aio-surface: #ffffff;
-    --aio-surface-2: #f6f6f6;
-    --aio-surface-3: #f4f4f8;
-    --aio-shell: #fafafa;
+       Structure is the aio-design-system skill's (references/tokens.css): the
+       surface ladder canvas -> card -> recessed tile, and never inverted. The
+       hue is this app's: the skill's neutrals are cool and its card is pure
+       #FFFFFF, which reads too bright here, so the whole family is warmed to a
+       cream and the steps are widened for contrast. Warming the card alone
+       would have made it darker than a cool canvas and inverted the ladder. */
+    --aio-bg: #efe9de;
+    --aio-surface: #fcf8f1;
+    --aio-surface-2: #f2ece0;
+    --aio-surface-3: #e7dfd0;
+    --aio-shell: #f7f2e9;
     --aio-overlay: rgba(0, 0, 0, 0.25);
-    --aio-border: #ececf5;
-    --aio-border-soft: #f4f4f8;
-    --aio-rule: #e9e9f4;
-    --aio-rule-2: #b7bac3;
-    --aio-text: #242528;
-    --aio-text-2: #53575d;
-    /* Skill §22: #888D95 is ~3.4:1 and below AA below 18px. This UI is 13px
-       throughout, so muted takes the AA-safe tertiary and faint takes #888D95. */
-    --aio-muted: #53575d;
-    --aio-text-faint: #888d95;
-    --aio-text-placeholder: #b7bac3;
+    --aio-border: #e2dacb;
+    --aio-border-soft: #ebe4d8;
+    --aio-rule: #d8cfbd;
+    --aio-rule-2: #b5a992;
+    --aio-text: #1c1b18;
+    --aio-text-2: #43413b;
+    /* Skill §22: its #888D95 secondary is ~3.4:1 and below AA under 18px. This
+       UI is 13px throughout, so muted stays in AA range and faint sits below it
+       for timestamps and meta only. */
+    --aio-muted: #57544b;
+    --aio-text-faint: #736f61;
+    --aio-text-placeholder: #a39c8b;
 
     --aio-accent: #f9674e;
     /* Skill §10 known bug: primary.light/main/dark are all #F9674E, so the
@@ -81,7 +85,7 @@
     /* Skill §22: hover and selected are the same tint in the source, which it
        flags as a defect. Hover takes palette.hover, selected keeps action.selected. */
     --aio-hover: #fee4de;
-    --aio-row-hover: #f3f5f7;
+    --aio-row-hover: #f5f0e6;
     --aio-selected: var(--aio-accent-soft);
     /* Skill §22: the source focus ring is 2px #F4F4F8 and near-invisible; it
        prescribes a visible branded ring. */
@@ -103,23 +107,23 @@
 
     /* ---- shadcn tokens mapped onto AIO — light ----
        Every triple below is one of the skill's hexes converted to HSL. */
-    --background: 210 20% 96%; /* #F3F5F7 page canvas */
-    --foreground: 225 5% 15%; /* #242528 */
+    --background: 39 35% 90%; /* #EFE9DE page canvas */
+    --foreground: 45 8% 10%; /* #1C1B18 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 225 5% 15%;
+    --card: 38 65% 97%; /* #FCF8F1 — cream, not pure white */
+    --card-foreground: 45 8% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 225 5% 15%;
+    --popover: 38 65% 97%;
+    --popover-foreground: 45 8% 10%;
 
     --primary: 9 93% 64%; /* #F9674E */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%; /* #F6F6F6 recessed tile */
-    --secondary-foreground: 216 6% 35%; /* #53575D */
+    --secondary: 40 41% 91%; /* #F2ECE0 recessed tile */
+    --secondary-foreground: 45 6% 25%; /* #43413B */
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 216 6% 35%;
+    --muted: 40 41% 91%;
+    --muted-foreground: 45 7% 32%; /* #57544B — 7.2:1 on the card */
 
     --accent: 12 100% 92%; /* #FFDFD7 selected tint */
     --accent-foreground: 9 98% 34%; /* #AC1B02 ink on tint */
@@ -128,29 +132,29 @@
     --destructive: 9 93% 64%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 31% 94%; /* #ECECF5 card border */
-    --input: 0 0% 91%; /* #E9E9E9 field at rest */
+    --border: 39 28% 84%; /* #E2DACB card border */
+    --input: 40 28% 81%; /* #DDD4C2 field at rest */
     --ring: 9 93% 64%;
 
     --radius: 0.75rem;
 
     /* Custom app tokens */
     --sidebar-width: 60px;
-    --sidebar-bg: 210 25% 98%; /* #FAFBFC */
-    --sidebar-foreground: 216 6% 35%;
+    --sidebar-bg: 39 50% 94%; /* #F8F3EA */
+    --sidebar-foreground: 45 7% 32%;
     --sidebar-active: 9 98% 34%; /* #AC1B02 */
     --sidebar-hover: 11 94% 93%; /* #FEE4DE */
 
-    --panel-bg: 0 0% 100%;
-    --panel-border: 240 31% 94%;
+    --panel-bg: 38 65% 97%;
+    --panel-border: 39 28% 84%;
 
-    --column-minimized: 0 0% 98%; /* #FAFAFA */
-    --column-active: 0 0% 100%;
-    --column-header: 225 5% 15%;
+    --column-minimized: 39 47% 94%; /* #F7F2E9 */
+    --column-active: 38 65% 97%;
+    --column-header: 45 8% 10%;
 
-    --item-hover: 210 20% 96%; /* #F3F5F7 row hover */
+    --item-hover: 40 43% 93%; /* #F5F0E6 row hover */
     --item-selected: 12 100% 92%; /* #FFDFD7 */
-    --item-86: 240 22% 96%; /* #F4F4F8 */
+    --item-86: 39 36% 89%; /* #EDE6D9 */
 
     --success: 136 46% 46%; /* #35B558 */
     --warning: 38 98% 47%; /* #EE9602 */
