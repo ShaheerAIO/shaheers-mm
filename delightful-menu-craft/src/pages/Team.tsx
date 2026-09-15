@@ -110,7 +110,7 @@ export default function Team() {
         <span className="aio-eyebrow">Access</span>
         <h1 className="aio-h1 mt-1">
           {rows === null ? 'Loading the team…' : query ? (
-            <><b>{visibleRows.length} {visibleRows.length === 1 ? 'person' : 'people'}</b> match</>
+            <><b>{visibleRows.length} {visibleRows.length === 1 ? 'person' : 'people'}</b> {visibleRows.length === 1 ? 'matches' : 'match'}</>
           ) : (
             <><b>{rows.length} {rows.length === 1 ? 'person' : 'people'}</b> can sign in</>
           )}

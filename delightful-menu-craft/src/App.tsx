@@ -90,7 +90,9 @@ const App = () => (
                 path="/team"
                 element={
                   <RequireAuth>
-                    <Team />
+                    <RequireAdmin>
+                      <Team />
+                    </RequireAdmin>
                   </RequireAuth>
                 }
               />
