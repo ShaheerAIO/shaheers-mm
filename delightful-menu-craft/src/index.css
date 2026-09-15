@@ -178,37 +178,42 @@
 
   .dark {
     /* ---- AIO raw tokens — dark ----
-       The skill ships a complete dark palette but the source app renders
-       light-only, so there are no reference screenshots. Surfaces, text and
-       accent below are its values verbatim; anything marked (inferred) had no
-       token in the skill and is carried over from what already shipped. */
-    --aio-bg: #132037;
-    --aio-surface: #091121;
-    --aio-surface-2: #0f1a2f;
-    --aio-surface-3: #1b2438;
-    --aio-shell: #0f1a2f;
+       The skill ships a dark palette but its source app renders light-only, so
+       there is nothing to be consistent WITH: no toggle is exposed and there
+       are no reference screenshots. Its values are navy (#091121 / #132037);
+       this app's dark mode is a near-black with a blue cast instead, which is
+       what shipped before and what the product wants. Everything that isn't a
+       surface hue still follows the skill: one coral accent unchanged across
+       modes, tints for selection, flat elevation, its radius and motion scales. */
+    --aio-bg: #0d0d12;
+    --aio-surface: #16161d;
+    --aio-surface-2: #1e1e27;
+    --aio-surface-3: #262633;
+    --aio-shell: #1e1e27;
     --aio-overlay: rgba(0, 0, 0, 0.5);
-    --aio-border: #1b2438;
-    --aio-border-soft: #101a31;
-    --aio-rule: #1f2d4a;
-    --aio-rule-2: #3a4a6b; /* (inferred) */
-    --aio-text: #f3f5f9;
-    --aio-text-2: #b8bfd1;
-    --aio-muted: #b8bfd1;
-    --aio-text-faint: #7f8597;
-    --aio-text-placeholder: #7f8597;
+    --aio-border: #2a2a35;
+    --aio-border-soft: #202029;
+    --aio-rule: #33333f;
+    --aio-rule-2: #44444f;
+    --aio-text: #f4f4f6;
+    --aio-text-2: #b3b4bd;
+    --aio-muted: #a0a1ab;
+    --aio-text-faint: #8a8b95;
+    --aio-text-placeholder: #8a8b95;
 
     --aio-accent: #f9674e;
     --aio-accent-h: #ff8a75;
-    --aio-accent-soft: #1f2d4a;
-    --aio-accent-hover: #1a2740;
-    --aio-accent-track: #1a2740;
-    --aio-accent-light: #1f2d4a;
+    /* Coral washes, not the skill's navy action.selected — a blue selection
+       tint is what made the whole theme read as blue. */
+    --aio-accent-soft: rgba(249, 103, 78, 0.14);
+    --aio-accent-hover: rgba(249, 103, 78, 0.09);
+    --aio-accent-track: rgba(249, 103, 78, 0.12);
+    --aio-accent-light: rgba(249, 103, 78, 0.18);
     --aio-accent-edge: #f9674e;
     --aio-accent-ink: #ffffff;
-    --aio-accent-text: #f9674e;
-    --aio-accent-2: #d5d9fc;
-    --aio-accent-2-soft: #1f2d4a;
+    --aio-accent-text: #f9805f;
+    --aio-accent-2: #99a1f2;
+    --aio-accent-2-soft: rgba(153, 161, 242, 0.16);
 
     /* (inferred) The skill gives no dark status colours — unchanged from what
        already shipped, which was tuned for legibility on a dark surface. */
@@ -230,55 +235,55 @@
     --aio-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
     --aio-shadow-pop: 0 11px 15px -7px rgba(0, 0, 0, 0.5), 0 24px 38px 3px rgba(0, 0, 0, 0.4),
       0 9px 46px 8px rgba(0, 0, 0, 0.35);
-    --aio-hover: #1a2740;
-    --aio-row-hover: #1a2740;
+    --aio-hover: rgba(255, 255, 255, 0.05);
+    --aio-row-hover: rgba(255, 255, 255, 0.04);
     --aio-selected: var(--aio-accent-soft);
     --aio-focus-ring: 0 0 0 2px #f9674e;
 
     /* ---- shadcn tokens mapped onto AIO — dark ---- */
-    --background: 218 49% 15%; /* #132037 */
-    --foreground: 220 33% 96%; /* #F3F5F9 */
+    --background: 240 16% 6%; /* #0d0d12 */
+    --foreground: 240 10% 96%;
 
-    --card: 220 57% 8%; /* #091121 */
-    --card-foreground: 220 33% 96%;
+    --card: 240 14% 10%; /* #16161d */
+    --card-foreground: 240 10% 96%;
 
-    --popover: 219 52% 12%; /* #0F1A2F */
-    --popover-foreground: 220 33% 96%;
+    --popover: 240 13% 14%;
+    --popover-foreground: 240 10% 96%;
 
-    --primary: 9 93% 64%; /* #F9674E — unchanged across modes */
+    --primary: 9 93% 64%; /* #F9674E — one coral, unchanged across modes */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 219 52% 12%;
-    --secondary-foreground: 223 21% 77%; /* #B8BFD1 */
+    --secondary: 240 13% 14%;
+    --secondary-foreground: 234 7% 72%;
 
-    --muted: 219 52% 12%;
-    --muted-foreground: 223 21% 77%;
+    --muted: 240 13% 14%;
+    --muted-foreground: 235 6% 65%;
 
-    --accent: 220 41% 21%; /* #1F2D4A action.selected */
-    --accent-foreground: 9 93% 64%;
+    --accent: 351 24% 17%; /* coral wash over the surface, not a navy tint */
+    --accent-foreground: 12 93% 68%; /* #f9805f — lifted for dark surfaces */
 
     --destructive: 9 93% 64%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 221 35% 16%; /* #1B2438 */
-    --input: 220 41% 21%;
+    --border: 240 12% 19%;
+    --input: 240 11% 22%;
     --ring: 9 93% 64%;
 
-    --sidebar-bg: 222 51% 13%; /* #101A31 */
-    --sidebar-foreground: 223 21% 77%;
-    --sidebar-active: 9 93% 64%;
-    --sidebar-hover: 220 42% 18%; /* #1A2740 hover.main */
+    --sidebar-bg: 240 14% 10%;
+    --sidebar-foreground: 235 6% 65%;
+    --sidebar-active: 12 93% 68%;
+    --sidebar-hover: 240 15% 17%;
 
-    --panel-bg: 220 57% 8%;
-    --panel-border: 221 35% 16%;
+    --panel-bg: 240 14% 10%;
+    --panel-border: 240 12% 19%;
 
-    --column-minimized: 219 52% 12%;
-    --column-active: 220 57% 8%;
-    --column-header: 220 33% 96%;
+    --column-minimized: 240 13% 14%;
+    --column-active: 240 14% 10%;
+    --column-header: 240 10% 96%;
 
-    --item-hover: 220 42% 18%;
-    --item-selected: 220 41% 21%;
-    --item-86: 221 35% 16%;
+    --item-hover: 240 15% 17%;
+    --item-selected: 351 24% 17%;
+    --item-86: 328 16% 15%;
 
     /* (inferred) no dark status colours in the skill — unchanged */
     --success: 138 44% 54%;

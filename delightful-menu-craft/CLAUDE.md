@@ -113,8 +113,12 @@ Deliberate deviations:
   builder is not one of them.
 - **Icons are `lucide-react`**; the skill calls for `@mui/icons-material` `*Outlined` or Material
   Symbols. Swapping the library is a separate job.
-- **Dark mode** stays (the skill's source app is light-only). Surfaces, text and accent use the
-  skill's dormant dark palette; anything marked `(inferred)` in `index.css` had no token there.
+- **Dark mode is this app's own near-black**, not the skill's navy (`#091121` / `#132037`). The
+  skill's source app renders light-only with no toggle and no reference screenshots, so there is
+  nothing to be consistent with; a blue-cast near-black (`#0d0d12` / `#16161d` / `#1e1e27`) is what
+  the product wants. Everything that isn't a surface hue still follows the skill in dark: one coral
+  accent, coral washes for selection rather than navy tints, flat elevation, its radius and motion
+  scales. Status colours are marked `(inferred)` in `index.css` — the skill defines none for dark.
 - **`ghost` buttons stay neutral** - in this codebase that variant is the icon affordance, not the
   skill's coral `tertiary`.
 - Two skill-prescribed bug fixes are applied: a real `--aio-accent-h` (`#E04A30`) so the primary

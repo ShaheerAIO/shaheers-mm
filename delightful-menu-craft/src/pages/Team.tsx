@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Shield, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Search, Shield, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 
@@ -32,6 +33,7 @@ export default function Team() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [rows, setRows] = useState<ProfileRow[] | null>(null);
+  const [search, setSearch] = useState('');
   const [savingRole, setSavingRole] = useState<string | null>(null);
 
   const refresh = () =>
@@ -47,6 +49,18 @@ export default function Team() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  const query = search.trim().toLowerCase();
+  const visibleRows = useMemo(() => {
+    if (!rows) return [];
+    if (!query) return rows;
+    return rows.filter((r) => {
+      const haystack = [r.email ?? '', r.role, r.id === user?.id ? 'you' : '']
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [rows, query, user?.id]);
 
   const handleSetRole = async (row: ProfileRow, next: UserRole) => {
     if (next === row.role) return;
@@ -95,7 +109,9 @@ export default function Team() {
 
         <span className="aio-eyebrow">Access</span>
         <h1 className="aio-h1 mt-1">
-          {rows === null ? 'Loading the team…' : (
+          {rows === null ? 'Loading the team…' : query ? (
+            <><b>{visibleRows.length} {visibleRows.length === 1 ? 'person' : 'people'}</b> match</>
+          ) : (
             <><b>{rows.length} {rows.length === 1 ? 'person' : 'people'}</b> can sign in</>
           )}
         </h1>
@@ -104,13 +120,49 @@ export default function Team() {
           admin here — admins manage access and can force a hand-over of a locked project.
         </p>
 
+        {rows !== null && rows.length > 0 && (
+          <div className="relative mb-4">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <Input
+              placeholder="Search people…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 pr-8"
+              aria-label="Search people"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint transition-colors hover:text-ink"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {rows === null ? (
           <div className="flex justify-center py-12 text-ink-faint">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-14 text-center">
+            <p className="text-[14px] font-semibold text-ink">No one has signed in yet</p>
+            <p className="aio-sub">People appear here after they sign in with an AIO Microsoft account.</p>
+          </div>
+        ) : visibleRows.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-14 text-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-3 text-ink-faint">
+              <Search className="h-5 w-5" />
+            </span>
+            <p className="text-[14px] font-semibold text-ink">Nothing matches that search</p>
+            <p className="aio-sub">Try a different email or role.</p>
+          </div>
         ) : (
           <div className="space-y-2">
-            {rows.map((r) => (
+            {visibleRows.map((r) => (
               <Card key={r.id} className="flex items-center justify-between p-4 aio-card-hover">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[14px] font-medium text-ink">
