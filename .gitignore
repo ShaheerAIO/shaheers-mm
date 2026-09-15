@@ -1,1 +1,5 @@
 .DS_Store
+
+# Local secrets / scratch notes (never commit)
+.m365.local
+*.local
