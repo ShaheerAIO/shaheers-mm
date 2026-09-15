@@ -20,14 +20,14 @@ Three cooperating pieces:
 
 2. **`extension/` — DoorDash scraper (Chrome MV3).** `content.js` runs on `doordash.com/store/*` and extracts menu data (RSC payload, with ld+json fallback). `mapper.js` normalizes it into the app's entity shape. `popup.js` drives the scrape→preview→import UX and stashes the result in `chrome.storage.local`. `bridge.js` runs on the deployed app domain, reads that stash, and `postMessage`s `DD_EXTENSION_IMPORT` into the page. The app receives it via `src/hooks/useExtensionImport.ts` and `src/lib/doorDashMapper.ts`.
 
-3. **`delightful-menu-craft/supabase/` — backend.** `schema.sql` defines `workspaces`, `profiles` (roles), and `audit_log` with RLS + triggers. Edge Functions (Deno): `ai-enhance` (server-side Anthropic proxy), and user management (`create-user`, `set-password`, `remove-user`; `invite-user` is legacy/unused).
+3. **`delightful-menu-craft/supabase/` — backend.** `schema.sql` defines `workspaces`, `profiles` (roles), and `audit_log` with RLS + triggers. Edge Functions (Deno): `ai-enhance` (server-side Anthropic proxy), and user management (`set-role`, `remove-user`; `create-user`, `set-password`, `invite-user` are retired/deleted).
 
 ### Data model
 Types live in `delightful-menu-craft/src/types/menu.ts` and mirror a multi-sheet Excel workbook: `Menu` → `Category` (nestable via `parentCategoryId`) → `Item`; `Modifier`/`ModifierOption` linked to items via `ItemModifier` join; `Station` (numeric id); `Tag`/`Allergen` via join tables. Visibility channels and grouping are centralized in `src/lib/visibility.ts` (`VISIBILITY_CHANNELS`); per-group day/time schedules are stored as `daySchedulesByGroup`.
 
 ## Key Files & Entry Points
 - `delightful-menu-craft/src/main.tsx` — React entry.
-- `delightful-menu-craft/src/App.tsx` — routing + providers; routes `/login`, `/set-password`, `/workspaces`, `/team` (admin-only), `/` (builder, requires auth + loaded workspace).
+- `delightful-menu-craft/src/App.tsx` — routing + providers; routes `/login`, `/workspaces`, `/team` (admin-only), `/` (builder, requires auth + loaded workspace).
 - `delightful-menu-craft/src/pages/Index.tsx` — main builder shell (left icon nav / main content / right detail panel).
 - `delightful-menu-craft/src/store/menuStore.ts` — single Zustand store (UI + data state), localStorage key `menu-manager-storage`, versioned migrations.
 - `delightful-menu-craft/src/lib/workspaceSync.ts` — Supabase sync, autosave, edit-lock logic.
@@ -65,8 +65,7 @@ Supabase Edge Functions (deploy from `delightful-menu-craft/`, requires Supabase
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 supabase functions deploy ai-enhance
-supabase functions deploy create-user
-supabase functions deploy set-password
+supabase functions deploy set-role
 supabase functions deploy remove-user
 ```
 
@@ -78,7 +77,7 @@ The Chrome extension has **no build step** — load `extension/` unpacked via `c
 - **Workspace = one JSON row**: each menu build is a single row in the `workspaces` table; the client autosaves ~1.5s after edits with an optimistic-concurrency version check. A tab-level lock (heartbeat ~8s, abandonment after 90s) prevents concurrent edits.
 - **Path alias**: `@/` → `delightful-menu-craft/src/` (see `vite.config.ts` and `tsconfig`).
 - **Visibility channels** are defined only in `src/lib/visibility.ts` — edit there when adding/renaming a channel; UI labels and parse helpers derive from it.
-- **Auth is invite-only**: sign-up is disabled in Supabase; admins create accounts via the in-app **Team** screen (email-free, no SMTP). Roles (`admin`/`member`) live in `profiles` and are not client-writable.
+- **Auth is Microsoft 365 SSO** (Entra ID, single-tenant); there is no password login. Any `@aioapp.com` account is auto-provisioned as `member` on first sign-in; a before-user-created auth hook rejects every other domain. Roles (`admin`/`member`) live in `profiles`, are set from the in-app **Team** screen via the `set-role` function, and are not client-writable. Offboarding is done in Entra ID, not in the app.
 - **Dev URL is `127.0.0.1:3000`** (not `localhost`); the extension's host permissions and `bridge.js` target `127.0.0.1:3000`, `localhost:3000`, and `https://shaheers-mm.vercel.app`. To point the extension at local dev, change `MENU_MANAGER_URL` in `extension/popup.js`.
 - **DoorDash scraping is brittle**: `content.js` depends on DoorDash's RSC/ld+json structure and may break when their page changes; full menu must be scrolled into view before scraping.
 - `lovable-tagger` runs only in dev mode (the project was scaffolded with Lovable).

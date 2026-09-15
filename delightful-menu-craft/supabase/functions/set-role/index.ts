@@ -1,9 +1,10 @@
-// Supabase Edge Function: create-user
+// Supabase Edge Function: set-role
 // Admin-only. Verifies the CALLER is an admin (server-side, via the service
-// role), then creates a user with an email + password directly — no invite
-// email is sent. The account is pre-confirmed so they can log in immediately.
+// role), then changes another user's role. Refuses to change your OWN role —
+// that single rule is the last-admin guard: the caller is an admin and stays
+// one, so the admin count can never reach zero.
 //
-// Deploy:  supabase functions deploy create-user
+// Deploy:  supabase functions deploy set-role
 // (No manual secret needed: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are built in.)
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -45,35 +46,28 @@ Deno.serve(async (req: Request) => {
       .single();
     if (prof?.role !== 'admin') return json({ error: 'Admins only.' }, 403);
 
-    // 3. Validate input.
-    const { email, password, role } = await req.json();
-    if (!email || typeof email !== 'string') return json({ error: 'Email is required.' }, 400);
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return json({ error: 'Password must be at least 6 characters.' }, 400);
+    // 3. Validate input + guard against self-changes (the last-admin guard).
+    const { userId, role } = await req.json();
+    if (!userId || typeof userId !== 'string') return json({ error: 'userId is required.' }, 400);
+    if (role !== 'admin' && role !== 'member') {
+      return json({ error: 'role must be "admin" or "member".' }, 400);
     }
-    const newRole = role === 'admin' ? 'admin' : 'member';
-
-    // 4. Create the user, pre-confirmed (no email sent). The handle_new_user
-    //    trigger creates the profile row (role 'member').
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (createErr || !created.user) {
-      return json({ error: createErr?.message ?? 'Create failed.' }, 400);
+    if (userId === caller.user.id) {
+      return json({ error: 'You cannot change your own role. Ask another admin.' }, 400);
     }
 
-    // 5. Promote to admin if requested.
-    if (newRole === 'admin') {
-      const { error: roleErr } = await admin
-        .from('profiles')
-        .update({ role: 'admin' })
-        .eq('id', created.user.id);
-      if (roleErr) return json({ error: `Created, but role update failed: ${roleErr.message}` }, 500);
-    }
+    // 4. Write it. The service role bypasses RLS on purpose: `profiles` has no
+    //    client write policy, which is the privilege-escalation guard.
+    const { data: updated, error: updErr } = await admin
+      .from('profiles')
+      .update({ role })
+      .eq('id', userId)
+      .select('id')
+      .maybeSingle();
+    if (updErr) return json({ error: updErr.message }, 400);
+    if (!updated) return json({ error: 'No such user.' }, 404);
 
-    return json({ ok: true, userId: created.user.id, role: newRole });
+    return json({ ok: true, role });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

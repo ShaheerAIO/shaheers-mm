@@ -15,6 +15,23 @@ if (!isSupabaseConfigured) {
   );
 }
 
+/**
+ * OAuth / auth-hook rejections come back on the URL as `error` +
+ * `error_description` (e.g. a non-aioapp.com account hitting the
+ * before-user-created hook). Captured at import time, before supabase-js gets a
+ * chance to scrub the URL. Read once by the Login page.
+ */
+export const oauthError = (() => {
+  const q = new URLSearchParams(window.location.search);
+  const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return (
+    q.get('error_description') ??
+    h.get('error_description') ??
+    q.get('error') ??
+    h.get('error')
+  );
+})();
+
 // Placeholder fallbacks keep createClient() from throwing when env is unset, so
 // the app still boots and the Login page can show a "not configured" message.
 // Real network calls will fail until VITE_SUPABASE_* are provided.

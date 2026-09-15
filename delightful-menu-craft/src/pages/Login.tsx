@@ -1,44 +1,78 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/contexts/AuthContext';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth, takeAuthRedirect } from '@/contexts/AuthContext';
+import { isSupabaseConfigured, oauthError } from '@/lib/supabase';
+
+/** Microsoft's four-square mark. lucide ships no brand logos, and Microsoft's
+ *  sign-in branding requires the mark alongside the label. The Button's
+ *  `[&_svg]:size-4` sizes it. */
+function MicrosoftMark() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="0" y="0" width="7" height="7" fill="#F25022" />
+      <rect x="9" y="0" width="7" height="7" fill="#7FBA00" />
+      <rect x="0" y="9" width="7" height="7" fill="#00A4EF" />
+      <rect x="9" y="9" width="7" height="7" fill="#FFB900" />
+    </svg>
+  );
+}
 
 export default function Login() {
-  const { signIn, resetPassword } = useAuth();
+  const { user, loading, signInWithMicrosoft } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Where to send the user after a successful login (set by the AuthGate).
+  // Where to send the user after login (set by RequireAuth on the bounce).
   const from = (location.state as { from?: string } | null)?.from ?? '/';
+  // PKCE returns to /login?code=… — supabase-js exchanges it in the background.
+  const [exchanging, setExchanging] = useState(() =>
+    new URLSearchParams(location.search).has('code')
+  );
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  // Surface an Entra / auth-hook rejection (e.g. a non-aioapp.com account).
+  useEffect(() => {
+    if (oauthError) toast.error(oauthError);
+  }, []);
+
+  // A successful exchange fires SIGNED_IN and the effect below navigates away.
+  // A failed one (stale code, PKCE verifier from another browser) fires nothing
+  // at all — so time the spinner out rather than hanging on the only way in.
+  useEffect(() => {
+    if (!exchanging) return;
+    const t = setTimeout(() => {
+      setExchanging(false);
+      toast.error('Sign-in did not complete. Please try again.');
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [exchanging]);
+
+  // Fires both on the OAuth return and when an already-signed-in user hits
+  // /login directly — this route has no guard of its own.
+  useEffect(() => {
+    if (loading || !user) return;
+    navigate(takeAuthRedirect(), { replace: true });
+  }, [loading, user, navigate]);
+
+  if (loading || exchanging || user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-ink-faint" />
+      </div>
+    );
+  }
+
+  const handleSignIn = async () => {
     setBusy(true);
-    const { error } = await signIn(email.trim(), password);
-    setBusy(false);
+    const { error } = await signInWithMicrosoft(from);
     if (error) {
+      setBusy(false);
       toast.error(error);
-      return;
     }
-    navigate(from, { replace: true });
-  };
-
-  const handleReset = async () => {
-    if (!email.trim()) {
-      toast.error('Enter your email first, then click "Forgot password".');
-      return;
-    }
-    const { error } = await resetPassword(email.trim());
-    if (error) toast.error(error);
-    else toast.success('Password reset email sent (if the account exists).');
   };
 
   return (
@@ -52,52 +86,30 @@ export default function Login() {
           <p className="aio-sub">Build a menu once, ship it to every channel.</p>
         </div>
         <Card>
-        <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Access is invite-only — an admin creates your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!isSupabaseConfigured && (
-            <p className="mb-4 rounded-[var(--aio-r-2)] border border-danger-edge bg-danger-bg p-3 text-[13px] text-danger">
-              Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and{' '}
-              <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
-            </p>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={busy || !isSupabaseConfigured}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </Button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="w-full text-center text-xs text-ink-faint transition-colors hover:text-ink"
+          <CardHeader>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>Use your AIO Microsoft account.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!isSupabaseConfigured && (
+              <p className="mb-4 rounded-[var(--aio-r-2)] border border-danger-edge bg-danger-bg p-3 text-[13px] text-danger">
+                Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and{' '}
+                <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
+              </p>
+            )}
+            <Button
+              variant="secondary"
+              className="h-10 w-full border-[var(--aio-border)] hover:border-rule-2"
+              onClick={() => void handleSignIn()}
+              disabled={busy || !isSupabaseConfigured}
             >
-              Forgot password?
-            </button>
-          </form>
-        </CardContent>
+              <MicrosoftMark />
+              {busy ? 'Redirecting to Microsoft…' : 'Continue with Microsoft'}
+            </Button>
+            <p className="mt-3 text-center text-[12px] text-ink-faint">
+              Only aioapp.com accounts can sign in. Your account is set up on first sign-in.
+            </p>
+          </CardContent>
         </Card>
       </div>
     </div>

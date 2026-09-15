@@ -5,21 +5,32 @@ import { leaveWorkspace } from '@/lib/workspaceSync';
 
 export type UserRole = 'admin' | 'member';
 
+// The OAuth round-trip leaves and re-enters the app, so the deep link the user
+// originally asked for can't ride on router state. Same tab => sessionStorage.
+const REDIRECT_KEY = 'mm.auth.redirect';
+
+/** Read-and-clear the path to return to after a Microsoft sign-in. */
+export function takeAuthRedirect(): string {
+  const target = sessionStorage.getItem(REDIRECT_KEY);
+  sessionStorage.removeItem(REDIRECT_KEY);
+  return target || '/';
+}
+
 interface AuthContextValue {
   user: User | null;
-  session: Session | null;
   role: UserRole | null;
   isAdmin: boolean;
   loading: boolean; // true until the initial session AND role check resolve
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signInWithMicrosoft: (from: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function fetchRole(userId: string): Promise<UserRole | null> {
-  const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
+  const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).single();
+  // A silent failure here degrades an admin to member-level UI, so say so.
+  if (error) console.error('[auth] could not load role', error);
   return (data?.role as UserRole | undefined) ?? null;
 }
 
@@ -47,8 +58,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const signIn: AuthContextValue['signIn'] = async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const signInWithMicrosoft: AuthContextValue['signInWithMicrosoft'] = async (from) => {
+    sessionStorage.setItem(REDIRECT_KEY, from);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        // Supabase Auth requires Azure to return an email; GoTrue adds `openid`
+        // itself. No `offline_access` — we never call Microsoft Graph.
+        scopes: 'email',
+        // Must be allow-listed in Supabase → Authentication → URL Configuration.
+        redirectTo: `${window.location.origin}/login`,
+      },
+    });
+    if (error) sessionStorage.removeItem(REDIRECT_KEY);
+    // On success the browser navigates away; only failures return here.
     return { error: error?.message ?? null };
   };
 
@@ -58,24 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const resetPassword: AuthContextValue['resetPassword'] = async (email) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/set-password`,
-    });
-    return { error: error?.message ?? null };
-  };
-
   return (
     <AuthContext.Provider
       value={{
         user: session?.user ?? null,
-        session,
         role,
         isAdmin: role === 'admin',
         loading,
-        signIn,
+        signInWithMicrosoft,
         signOut,
-        resetPassword,
       }}
     >
       {children}
