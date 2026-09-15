@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, LogOut, FolderOpen, Lock, Search, Pencil, Check, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, LogOut, FolderOpen, Lock, Search, Pencil, Check, X, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -33,7 +33,7 @@ type OwnerFilter = 'all' | 'me' | 'others';
 
 export default function Workspaces() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, isAdmin, signOut } = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceMeta[] | null>(null);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -174,6 +174,11 @@ export default function Workspaces() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/team')}>
+                <Users className="mr-2 h-4 w-4" /> Team
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={() => void signOut()}>
               <LogOut className="mr-2 h-4 w-4" /> Sign out
             </Button>
