@@ -103,7 +103,7 @@ export function BulkColumn({
           onToggle={() => onToggleAll(allKeys)}
         />
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent }} />
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium text-muted-foreground">
           {title}
         </span>
         <span className="text-[11px] text-muted-foreground/70 tabular-nums ml-auto">{count}</span>

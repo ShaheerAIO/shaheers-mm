@@ -198,7 +198,7 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
                       {/* Kind badge */}
                       <span
                         className={cn(
-                          'shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ring-1',
+                          'shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ring-1',
                           kindMeta.color,
                         )}
                       >
@@ -229,7 +229,7 @@ export function AiEnhanceModal({ open, onOpenChange }: Props) {
                       {/* Confidence */}
                       <span
                         className={cn(
-                          'shrink-0 text-[10px] font-semibold uppercase tabular-nums mt-0.5',
+                          'shrink-0 text-[10px] font-medium tabular-nums mt-0.5',
                           confMeta.color,
                         )}
                       >

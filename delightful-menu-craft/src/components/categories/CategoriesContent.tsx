@@ -142,7 +142,7 @@ export function CategoriesContent() {
                 key={c.label}
                 className="px-3 py-1.5 rounded-lg border border-border bg-card min-w-[72px]"
               >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <p className="text-[10px] font-medium text-muted-foreground/70">
                   {c.label}
                 </p>
                 <p
@@ -218,7 +218,7 @@ export function CategoriesContent() {
       {filtersOpen && (
         <div className="px-4 py-2 border-b border-border shrink-0 flex items-end gap-3 flex-wrap">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Stock</label>
+            <label className="text-[10px] font-medium text-muted-foreground/70">Stock</label>
             <select
               value={filters.stock}
               onChange={(e) => setFilters((f) => ({ ...f, stock: e.target.value as BulkFilters['stock'] }))}
@@ -230,7 +230,7 @@ export function CategoriesContent() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Station</label>
+            <label className="text-[10px] font-medium text-muted-foreground/70">Station</label>
             <select
               value={filters.stationId ?? 'all'}
               onChange={(e) => setFilters((f) => ({ ...f, stationId: e.target.value === 'all' ? null : +e.target.value }))}
@@ -243,7 +243,7 @@ export function CategoriesContent() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Tag</label>
+            <label className="text-[10px] font-medium text-muted-foreground/70">Tag</label>
             <select
               value={filters.tagId ?? 'all'}
               onChange={(e) => setFilters((f) => ({ ...f, tagId: e.target.value === 'all' ? null : +e.target.value }))}
@@ -256,7 +256,7 @@ export function CategoriesContent() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Allergen</label>
+            <label className="text-[10px] font-medium text-muted-foreground/70">Allergen</label>
             <select
               value={filters.allergenId ?? 'all'}
               onChange={(e) => setFilters((f) => ({ ...f, allergenId: e.target.value === 'all' ? null : +e.target.value }))}

@@ -26,13 +26,13 @@ import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelW
 /* AIO appbar control language: 1px rule edge on a surface fill, ink-2 label,
    edge + ink darken on hover. Popovers sit on --shadow-pop. */
 const APPBAR_BTN =
-  'inline-flex items-center gap-2 h-9 px-3 rounded-[var(--aio-r-2)] border border-rule bg-surface text-[13px] font-medium text-ink-2 transition-colors duration-[140ms] ease-aio hover:border-ink-2 hover:text-ink';
+  'inline-flex items-center gap-2 h-9 px-3 rounded-[var(--aio-r-2)] border border-rule bg-surface text-[13px] font-medium text-ink-2 transition-colors duration-[200ms] ease-aio hover:border-ink-2 hover:text-ink';
 const APPBAR_ICON =
-  'inline-flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] border border-rule bg-surface text-ink-muted transition-colors duration-[140ms] ease-aio hover:border-ink-2 hover:text-ink';
+  'inline-flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] border border-rule bg-surface text-ink-muted transition-colors duration-[200ms] ease-aio hover:border-ink-2 hover:text-ink';
 const APPBAR_POP =
   'absolute top-full mt-1.5 z-50 rounded-[var(--aio-r-3)] border border-[var(--aio-border)] bg-popover p-1 shadow-pop overflow-hidden';
 const APPBAR_POP_ITEM =
-  'w-full flex items-center gap-2 px-2.5 py-2 text-[13px] rounded-[var(--aio-r-1)] transition-colors duration-[140ms] ease-aio';
+  'w-full flex items-center gap-2 px-2.5 py-2 text-[13px] rounded-[var(--aio-r-1)] transition-colors duration-[200ms] ease-aio';
 
 export function TopBar() {
   const { 
@@ -260,7 +260,7 @@ export function TopBar() {
                 type="button"
                 onClick={startRenameProject}
                 title="Rename project"
-                className="flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] text-ink-faint hover:bg-accent hover:text-accent-foreground transition-colors duration-[140ms] ease-aio"
+                className="flex items-center justify-center h-9 w-9 rounded-[var(--aio-r-2)] text-ink-faint hover:bg-accent hover:text-accent-foreground transition-colors duration-[200ms] ease-aio"
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
@@ -297,7 +297,7 @@ export function TopBar() {
             className={cn(APPBAR_BTN, fileDropdownOpen && 'border-primary text-ink')}
           >
             File
-            <ChevronDown className={cn('w-4 h-4 text-ink-faint transition-transform duration-[140ms] ease-aio', fileDropdownOpen && 'rotate-180')} />
+            <ChevronDown className={cn('w-4 h-4 text-ink-faint transition-transform duration-[200ms] ease-aio', fileDropdownOpen && 'rotate-180')} />
           </button>
 
           {fileDropdownOpen && (
@@ -345,7 +345,7 @@ export function TopBar() {
         <div className="w-px h-5 bg-[var(--aio-rule)] mx-1" />
 
         {/* View Toggle */}
-        <div className="flex gap-0.5 rounded-[var(--aio-r-2)] bg-surface-2 p-1">
+        <div className="flex gap-0.5 rounded-[var(--aio-r-2)] bg-[var(--aio-accent-track)] p-1">
           <button
             onClick={() => setViewMode('tree')}
             className={cn('toggle-button', viewMode === 'tree' && 'active')}
@@ -387,7 +387,7 @@ export function TopBar() {
                 ? (menus.find((m) => m.id === selectedMenuId)?.menuName ?? 'Select menu')
                 : isDataLoaded ? 'Select menu' : 'Import data first'}
             </span>
-            <ChevronDown className={cn('w-4 h-4 shrink-0 text-ink-faint transition-transform duration-[140ms] ease-aio', menuDropdownOpen && 'rotate-180')} />
+            <ChevronDown className={cn('w-4 h-4 shrink-0 text-ink-faint transition-transform duration-[200ms] ease-aio', menuDropdownOpen && 'rotate-180')} />
           </button>
 
           {menuDropdownOpen && isDataLoaded && (

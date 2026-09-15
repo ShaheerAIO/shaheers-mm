@@ -356,7 +356,7 @@ export function SettingsContent() {
         ) : (
           <section className="space-y-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Menu health</h2>
+              <h2 className="text-sm font-medium text-muted-foreground">Menu health</h2>
               {totalIssues > 0
                 ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-danger-bg text-danger">{totalIssues} issues</span>
                 : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-ok-bg text-ok">All clear</span>}
@@ -395,7 +395,7 @@ export function SettingsContent() {
                 <IssueGroup icon={<ImageOff className="w-4 h-4" />} title="Image gaps by channel" count={totalImageGaps} severity="blue" expanded={expanded.has('imageGaps')} onToggle={() => toggle('imageGaps')}>
                   {imageGapGroups.map(group => (
                     <div key={group.channel} className="pt-1">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 px-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1 px-3">
                         {group.channel} — {group.items.length} missing
                       </p>
                       {group.items.slice(0, 20).map(item => <IssueRow key={item.id} label={item.itemName} />)}

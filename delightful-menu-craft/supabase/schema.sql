@@ -6,9 +6,12 @@
 --
 -- Security model: access is enforced by RLS server-side. The frontend ships
 -- only the public `anon` key; every request carries the logged-in user's JWT.
--- "Flat" permissions: any authenticated (invited) user may read/write workspaces.
--- There is no public sign-up — disable it in Auth → Providers → Email
--- ("Allow new users to sign up" OFF). Invite users via Auth → Users → Invite.
+-- "Flat" permissions: any authenticated user may read/write workspaces.
+-- Auth is Microsoft 365 (Entra ID) SSO only — no passwords. Public sign-up is
+-- ON so first-time Microsoft users are provisioned automatically; a
+-- before-user-created auth hook (`restrict_signup_to_aio` below) rejects
+-- every email outside the `aioapp.com` tenant, which is what actually keeps
+-- registration closed.
 -- =============================================================================
 
 -- One JSON document per menu build ------------------------------------------
@@ -149,7 +152,7 @@ create policy audit_insert on public.audit_log
 -- Roles & user management (admin / member)
 -- =============================================================================
 -- "member" can read/write menus (the flat model above). "admin" can also
--- manage users via the `invite-user` Edge Function. Roles live here, NOT in
+-- manage users via the `set-role` / `remove-user` Edge Functions. Roles live here, NOT in
 -- client state, and clients cannot write this table (see policies) — only the
 -- security-definer trigger and the service-role function can. That's the
 -- privilege-escalation guard.
@@ -199,6 +202,37 @@ create policy profiles_select on public.profiles
   using (true);
 
 -- =============================================================================
+-- Auth hook: restrict sign-up to the AIO tenant
+-- =============================================================================
+-- Public sign-up is ON so first-time Microsoft SSO users are provisioned
+-- automatically. THIS HOOK is what keeps that from being open to the world:
+-- Supabase Auth calls it immediately before inserting into auth.users and
+-- aborts when it returns an error object. Wire it up once in
+--   Dashboard → Authentication → Hooks → "Before User Created".
+create or replace function public.restrict_signup_to_aio(event jsonb)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_email text := lower(event -> 'user' ->> 'email');
+begin
+  if v_email is null or split_part(v_email, '@', 2) <> 'aioapp.com' then
+    return jsonb_build_object(
+      'error', jsonb_build_object(
+        'http_code', 403,
+        'message', 'Only aioapp.com accounts can use Menu Manager.'
+      )
+    );
+  end if;
+  return '{}'::jsonb;    -- allow
+end;
+$$;
+
+-- Supabase Auth runs the hook as `supabase_auth_admin`; nobody else may call it.
+grant execute on function public.restrict_signup_to_aio(jsonb) to supabase_auth_admin;
+revoke execute on function public.restrict_signup_to_aio(jsonb) from authenticated, anon, public;
+
+-- =============================================================================
 -- Admin force-takeover of the single-editor lock
 -- =============================================================================
 -- Members can only take over a lock that is free or stale (handled client-side).
@@ -224,8 +258,10 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
--- ONE-TIME bootstrap: promote the first admin. Run this once after applying
--- the schema, editing the email to match your account.
+-- BREAK-GLASS: promote the first/only admin. Idempotent and safe to re-run —
+-- if Microsoft sign-in ever creates a fresh auth.users row instead of linking to
+-- the existing one, this is how you get your admin role back. Edit the email to
+-- match whatever address Entra actually returns.
 -- -----------------------------------------------------------------------------
 update public.profiles set role = 'admin'
-where email = 'shaheer.hasnain@aioapp.com';
+where lower(email) = 'shaheer.hasnain@aioapp.com';

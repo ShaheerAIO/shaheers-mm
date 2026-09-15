@@ -68,7 +68,7 @@ export function TagIconPicker({
       >
         {/* Color palette */}
         <div className="mb-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5 mb-1.5">
+          <p className="text-[10px] font-medium text-muted-foreground px-0.5 mb-1.5">
             Color
           </p>
           <div className="flex flex-wrap gap-1.5 px-0.5">
@@ -118,7 +118,7 @@ export function TagIconPicker({
           ) : (
             Array.from(groups.entries()).map(([group, defs]) => (
               <div key={group}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-0.5 mb-1">
+                <p className="text-[10px] font-medium text-muted-foreground px-0.5 mb-1">
                   {group}
                 </p>
                 <div className="flex flex-wrap gap-0.5">

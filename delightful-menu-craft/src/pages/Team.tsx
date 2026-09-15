@@ -1,9 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, UserPlus, KeyRound, Shield, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Shield, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
@@ -33,10 +32,7 @@ export default function Team() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [rows, setRows] = useState<ProfileRow[] | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('member');
-  const [busy, setBusy] = useState(false);
+  const [savingRole, setSavingRole] = useState<string | null>(null);
 
   const refresh = () =>
     supabase
@@ -52,46 +48,30 @@ export default function Team() {
     void refresh();
   }, []);
 
-  const handleCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password) return;
-    setBusy(true);
-    const { data, error } = await supabase.functions.invoke('create-user', {
-      body: { email: email.trim(), password, role },
+  const handleSetRole = async (row: ProfileRow, next: UserRole) => {
+    if (next === row.role) return;
+    setSavingRole(row.id);
+    const { data, error } = await supabase.functions.invoke('set-role', {
+      body: { userId: row.id, role: next },
     });
-    setBusy(false);
+    setSavingRole(null);
     if (error || data?.error) {
-      toast.error(`Could not create user: ${data?.error ?? (await fnErrorMessage(error, 'Unknown error'))}`);
+      toast.error(`Could not change role: ${data?.error ?? (await fnErrorMessage(error, 'Unknown error'))}`);
       return;
     }
-    toast.success(`Created ${email.trim()} as ${role}. Share the email + password with them.`);
-    setEmail('');
-    setPassword('');
-    setRole('member');
+    toast.success(
+      `${row.email ?? 'User'} is now ${next === 'admin' ? 'an admin' : 'a member'}. They will see the change after a reload.`
+    );
     void refresh();
-  };
-
-  const handleSetPassword = async (row: ProfileRow) => {
-    const label = row.email ?? 'this user';
-    const next = prompt(`Set a new password for ${label} (min 6 characters):`);
-    if (next === null) return; // cancelled
-    if (next.length < 6) {
-      toast.error('Password must be at least 6 characters.');
-      return;
-    }
-    const { data, error } = await supabase.functions.invoke('set-password', {
-      body: { userId: row.id, password: next },
-    });
-    if (error || data?.error) {
-      toast.error(`Could not set password: ${data?.error ?? (await fnErrorMessage(error, 'Unknown error'))}`);
-      return;
-    }
-    toast.success(`Password updated for ${label}. Share it with them.`);
   };
 
   const handleRemove = async (row: ProfileRow) => {
     const label = row.email ?? 'this user';
-    if (!confirm(`Remove ${label}? They lose access immediately. This cannot be undone.`)) return;
+    if (!confirm(
+      `Remove ${label}? This signs them out and clears their role. ` +
+      `If their AIO Microsoft account is still active they can sign back in as a member — ` +
+      `disable them in Entra ID to revoke access for good.`
+    )) return;
     const { data, error } = await supabase.functions.invoke('remove-user', {
       body: { userId: row.id },
     });
@@ -120,42 +100,9 @@ export default function Team() {
           )}
         </h1>
         <p className="aio-sub mb-6 mt-1">
-          Accounts are created here, not by invite email — set the email and password, then pass the
-          credentials to your teammate.
+          Anyone with an AIO Microsoft account can sign in and starts as a member. Promote someone to
+          admin here — admins manage access and can force a hand-over of a locked project.
         </p>
-
-        <Card className="mb-6 p-4 aio-card-hover">
-          <form onSubmit={handleCreate} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Input
-              type="email"
-              placeholder="teammate@aioapp.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="flex-1"
-              required
-            />
-            <Input
-              type="text"
-              placeholder="Password (min 6)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="flex-1"
-              required
-              minLength={6}
-            />
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="h-9 rounded-[var(--aio-r-2)] border border-[var(--aio-border)] bg-surface px-3 text-[13px] font-medium text-ink transition-colors hover:border-rule-2"
-            >
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
-            <Button type="submit" disabled={busy}>
-              <UserPlus className="mr-2 h-4 w-4" /> {busy ? 'Creating…' : 'Create user'}
-            </Button>
-          </form>
-        </Card>
 
         {rows === null ? (
           <div className="flex justify-center py-12 text-ink-faint">
@@ -171,17 +118,27 @@ export default function Team() {
                     {r.id === user?.id && <span className="text-[11px] text-ink-faint">(you)</span>}
                   </div>
                   <div className="mt-1">
-                    {r.role === 'admin' ? (
-                      <span className="aio-chip accent"><Shield className="h-3 w-3" /> Admin</span>
+                    {r.id === user?.id ? (
+                      r.role === 'admin' ? (
+                        <span className="aio-chip accent"><Shield className="h-3 w-3" /> Admin</span>
+                      ) : (
+                        <span className="aio-chip">Member</span>
+                      )
                     ) : (
-                      <span className="aio-chip">Member</span>
+                      <select
+                        value={r.role}
+                        disabled={savingRole === r.id}
+                        onChange={(e) => void handleSetRole(r, e.target.value as UserRole)}
+                        aria-label={`Role for ${r.email ?? 'user'}`}
+                        className="h-8 rounded-[var(--aio-r-2)] border border-[var(--aio-border)] bg-surface px-2 text-[12px] font-medium text-ink transition-colors hover:border-rule-2 disabled:opacity-60"
+                      >
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => void handleSetPassword(r)}>
-                    <KeyRound className="mr-2 h-4 w-4" /> Set password
-                  </Button>
                   {r.id !== user?.id && (
                     <Button
                       variant="ghost"

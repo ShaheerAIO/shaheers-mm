@@ -156,64 +156,70 @@ const parseCategories = (sheet: XLSX.WorkSheet): Category[] => {
 // Parse Item sheet
 const parseItems = (sheet: XLSX.WorkSheet): Item[] => {
   const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-  return data.map((row) => ({
-    id: parseNumber(row['id']),
-    itemName: parseString(row['itemName']),
-    posDisplayName: parseString(row['posDisplayName']),
-    kdsName: parseString(row['kdsName']),
-    itemDescription: parseString(row['itemDescription']),
-    itemPicture: parseString(row['itemPicture']),
-    onlineImage: parseString(row['onlineImage']),
-    landscapeImage: parseString(row['landscapeImage']),
-    thirdPartyImage: parseString(row['thirdPartyImage']),
-    kioskItemImage: parseString(row['kioskItemImage']),
-    itemPrice: parseNumber(row['itemPrice']),
-    taxLinkedWithParentSetting: parseBoolean(row['taxLinkedWithParentSetting']),
-    calculatePricesWithTaxIncluded: parseBoolean(row['calculatePricesWithTaxIncluded']),
-    salesTax: row['salesTax'] !== undefined ? parseBoolean(row['salesTax']) : true,
-    takeoutException: parseBoolean(row['takeoutException']),
-    stockStatus: parseString(row['stockStatus']),
-    stockValue: parseNumber(row['stockValue']),
-    orderQuantityLimit: parseBoolean(row['orderQuantityLimit']),
-    minLimit: parseNumber(row['minLimit']),
-    maxLimit: parseNumber(row['maxLimit']),
-    noMaxLimit: parseBoolean(row['noMaxLimit']),
-    stationIds: parseString(row['stationIds'])
-      .split(',')
-      .map((t) => t.trim())
-      .filter((t) => { const n = parseInt(t, 10); return !isNaN(n) && n > 0 && String(n) === t; })
-      .join(','),
-    preparationTime: parseOptionalNumber(row['preparationTime']),
-    calories: parseOptionalNumber(row['calories']),
-    tagIds: parseString(row['tagIds']),
-    inheritTagsFromCategory: parseBoolean(row['inheritTagsFromCategory']),
-    saleCategory: parseString(row['saleCategory']),
-    // Blank/missing (files predating the Sales Category sheet) → undefined;
-    // importData resolves it from the name against the catalog.
-    saleCategoryId: (() => { const n = parseNumber(row['saleCategoryId']); return n > 0 ? n : undefined; })(),
-    allergenIds: parseString(row['allergenIds']),
-    inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
-    addonIds: parseString(row['addonIds']),
-    isSpecialRequest: row['isSpecialRequest'] !== undefined ? parseBoolean(row['isSpecialRequest']) : true,
-    doordashPrice: parseNumber(row['doordashPrice']),
-    uberEatsPrice: parseNumber(row['uberEatsPrice']),
-    grubHubPrice: parseNumber(row['grubHubPrice']),
-    // Single custom-tax id; empty/missing (older files) → undefined = standard rate.
-    customTaxId: (() => { const n = parseNumber(row['customTaxId']); return n > 0 ? n : undefined; })(),
-    ...parseVisibilityFromRow(row),
-    daySchedules: serializeDaySchedules(
+  return data.map((row) => {
+    // Legacy availableDays/availableTime* columns are migrated once here so the
+    // authoritative daySchedulesByGroup falls back to the migrated value rather
+    // than to the raw (possibly empty) daySchedules cell.
+    const daySchedules = serializeDaySchedules(
       parseDaySchedules(
         parseString(row['daySchedules']) || undefined,
-        parseString(row['availableDays'])     || undefined,
+        parseString(row['availableDays'])      || undefined,
         parseString(row['availableTimeStart']) || undefined,
         parseString(row['availableTimeEnd'])   || undefined,
       )
-    ),
-    daySchedulesByGroup: serializeGroupSchedules(parseGroupSchedules(
-      parseString(row['daySchedulesByGroup']) || undefined,
-      parseString(row['daySchedules']) || undefined,
-    )),
-  }));
+    );
+    return {
+      id: parseNumber(row['id']),
+      itemName: parseString(row['itemName']),
+      posDisplayName: parseString(row['posDisplayName']),
+      kdsName: parseString(row['kdsName']),
+      itemDescription: parseString(row['itemDescription']),
+      itemPicture: parseString(row['itemPicture']),
+      onlineImage: parseString(row['onlineImage']),
+      landscapeImage: parseString(row['landscapeImage']),
+      thirdPartyImage: parseString(row['thirdPartyImage']),
+      kioskItemImage: parseString(row['kioskItemImage']),
+      itemPrice: parseNumber(row['itemPrice']),
+      taxLinkedWithParentSetting: parseBoolean(row['taxLinkedWithParentSetting']),
+      calculatePricesWithTaxIncluded: parseBoolean(row['calculatePricesWithTaxIncluded']),
+      salesTax: row['salesTax'] !== undefined ? parseBoolean(row['salesTax']) : true,
+      takeoutException: parseBoolean(row['takeoutException']),
+      stockStatus: parseString(row['stockStatus']),
+      stockValue: parseNumber(row['stockValue']),
+      orderQuantityLimit: parseBoolean(row['orderQuantityLimit']),
+      minLimit: parseNumber(row['minLimit']),
+      maxLimit: parseNumber(row['maxLimit']),
+      noMaxLimit: parseBoolean(row['noMaxLimit']),
+      stationIds: parseString(row['stationIds'])
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => { const n = parseInt(t, 10); return !isNaN(n) && n > 0 && String(n) === t; })
+        .join(','),
+      preparationTime: parseOptionalNumber(row['preparationTime']),
+      calories: parseOptionalNumber(row['calories']),
+      tagIds: parseString(row['tagIds']),
+      inheritTagsFromCategory: parseBoolean(row['inheritTagsFromCategory']),
+      saleCategory: parseString(row['saleCategory']),
+      // Blank/missing (files predating the Sales Category sheet) → undefined;
+      // importData resolves it from the name against the catalog.
+      saleCategoryId: (() => { const n = parseNumber(row['saleCategoryId']); return n > 0 ? n : undefined; })(),
+      allergenIds: parseString(row['allergenIds']),
+      inheritModifiersFromCategory: parseBoolean(row['inheritModifiersFromCategory']),
+      addonIds: parseString(row['addonIds']),
+      isSpecialRequest: row['isSpecialRequest'] !== undefined ? parseBoolean(row['isSpecialRequest']) : true,
+      doordashPrice: parseNumber(row['doordashPrice']),
+      uberEatsPrice: parseNumber(row['uberEatsPrice']),
+      grubHubPrice: parseNumber(row['grubHubPrice']),
+      // Single custom-tax id; empty/missing (older files) → undefined = standard rate.
+      customTaxId: (() => { const n = parseNumber(row['customTaxId']); return n > 0 ? n : undefined; })(),
+      ...parseVisibilityFromRow(row),
+      daySchedules,
+      daySchedulesByGroup: serializeGroupSchedules(parseGroupSchedules(
+        parseString(row['daySchedulesByGroup']) || undefined,
+        daySchedules,
+      )),
+    };
+  });
 };
 
 // Parse Item Modifiers join table

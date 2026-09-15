@@ -10,7 +10,6 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Workspaces from "./pages/Workspaces";
 import Team from "./pages/Team";
-import SetPassword from "./pages/SetPassword";
 import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import {
@@ -79,7 +78,6 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/set-password" element={<SetPassword />} />
               <Route
                 path="/workspaces"
                 element={

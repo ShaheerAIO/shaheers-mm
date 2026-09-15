@@ -20,119 +20,141 @@
 @layer base {
   :root {
     /* ---- AIO raw tokens — light ----
-       The neutral family is warm (the cream the console declares as its light
-       theme-color), not grey: it gives white cards something to sit on and
-       keeps the coral accent from reading as the only warm thing on screen. */
-    --aio-bg: #faf8f5;
+       Values come from the aio-design-system skill (references/tokens.css),
+       which encodes apps/portal/web-dash. The surface ladder is the backbone:
+       #F3F5F7 canvas -> #FFFFFF card -> #F6F6F6 recessed tile. Never invert it. */
+    --aio-bg: #f3f5f7;
     --aio-surface: #ffffff;
-    --aio-surface-2: #f4f1ec;
-    --aio-surface-3: #ece7e0;
-    --aio-overlay: rgba(17, 20, 24, 0.45);
-    --aio-border: #ece9e4;
-    --aio-border-soft: #f3f0eb;
-    --aio-rule: #e0dbd3;
-    --aio-rule-2: #cdc7bd;
-    --aio-text: #1a1a1a;
-    --aio-text-2: #4f4f4f;
-    --aio-muted: #5f5f66;
-    --aio-text-faint: #74747c;
+    --aio-surface-2: #f6f6f6;
+    --aio-surface-3: #f4f4f8;
+    --aio-shell: #fafafa;
+    --aio-overlay: rgba(0, 0, 0, 0.25);
+    --aio-border: #ececf5;
+    --aio-border-soft: #f4f4f8;
+    --aio-rule: #e9e9f4;
+    --aio-rule-2: #b7bac3;
+    --aio-text: #242528;
+    --aio-text-2: #53575d;
+    /* Skill §22: #888D95 is ~3.4:1 and below AA below 18px. This UI is 13px
+       throughout, so muted takes the AA-safe tertiary and faint takes #888D95. */
+    --aio-muted: #53575d;
+    --aio-text-faint: #888d95;
+    --aio-text-placeholder: #b7bac3;
 
     --aio-accent: #f9674e;
-    --aio-accent-h: #ec4f33;
-    --aio-accent-soft: rgba(249, 103, 78, 0.1);
-    --aio-accent-edge: rgba(249, 103, 78, 0.34);
+    /* Skill §10 known bug: primary.light/main/dark are all #F9674E, so the
+       primary hover is a no-op. It prescribes a real dark — this is it. */
+    --aio-accent-h: #e04a30;
+    --aio-accent-soft: #ffdfd7;
+    --aio-accent-hover: #fee4de;
+    --aio-accent-track: #ffefeb;
+    --aio-accent-light: #ffe5e0;
+    --aio-accent-edge: #f9674e;
     --aio-accent-ink: #ffffff;
-    --aio-accent-text: #cf4529;
-    --aio-accent-2: #7a80f6;
-    --aio-accent-2-soft: rgba(122, 128, 246, 0.12);
-    --aio-brand-grad: linear-gradient(90deg, #f9674e 0%, #7a80f6 100%);
+    --aio-accent-text: #ac1b02;
+    /* Not a second brand colour — the chart palette's categorical indigo, used
+       only where a tag needs to be told apart from a coral one. */
+    --aio-accent-2: #5f68bc;
+    --aio-accent-2-soft: #d5d9fc;
 
-    --aio-ok: #0f6d33;
-    --aio-warn: #8f4209;
-    --aio-danger: #b42318;
-    --aio-info: #1a63c0;
-    --aio-ok-bg: rgba(21, 127, 60, 0.1);
-    --aio-warn-bg: rgba(180, 83, 9, 0.1);
-    --aio-danger-bg: rgba(180, 35, 24, 0.1);
-    --aio-info-bg: rgba(29, 111, 216, 0.1);
-    --aio-ok-edge: rgba(21, 127, 60, 0.3);
-    --aio-warn-edge: rgba(180, 83, 9, 0.28);
-    --aio-danger-edge: rgba(180, 35, 24, 0.3);
-    --aio-info-edge: rgba(29, 111, 216, 0.28);
+    /* Status washes come from the toast family — the one place the system uses
+       a full tinted-surface alert set. */
+    --aio-ok: #35b558;
+    --aio-warn: #ee9602;
+    --aio-danger: #d5381d;
+    --aio-info: #4081ff;
+    --aio-ok-bg: #eaf7ee;
+    --aio-warn-bg: #fef7ea;
+    --aio-danger-bg: #fcede9;
+    --aio-info-bg: #eaf1ff;
+    --aio-ok-edge: #d8e7dd;
+    --aio-warn-edge: #fff4df;
+    --aio-danger-edge: #ffe3db;
+    --aio-info-edge: #d0e1ff;
 
-    /* Warm-tinted shadows and hover, so depth doesn't grey the cream out */
-    --aio-shadow-sm: 0 2px 10px rgba(70, 50, 38, 0.05);
-    --aio-shadow-md: 0 6px 20px rgba(70, 50, 38, 0.07);
-    --aio-shadow-lg: 0 12px 40px rgba(70, 50, 38, 0.09);
-    --aio-shadow-pop: 0 30px 80px rgba(45, 32, 24, 0.2);
-    --aio-hover: rgba(249, 103, 78, 0.06);
+    /* Flat system: shadows are for things that genuinely float, nothing else. */
+    --aio-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+    --aio-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --aio-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --aio-shadow-pop: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 24px 38px 3px rgba(0, 0, 0, 0.14),
+      0 9px 46px 8px rgba(0, 0, 0, 0.12);
+    /* Skill §22: hover and selected are the same tint in the source, which it
+       flags as a defect. Hover takes palette.hover, selected keeps action.selected. */
+    --aio-hover: #fee4de;
+    --aio-row-hover: #f3f5f7;
     --aio-selected: var(--aio-accent-soft);
-    --aio-focus-ring: 0 0 0 3px rgba(249, 103, 78, 0.3);
+    /* Skill §22: the source focus ring is 2px #F4F4F8 and near-invisible; it
+       prescribes a visible branded ring. */
+    --aio-focus-ring: 0 0 0 2px #f9674e;
 
     /* Scales are theme-independent */
     --aio-r-1: 4px;
     --aio-r-2: 8px;
+    --aio-r-btn: 10px;
     --aio-r-3: 12px;
-    --aio-r-4: 24px;
-    --aio-dur-fast: 100ms;
-    --aio-dur: 140ms;
-    --aio-dur-slow: 220ms;
-    --aio-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+    --aio-r-chip: 16px;
+    --aio-r-4: 20px;
+    --aio-dur-fast: 150ms;
+    --aio-dur: 200ms;
+    --aio-dur-slow: 250ms;
+    --aio-ease: cubic-bezier(0.4, 0, 0.2, 1);
     --aio-font: 'Poppins', 'IBM Plex Sans', system-ui, sans-serif;
     --aio-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace;
 
-    /* ---- shadcn tokens mapped onto AIO — light ---- */
-    --background: 36 33% 97%;
-    --foreground: 0 0% 10%;
+    /* ---- shadcn tokens mapped onto AIO — light ----
+       Every triple below is one of the skill's hexes converted to HSL. */
+    --background: 210 20% 96%; /* #F3F5F7 page canvas */
+    --foreground: 225 5% 15%; /* #242528 */
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
+    --card-foreground: 225 5% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover-foreground: 225 5% 15%;
 
-    --primary: 9 93% 64%;
+    --primary: 9 93% 64%; /* #F9674E */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 38 27% 94%;
-    --secondary-foreground: 0 0% 31%;
+    --secondary: 0 0% 96%; /* #F6F6F6 recessed tile */
+    --secondary-foreground: 216 6% 35%; /* #53575D */
 
-    --muted: 38 27% 94%;
-    --muted-foreground: 30 4% 39%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 216 6% 35%;
 
-    --accent: 10 100% 97%;
-    --accent-foreground: 10 63% 49%;
+    --accent: 12 100% 92%; /* #FFDFD7 selected tint */
+    --accent-foreground: 9 98% 34%; /* #AC1B02 ink on tint */
 
-    --destructive: 4 76% 40%;
+    /* Destructive is the brand coral, not red — red is validation-only. */
+    --destructive: 9 93% 64%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 38 17% 91%;
-    --input: 37 17% 85%;
+    --border: 240 31% 94%; /* #ECECF5 card border */
+    --input: 0 0% 91%; /* #E9E9E9 field at rest */
     --ring: 9 93% 64%;
 
     --radius: 0.75rem;
 
     /* Custom app tokens */
     --sidebar-width: 60px;
-    --sidebar-bg: 0 0% 100%;
-    --sidebar-foreground: 240 4% 39%;
-    --sidebar-active: 10 63% 49%;
-    --sidebar-hover: 38 27% 94%;
+    --sidebar-bg: 210 25% 98%; /* #FAFBFC */
+    --sidebar-foreground: 216 6% 35%;
+    --sidebar-active: 9 98% 34%; /* #AC1B02 */
+    --sidebar-hover: 11 94% 93%; /* #FEE4DE */
 
     --panel-bg: 0 0% 100%;
-    --panel-border: 38 17% 91%;
+    --panel-border: 240 31% 94%;
 
-    --column-minimized: 38 27% 94%;
+    --column-minimized: 0 0% 98%; /* #FAFAFA */
     --column-active: 0 0% 100%;
-    --column-header: 0 0% 10%;
+    --column-header: 225 5% 15%;
 
-    --item-hover: 36 30% 96%;
-    --item-selected: 10 100% 97%;
-    --item-86: 9 62% 94%;
+    --item-hover: 210 20% 96%; /* #F3F5F7 row hover */
+    --item-selected: 12 100% 92%; /* #FFDFD7 */
+    --item-86: 240 22% 96%; /* #F4F4F8 */
 
-    --success: 143 76% 24%;
-    --warning: 26 88% 30%;
-    --info: 214 76% 43%;
+    --success: 136 46% 46%; /* #35B558 */
+    --warning: 38 98% 47%; /* #EE9602 */
+    --info: 220 100% 63%; /* #4081FF */
 
     /* POS Preview — light fallback; dark purple + orange via .pos-preview-dark / .dark */
     --pos-bg: 0 0% 100%;
@@ -155,31 +177,41 @@
   }
 
   .dark {
-    /* ---- AIO raw tokens — dark (a full second set, not a filter) ---- */
-    --aio-bg: #0d0d12;
-    --aio-surface: #16161d;
-    --aio-surface-2: #1e1e27;
-    --aio-surface-3: #262633;
-    --aio-overlay: rgba(0, 0, 0, 0.58);
-    --aio-border: #2a2a35;
-    --aio-border-soft: #202029;
-    --aio-rule: #33333f;
-    --aio-rule-2: #44444f;
-    --aio-text: #f4f4f6;
-    --aio-text-2: #b3b4bd;
-    --aio-muted: #a0a1ab;
-    --aio-text-faint: #8a8b95;
+    /* ---- AIO raw tokens — dark ----
+       The skill ships a complete dark palette but the source app renders
+       light-only, so there are no reference screenshots. Surfaces, text and
+       accent below are its values verbatim; anything marked (inferred) had no
+       token in the skill and is carried over from what already shipped. */
+    --aio-bg: #132037;
+    --aio-surface: #091121;
+    --aio-surface-2: #0f1a2f;
+    --aio-surface-3: #1b2438;
+    --aio-shell: #0f1a2f;
+    --aio-overlay: rgba(0, 0, 0, 0.5);
+    --aio-border: #1b2438;
+    --aio-border-soft: #101a31;
+    --aio-rule: #1f2d4a;
+    --aio-rule-2: #3a4a6b; /* (inferred) */
+    --aio-text: #f3f5f9;
+    --aio-text-2: #b8bfd1;
+    --aio-muted: #b8bfd1;
+    --aio-text-faint: #7f8597;
+    --aio-text-placeholder: #7f8597;
 
-    --aio-accent: #f9805f;
-    --aio-accent-h: #ffa088;
-    --aio-accent-soft: rgba(249, 128, 95, 0.14);
-    --aio-accent-edge: rgba(249, 128, 95, 0.36);
+    --aio-accent: #f9674e;
+    --aio-accent-h: #ff8a75;
+    --aio-accent-soft: #1f2d4a;
+    --aio-accent-hover: #1a2740;
+    --aio-accent-track: #1a2740;
+    --aio-accent-light: #1f2d4a;
+    --aio-accent-edge: #f9674e;
     --aio-accent-ink: #ffffff;
-    --aio-accent-text: #f9805f;
-    --aio-accent-2: #99a1f2;
-    --aio-accent-2-soft: rgba(153, 161, 242, 0.16);
-    --aio-brand-grad: linear-gradient(92deg, #f9805f 0%, #99a1f2 100%);
+    --aio-accent-text: #f9674e;
+    --aio-accent-2: #d5d9fc;
+    --aio-accent-2-soft: #1f2d4a;
 
+    /* (inferred) The skill gives no dark status colours — unchanged from what
+       already shipped, which was tuned for legibility on a dark surface. */
     --aio-ok: #55bd75;
     --aio-warn: #dba33a;
     --aio-danger: #e07575;
@@ -193,61 +225,62 @@
     --aio-danger-edge: rgba(224, 117, 117, 0.32);
     --aio-info-edge: rgba(107, 163, 240, 0.32);
 
-    --aio-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.3);
-    --aio-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
-    --aio-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
-    --aio-shadow-pop: 0 30px 80px rgba(0, 0, 0, 0.6);
-    --aio-hover: rgba(255, 255, 255, 0.05);
+    --aio-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --aio-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+    --aio-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --aio-shadow-pop: 0 11px 15px -7px rgba(0, 0, 0, 0.5), 0 24px 38px 3px rgba(0, 0, 0, 0.4),
+      0 9px 46px 8px rgba(0, 0, 0, 0.35);
+    --aio-hover: #1a2740;
+    --aio-row-hover: #1a2740;
     --aio-selected: var(--aio-accent-soft);
-    --aio-focus-ring: 0 0 0 2px rgba(249, 128, 95, 0.45);
+    --aio-focus-ring: 0 0 0 2px #f9674e;
 
     /* ---- shadcn tokens mapped onto AIO — dark ---- */
-    --background: 240 16% 6%;
-    --foreground: 240 10% 96%;
+    --background: 218 49% 15%; /* #132037 */
+    --foreground: 220 33% 96%; /* #F3F5F9 */
 
-    --card: 240 14% 10%;
-    --card-foreground: 240 10% 96%;
+    --card: 220 57% 8%; /* #091121 */
+    --card-foreground: 220 33% 96%;
 
-    --popover: 240 13% 14%;
-    --popover-foreground: 240 10% 96%;
+    --popover: 219 52% 12%; /* #0F1A2F */
+    --popover-foreground: 220 33% 96%;
 
-    --primary: 13 93% 67%;
+    --primary: 9 93% 64%; /* #F9674E — unchanged across modes */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 13% 14%;
-    --secondary-foreground: 234 7% 72%;
+    --secondary: 219 52% 12%;
+    --secondary-foreground: 223 21% 77%; /* #B8BFD1 */
 
-    --muted: 240 13% 14%;
-    --muted-foreground: 235 6% 65%;
+    --muted: 219 52% 12%;
+    --muted-foreground: 223 21% 77%;
 
-    --accent: 357 19% 18%;
-    --accent-foreground: 13 93% 67%;
+    --accent: 220 41% 21%; /* #1F2D4A action.selected */
+    --accent-foreground: 9 93% 64%;
 
-    /* AIO's dark --danger (#e07575) is a text/chip colour; darkened here so a
-       filled destructive button still carries white label text. */
-    --destructive: 0 63% 55%;
+    --destructive: 9 93% 64%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 12% 19%;
-    --input: 240 11% 22%;
-    --ring: 13 93% 67%;
+    --border: 221 35% 16%; /* #1B2438 */
+    --input: 220 41% 21%;
+    --ring: 9 93% 64%;
 
-    --sidebar-bg: 240 14% 10%;
-    --sidebar-foreground: 235 6% 65%;
-    --sidebar-active: 13 93% 67%;
-    --sidebar-hover: 240 15% 17%;
+    --sidebar-bg: 222 51% 13%; /* #101A31 */
+    --sidebar-foreground: 223 21% 77%;
+    --sidebar-active: 9 93% 64%;
+    --sidebar-hover: 220 42% 18%; /* #1A2740 hover.main */
 
-    --panel-bg: 240 14% 10%;
-    --panel-border: 240 12% 19%;
+    --panel-bg: 220 57% 8%;
+    --panel-border: 221 35% 16%;
 
-    --column-minimized: 240 13% 14%;
-    --column-active: 240 14% 10%;
-    --column-header: 240 10% 96%;
+    --column-minimized: 219 52% 12%;
+    --column-active: 220 57% 8%;
+    --column-header: 220 33% 96%;
 
-    --item-hover: 240 15% 17%;
-    --item-selected: 357 19% 18%;
-    --item-86: 328 16% 15%;
+    --item-hover: 220 42% 18%;
+    --item-selected: 220 41% 21%;
+    --item-86: 221 35% 16%;
 
+    /* (inferred) no dark status colours in the skill — unchanged */
     --success: 138 44% 54%;
     --warning: 39 69% 54%;
     --info: 215 82% 68%;
@@ -309,7 +342,8 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-sans font-semibold tracking-tight;
+    @apply font-sans font-semibold;
+    letter-spacing: -0.02em;
   }
 
   /* AIO focus treatment: a soft accent halo rather than an offset ring.
@@ -339,7 +373,7 @@
 
   /* AIO dock item: quiet by default, accent-tinted pill when active */
   .sidebar-tab {
-    @apply flex flex-col items-center justify-center w-12 h-12 rounded-[10px] cursor-pointer;
+    @apply flex flex-col items-center justify-center w-12 h-12 rounded-[9px] cursor-pointer;
     @apply text-[hsl(var(--sidebar-foreground))];
     transition: background-color var(--aio-dur) var(--aio-ease),
       color var(--aio-dur) var(--aio-ease);
@@ -360,59 +394,25 @@
   }
 
   .sidebar-tab-label {
-    @apply text-[9px] mt-1 font-medium tracking-wide uppercase;
+    @apply text-[9px] mt-1 font-medium;
   }
 
-  /* Gradient wordmark — "AIO" in the brand gradient, the rest in plain ink */
+  /* Wordmark — solid coral. The system has exactly one brand colour and no
+     gradients; the previous coral->indigo clip was a second accent. */
   .brand-aio {
-    background: var(--aio-brand-grad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    @apply font-bold;
+    color: var(--aio-accent);
+    @apply font-semibold;
   }
 
-  /* A whisper of brand: the rail's outer edge is a vertical brand-gradient
-     hairline rather than a flat rule, fading out toward the bottom. */
   .sidebar-rail {
-    position: relative;
-    border-right: 1px solid var(--aio-border);
+    border-right: 1px solid rgba(0, 0, 0, 0.06);
   }
 
-  .sidebar-rail::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: -1px;
-    bottom: 0;
-    width: 1px;
-    background: linear-gradient(
-      180deg,
-      var(--aio-accent) 0%,
-      var(--aio-accent-2) 52%,
-      transparent 100%
-    );
-    opacity: 0.55;
-    pointer-events: none;
-  }
-
+  /* App chrome is separated by a hairline, never a shadow or a gradient. */
   .appbar {
-    @apply relative flex items-center justify-between px-4 py-2.5;
+    @apply flex items-center justify-between px-4 py-2.5;
     background: var(--aio-surface);
-  }
-
-  /* The appbar's bottom edge is the brand gradient rather than a grey rule —
-     with the rail hairline it frames the app in one continuous stroke. */
-  .appbar::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 2px;
-    background: var(--aio-brand-grad);
-    opacity: 0.6;
-    pointer-events: none;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 
   .panel {
@@ -431,9 +431,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    background: linear-gradient(135deg, var(--aio-accent), var(--aio-accent-2));
-    box-shadow: 0 4px 13px rgba(249, 103, 78, 0.28);
+    color: var(--aio-accent-ink);
+    background: var(--aio-accent);
   }
 
   .ai-orb svg {
@@ -472,38 +471,38 @@
 
   /* ---- Cards ------------------------------------------------------------ */
 
+  /* Flat, not floating: depth is a 1px border, never elevation. */
   .aio-card {
     background: var(--aio-surface);
     border: 1px solid var(--aio-border);
     border-radius: var(--aio-r-3);
-    box-shadow: var(--aio-shadow-sm);
   }
 
   .aio-card-hover {
-    transition: box-shadow var(--aio-dur) var(--aio-ease),
-      border-color var(--aio-dur) var(--aio-ease);
+    transition: background-color var(--aio-dur) var(--aio-ease);
   }
 
   .aio-card-hover:hover {
-    box-shadow: var(--aio-shadow-md);
-    border-color: var(--aio-accent-edge);
+    background: var(--aio-row-hover);
   }
 
   /* ---- Narrative header (AIO writes headings as sentences) -------------- */
 
+  /* Sentence case, always — the system sets textTransform:none globally and
+     has no letter-spaced caps anywhere. */
   .aio-eyebrow {
-    @apply text-[11px] font-semibold uppercase;
-    letter-spacing: 0.08em;
-    color: var(--aio-accent-text);
+    @apply text-[11px] font-medium;
+    color: var(--aio-text-faint);
   }
 
   .aio-h1 {
     @apply text-[22px] font-semibold leading-tight;
+    letter-spacing: -0.02em;
     color: var(--aio-text);
   }
 
   .aio-h1 b, .aio-h1 strong {
-    color: var(--aio-accent-text);
+    color: var(--aio-accent);
     @apply font-semibold;
   }
 
@@ -517,7 +516,7 @@
 
   .aio-chip {
     @apply inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium;
-    border-radius: 999px;
+    border-radius: var(--aio-r-chip);
     border: 1px solid var(--aio-border);
     background: var(--aio-surface-2);
     color: var(--aio-text-2);
@@ -543,7 +542,7 @@
 
   .aio-chip.accent {
     background: var(--aio-accent-soft);
-    border-color: var(--aio-accent-edge);
+    border-color: transparent;
     color: var(--aio-accent-text);
   }
 
@@ -566,7 +565,7 @@
   }
 
   .category-header {
-    @apply px-3 py-3 font-semibold text-[13px] border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
+    @apply px-3 py-3 font-medium text-[13px] border-b border-[hsl(var(--panel-border))] text-[hsl(var(--column-header))];
     background: var(--aio-surface-2);
   }
 
@@ -597,12 +596,9 @@
     @apply w-0 opacity-0;
   }
 
-  /* Same treatment as .aio-eyebrow — small-caps labels carry the accent, which
-     puts colour in every detail panel without raising its intensity. */
   .section-header {
-    @apply text-[11px] font-semibold uppercase mb-2;
-    letter-spacing: 0.06em;
-    color: var(--aio-accent-text);
+    @apply text-[11px] font-medium mb-2;
+    color: var(--aio-text-faint);
   }
 
   /* ---- Controls --------------------------------------------------------- */
@@ -611,13 +607,13 @@
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium;
     border-radius: var(--aio-r-2);
     background: var(--aio-accent-soft);
-    border: 1px solid var(--aio-accent-edge);
+    border: 1px solid transparent;
     color: var(--aio-accent-text);
     transition: background-color var(--aio-dur) var(--aio-ease);
   }
 
   .btn-add:hover {
-    background: var(--aio-accent-2-soft);
+    background: var(--aio-accent-light);
   }
 
   .input-field {
@@ -653,7 +649,6 @@
   .toggle-button.active {
     background: var(--aio-surface);
     color: var(--aio-accent-text);
-    box-shadow: var(--aio-shadow-sm);
   }
 
   /* ---- POS preview tiles (device UI, kept on its own palette) ----------- */
