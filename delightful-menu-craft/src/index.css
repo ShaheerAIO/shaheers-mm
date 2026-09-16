@@ -26,14 +26,11 @@
        #FFFFFF, which reads too bright here, so the whole family is warmed to a
        cream and the steps are widened for contrast. Warming the card alone
        would have made it darker than a cool canvas and inverted the ladder. */
-    --aio-bg: #efe9de;
     --aio-surface: #fcf8f1;
     --aio-surface-2: #f2ece0;
     --aio-surface-3: #e7dfd0;
-    --aio-shell: #f7f2e9;
     --aio-overlay: rgba(0, 0, 0, 0.25);
     --aio-border: #e2dacb;
-    --aio-border-soft: #ebe4d8;
     --aio-rule: #d8cfbd;
     --aio-rule-2: #b5a992;
     --aio-text: #1c1b18;
@@ -43,14 +40,12 @@
        for timestamps and meta only. */
     --aio-muted: #57544b;
     --aio-text-faint: #736f61;
-    --aio-text-placeholder: #a39c8b;
 
     --aio-accent: #f9674e;
     /* Skill §10 known bug: primary.light/main/dark are all #F9674E, so the
        primary hover is a no-op. It prescribes a real dark — this is it. */
     --aio-accent-h: #e04a30;
     --aio-accent-soft: #ffdfd7;
-    --aio-accent-hover: #fee4de;
     --aio-accent-track: #ffefeb;
     --aio-accent-light: #ffe5e0;
     --aio-accent-edge: #f9674e;
@@ -86,7 +81,6 @@
        flags as a defect. Hover takes palette.hover, selected keeps action.selected. */
     --aio-hover: #fee4de;
     --aio-row-hover: #f5f0e6;
-    --aio-selected: var(--aio-accent-soft);
     /* Skill §22: the source focus ring is 2px #F4F4F8 and near-invisible; it
        prescribes a visible branded ring. */
     --aio-focus-ring: 0 0 0 2px #f9674e;
@@ -97,13 +91,10 @@
     --aio-r-btn: 10px;
     --aio-r-3: 12px;
     --aio-r-chip: 16px;
-    --aio-r-4: 20px;
     --aio-dur-fast: 150ms;
     --aio-dur: 200ms;
     --aio-dur-slow: 250ms;
     --aio-ease: cubic-bezier(0.4, 0, 0.2, 1);
-    --aio-font: 'Poppins', 'IBM Plex Sans', system-ui, sans-serif;
-    --aio-mono: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace;
 
     /* ---- shadcn tokens mapped onto AIO — light ----
        Every triple below is one of the skill's hexes converted to HSL. */
@@ -189,28 +180,23 @@
        what shipped before and what the product wants. Everything that isn't a
        surface hue still follows the skill: one coral accent unchanged across
        modes, tints for selection, flat elevation, its radius and motion scales. */
-    --aio-bg: #0d0d12;
     --aio-surface: #16161d;
     --aio-surface-2: #1e1e27;
     --aio-surface-3: #262633;
-    --aio-shell: #1e1e27;
     --aio-overlay: rgba(0, 0, 0, 0.5);
     --aio-border: #2a2a35;
-    --aio-border-soft: #202029;
     --aio-rule: #33333f;
     --aio-rule-2: #44444f;
     --aio-text: #f4f4f6;
     --aio-text-2: #b3b4bd;
     --aio-muted: #a0a1ab;
     --aio-text-faint: #8a8b95;
-    --aio-text-placeholder: #8a8b95;
 
     --aio-accent: #f9674e;
     --aio-accent-h: #ff8a75;
     /* Coral washes, not the skill's navy action.selected — a blue selection
        tint is what made the whole theme read as blue. */
     --aio-accent-soft: rgba(249, 103, 78, 0.14);
-    --aio-accent-hover: rgba(249, 103, 78, 0.09);
     --aio-accent-track: rgba(249, 103, 78, 0.12);
     --aio-accent-light: rgba(249, 103, 78, 0.18);
     --aio-accent-edge: #f9674e;
@@ -241,7 +227,6 @@
       0 9px 46px 8px rgba(0, 0, 0, 0.35);
     --aio-hover: rgba(255, 255, 255, 0.05);
     --aio-row-hover: rgba(255, 255, 255, 0.04);
-    --aio-selected: var(--aio-accent-soft);
     --aio-focus-ring: 0 0 0 2px #f9674e;
 
     /* ---- shadcn tokens mapped onto AIO — dark ---- */

@@ -115,9 +115,6 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        pill: "999px",
-        btn: "var(--aio-r-btn)",
-        chip: "var(--aio-r-chip)",
       },
       boxShadow: {
         sm: "var(--aio-shadow-sm)",
