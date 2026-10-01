@@ -53,6 +53,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { NumberStepperInput } from '@/components/ui/number-stepper-input';
 import { effectiveItemTaxRate } from '@/lib/tax';
+import { buildModifierNesting } from '@/lib/modifierNesting';
 import { resolveOptionPriceScope, countLabel, type OptionPriceScope } from '@/lib/optionPriceScope';
 import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
 import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
@@ -733,9 +734,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       .filter((m): m is NonNullable<typeof m> => m !== undefined);
   }, [allAttachedModifierIds, modifiers]);
 
-  // Get available modifiers (not yet attached, including pending)
+  // Get available modifiers (not yet attached, including pending). Nested
+  // children are excluded: the POS rejects linking them to an item directly.
   const availableModifiers = useMemo(() => {
-    return modifiers.filter(m => !allAttachedModifierIds.includes(m.id));
+    const { nestedIds } = buildModifierNesting(modifiers);
+    return modifiers.filter(m => !allAttachedModifierIds.includes(m.id) && !nestedIds.has(m.id));
   }, [modifiers, allAttachedModifierIds]);
 
   // One trimmed predicate for the group picker, matching either name a group is

@@ -16,6 +16,7 @@ import type {
 import { serializeVisibility } from '@/lib/visibility';
 import { THREE_PO_PLATFORMS, THREE_PO_TYPE_EXCEL, parseThreePoPricing } from '@/lib/threePoPricing';
 import { freshSalesCategories, resolveSaleCategory } from '@/lib/saleCategories';
+import { buildModifierNesting, type ModifierNesting } from '@/lib/modifierNesting';
 
 // Sheet names — must match the POS import schema exactly (order included).
 const SHEET_NAMES = {
@@ -200,32 +201,9 @@ const buildItemRows = (
     };
   });
 
-// Nested-modifier structure: a child→parent map derived from each modifier's
-// `modifierIds` list, plus the set of modifier ids that are nested children.
-// The POS forbids linking nested modifiers directly to items/categories and
-// requires each nested modifier to point at its parent.
-interface ModifierNesting {
-  childToParent: Map<number, number>;
-  nestedIds: Set<number>;
-}
-const buildModifierNesting = (mods: Modifier[]): ModifierNesting => {
-  const childToParent = new Map<number, number>();
-  for (const m of mods) {
-    String(m.modifierIds || '')
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => !isNaN(n) && n > 0)
-      .forEach((childId) => { if (!childToParent.has(childId)) childToParent.set(childId, m.id); });
-  }
-  const nestedIds = new Set<number>();
-  for (const m of mods) if (m.isNested || childToParent.has(m.id)) nestedIds.add(m.id);
-  return { childToParent, nestedIds };
-};
-
 //Move nested modifiers below their parent modifiers, since the excel imports items in order. This ensures each parent modifier is inserted before its children, preventing foreign key constraint errors.
 const sortModifiersParentFirst = (mods: Modifier[], nesting: ModifierNesting): Modifier[] => {
-  const hasParent = (modifier: Modifier) =>
-    Boolean(modifier.parentModifierId || nesting.childToParent.has(modifier.id));
+  const hasParent = (modifier: Modifier) => nesting.nestedIds.has(modifier.id);
 
   return [...mods].sort((a, b) => Number(hasParent(a)) - Number(hasParent(b)));
 };
@@ -233,7 +211,7 @@ const sortModifiersParentFirst = (mods: Modifier[], nesting: ModifierNesting): M
 const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
   mods.map((m) => {
     // A nested child modifier is one attached under an addNested parent.
-    const isNestedChild = m.isNested || nesting.childToParent.has(m.id) || Boolean(m.parentModifierId);
+    const isNestedChild = nesting.nestedIds.has(m.id);
     // modType is required by the POS importer; fall back when blank (e.g. nested
     // modifiers). isOptional is the boolean form derived from the resolved modType.
     const baseModType = m.modType || (m.isOptional === 'Required' || m.isOptional === 'Select one' ? 'Required' : 'Optional');
@@ -252,7 +230,7 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       : (isOptional && !m.addNested ? 0 : (m.noMaxSelection ? 1 : m.minSelector));
     return {
       id: m.id, modifierName: m.modifierName, posDisplayName: m.posDisplayName,
-      isNested: m.isNested, addNested: m.addNested,
+      isNested: isNestedChild, addNested: m.addNested,
       // POS rule: a nested container (addNested) carries no pricing of its own —
       // its price lives on the child modifiers' options — so it must export as
       // NoCharge regardless of the type stored on the parent.
@@ -274,9 +252,9 @@ const buildModifierRows = (mods: Modifier[], nesting: ModifierNesting) =>
       noMaxSelection: m.noMaxSelection,
       prefix: m.prefix, pizzaSelection: m.pizzaSelection, stockStatus: true,
       price: m.price, onPrem: m.onPrem, offPrem: m.offPrem,
-      // Nested modifiers must reference their parent; backfill from the parent's
-      // modifierIds when the modifier's own parentModifierId wasn't set.
-      parentModifierId: m.parentModifierId || nesting.childToParent.get(m.id) || '',
+      // Nested modifiers must reference their parent; top-level ones must not,
+      // even when a stale parentModifierId is still stored on them.
+      parentModifierId: nesting.childToParent.get(m.id) ?? '',
       isSizeModifier: m.isSizeModifier, modType,
     };
   });

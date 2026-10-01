@@ -1515,13 +1515,20 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       });
     } else if (detectedMode === 'nested') {
       const count = childModifiers.length;
+      // Also unlink modifiers whose parentModifierId still points here but that
+      // aren't in modifierIds — once that list is cleared they'd resolve as children.
+      const snapshot = [...new Set([
+        ...childModifiers.map((c) => c.id),
+        ...modifiers.filter((m) => m.parentModifierId === modifier.id).map((m) => m.id),
+      ])];
       setConfirmState({
         title: 'Switch to Flat Options?',
         description: `This will unlink ${count} nested modifier${count !== 1 ? 's' : ''} from this modifier.`,
         confirmLabel: 'Switch',
         destructive: false,
         onConfirm: () => {
-          updateModifier(modifier.id, { modifierIds: '' });
+          updateModifier(modifier.id, { modifierIds: '', addNested: false });
+          snapshot.forEach((childId) => updateModifier(childId, { parentModifierId: 0, isNested: false }));
           setChosenMode(targetMode);
         },
       });
