@@ -19,6 +19,7 @@ export const VISIBILITY_CHANNELS = [
   { key: 'visibilityMenuBoard',  label: 'Menu Board', group: 'On-Prem',  token: 'MenuBoard' },
   { key: 'visibilityMobileApp',  label: 'MPOS',       group: 'On-Prem',  token: 'Mpos'     },
   { key: 'visibilityNugget',     label: 'Nugget',     group: 'On-Prem',  token: 'Nugget'   },
+  { key: 'visibilityCatering',   label: 'Catering',   group: 'On-Prem',  token: 'Catering' },
   { key: 'visibilityQr',         label: 'QR Code',    group: 'Off-Prem', token: 'QR'        },
   { key: 'visibilityWebsite',    label: 'Website',    group: 'Off-Prem', token: 'Website'  },
   { key: 'visibilityOnline',     label: 'Online',     group: 'Off-Prem', token: 'Online'   },
@@ -160,6 +161,30 @@ export function toggleVisibilityChannel<T extends Record<VisibilityChannelKey, b
 }
 
 /**
+ * Read an entity's channel flags into a complete record, treating a missing
+ * field as visible (same rule as isVisibleOnChannel). Use this to seed edit
+ * drafts so they pick up new channels automatically.
+ */
+export function pickVisibility(
+  entity: Partial<Record<VisibilityChannelKey, boolean>>,
+): Record<VisibilityChannelKey, boolean> {
+  const result = {} as Record<VisibilityChannelKey, boolean>;
+  for (const { key } of VISIBILITY_CHANNELS) result[key] = entity[key] ?? true;
+  return result;
+}
+
+/**
+ * True when any channel differs between a draft and the entity it was seeded
+ * from — the dirty check for the detail panels.
+ */
+export function visibilityDiffers(
+  draft: Record<VisibilityChannelKey, boolean>,
+  entity: Partial<Record<VisibilityChannelKey, boolean>>,
+): boolean {
+  return VISIBILITY_CHANNELS.some(({ key }) => draft[key] !== (entity[key] ?? true));
+}
+
+/**
  * Default visibility for a newly-created entity — all channels enabled.
  */
 export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {
@@ -169,6 +194,7 @@ export function defaultVisibility(): Record<VisibilityChannelKey, boolean> {
     visibilityMenuBoard:  true,
     visibilityMobileApp:  true,
     visibilityNugget:     true,
+    visibilityCatering:   true,
     visibilityQr:         true,
     visibilityWebsite:    true,
     visibilityOnline:     true,
@@ -307,8 +333,7 @@ const PLATFORM_TO_KEY: Record<string, VisibilityChannelKey> = {
   doordash3p: 'visibilityDoordash',
   online: 'visibilityOnline', // POS "Online" ordering channel (distinct from Website)
   nugget: 'visibilityNugget',
-  // POS-only channels with no app equivalent (catering) are intentionally not
-  // mapped and are ignored on import.
+  catering: 'visibilityCatering',
 };
 
 /** Channel keys belonging to a visibility group (derived from VISIBILITY_CHANNELS). */
@@ -317,11 +342,12 @@ const groupChannelKeys = (group: VisibilityGroup): VisibilityChannelKey[] =>
 
 /**
  * Serialize the boolean channel fields into the POS `visibility` JSON column.
- * The POS accepts a JSON array of either group tokens (`["OnPrem","OffPrem"]`)
- * or individual channel tokens (`["Kiosk","QR","Doordash"]`). Per group: when
- * every channel in the group is on we collapse to the group token; when only
- * some are on we list those channels individually; when none are on we emit
- * nothing. Nothing enabled at all → "" (matching empty cells in real POS files).
+ *
+ * The POS also accepts the group tokens `OnPrem`/`OffPrem`, but we never emit
+ * them: a group token means "every on-prem channel this POS has", which is not
+ * the same set as the channels this app knows about, so collapsing would hand
+ * back a value the operator never set. Always list channels individually.
+ * Nothing enabled at all → "" (matching empty cells in real POS files).
  */
 export function serializeVisibility(
   channels: Partial<Record<VisibilityChannelKey, boolean>>,
@@ -330,17 +356,7 @@ export function serializeVisibility(
   // isVisibleOnChannel), so entities created without visibility fields default
   // to fully visible.
   const on = (k: VisibilityChannelKey) => channels[k] !== false;
-  const tokens: string[] = [];
-  for (const group of ['On-Prem', 'Off-Prem'] as VisibilityGroup[]) {
-    const keys = groupChannelKeys(group);
-    const onKeys = keys.filter(on);
-    if (onKeys.length === 0) continue;
-    if (onKeys.length === keys.length) {
-      tokens.push(group === 'On-Prem' ? 'OnPrem' : 'OffPrem');
-    } else {
-      for (const c of VISIBILITY_CHANNELS) if (c.group === group && on(c.key)) tokens.push(c.token);
-    }
-  }
+  const tokens = VISIBILITY_CHANNELS.filter((c) => on(c.key)).map((c) => c.token);
   return tokens.length ? JSON.stringify(tokens) : '';
 }
 
@@ -373,6 +389,7 @@ export function parseVisibilityFromRow(
           visibilityMenuBoard:  false,
           visibilityMobileApp:  false,
           visibilityNugget:     false,
+          visibilityCatering:   false,
           visibilityQr:         false,
           visibilityWebsite:    false,
           visibilityOnline:     false,
@@ -424,6 +441,7 @@ export function parseVisibilityFromRow(
     visibilityMenuBoard:  parseBool(row['visibilityMenuBoard']),
     visibilityMobileApp:  parseBool(row['visibilityMobileApp'], legacyOnline),
     visibilityNugget:     parseBool(row['visibilityNugget']),
+    visibilityCatering:   parseBool(row['visibilityCatering']),
     visibilityQr:         parseBool(row['visibilityQr'],        legacyOnline),
     visibilityWebsite:    parseBool(row['visibilityWebsite'],   legacyOnline),
     // New Online channel: legacy per-column files predate it, so fall back to the
@@ -529,6 +547,7 @@ export function parseVisibilityFromScraper(item: {
     visibilityMenuBoard:  item.visibilityMenuBoard  ?? true,
     visibilityMobileApp:  item.visibilityMobileApp  ?? online,
     visibilityNugget:     true,
+    visibilityCatering:   true,
     visibilityQr:         item.visibilityQr         ?? online,
     visibilityWebsite:    item.visibilityWebsite     ?? online,
     visibilityOnline:     online,

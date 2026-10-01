@@ -15,6 +15,7 @@ export interface Menu {
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
   visibilityNugget: boolean;
+  visibilityCatering: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityOnline: boolean;
@@ -45,6 +46,7 @@ export interface Category {
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
   visibilityNugget: boolean;
+  visibilityCatering: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityOnline: boolean;
@@ -107,6 +109,7 @@ export interface Item {
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
   visibilityNugget: boolean;
+  visibilityCatering: boolean;
   visibilityQr: boolean;       // QR code ordering
   visibilityWebsite: boolean;  // Web ordering
   visibilityOnline: boolean;   // Online ordering channel (distinct from Website)
@@ -196,6 +199,7 @@ export interface Modifier {
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
   visibilityNugget: boolean;
+  visibilityCatering: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityOnline: boolean;
@@ -224,6 +228,7 @@ export interface ModifierOption {
   visibilityKiosk: boolean;
   visibilityMenuBoard: boolean;
   visibilityNugget: boolean;
+  visibilityCatering: boolean;
   visibilityQr: boolean;
   visibilityWebsite: boolean;
   visibilityOnline: boolean;

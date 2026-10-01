@@ -12,6 +12,8 @@ import {
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
   toggleVisibilityChannel,
+  pickVisibility,
+  visibilityDiffers,
   type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
@@ -62,15 +64,7 @@ export function MenuDetailPanel({ menu }: Props) {
     posDisplayName: menu.posDisplayName,
     posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
     picture: menu.picture || '',
-    visibilityPos: menu.visibilityPos ?? true,
-    visibilityKiosk: menu.visibilityKiosk ?? true,
-    visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
-    visibilityNugget: menu.visibilityNugget ?? true,
-    visibilityQr: menu.visibilityQr ?? true,
-    visibilityWebsite: menu.visibilityWebsite ?? true,
-    visibilityOnline: menu.visibilityOnline ?? true,
-    visibilityMobileApp: menu.visibilityMobileApp ?? true,
-    visibilityDoordash: menu.visibilityDoordash ?? true,
+    ...pickVisibility(menu),
     daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
   }));
 
@@ -87,15 +81,7 @@ export function MenuDetailPanel({ menu }: Props) {
       posDisplayName: menu.posDisplayName,
       posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
       picture: menu.picture || '',
-      visibilityPos: menu.visibilityPos ?? true,
-      visibilityKiosk: menu.visibilityKiosk ?? true,
-      visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
-      visibilityNugget: menu.visibilityNugget ?? true,
-      visibilityQr: menu.visibilityQr ?? true,
-      visibilityWebsite: menu.visibilityWebsite ?? true,
-      visibilityOnline: menu.visibilityOnline ?? true,
-      visibilityMobileApp: menu.visibilityMobileApp ?? true,
-      visibilityDoordash: menu.visibilityDoordash ?? true,
+      ...pickVisibility(menu),
       daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
     });
     setOpenGroup(null);
@@ -111,15 +97,7 @@ export function MenuDetailPanel({ menu }: Props) {
     draft.posDisplayName !== menu.posDisplayName ||
     draft.posButtonColor !== (menu.posButtonColor || DEFAULT_MENU_COLOR) ||
     draft.picture !== (menu.picture || '') ||
-    draft.visibilityPos !== (menu.visibilityPos ?? true) ||
-    draft.visibilityKiosk !== (menu.visibilityKiosk ?? true) ||
-    draft.visibilityMenuBoard !== (menu.visibilityMenuBoard ?? true) ||
-    draft.visibilityNugget !== (menu.visibilityNugget ?? true) ||
-    draft.visibilityQr !== (menu.visibilityQr ?? true) ||
-    draft.visibilityWebsite !== (menu.visibilityWebsite ?? true) ||
-    draft.visibilityOnline !== (menu.visibilityOnline ?? true) ||
-    draft.visibilityMobileApp !== (menu.visibilityMobileApp ?? true) ||
-    draft.visibilityDoordash !== (menu.visibilityDoordash ?? true) ||
+    visibilityDiffers(draft, menu) ||
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (menu.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules()));
 
   const handleSave = () => {
@@ -135,15 +113,7 @@ export function MenuDetailPanel({ menu }: Props) {
       posDisplayName: menu.posDisplayName,
       posButtonColor: menu.posButtonColor || DEFAULT_MENU_COLOR,
       picture: menu.picture || '',
-      visibilityPos: menu.visibilityPos ?? true,
-      visibilityKiosk: menu.visibilityKiosk ?? true,
-      visibilityMenuBoard: menu.visibilityMenuBoard ?? true,
-      visibilityNugget: menu.visibilityNugget ?? true,
-      visibilityQr: menu.visibilityQr ?? true,
-      visibilityWebsite: menu.visibilityWebsite ?? true,
-      visibilityOnline: menu.visibilityOnline ?? true,
-      visibilityMobileApp: menu.visibilityMobileApp ?? true,
-      visibilityDoordash: menu.visibilityDoordash ?? true,
+      ...pickVisibility(menu),
       daySchedulesByGroup: parseGroupSchedules(menu.daySchedulesByGroup, menu.daySchedules),
     });
     setOpenGroup(null);

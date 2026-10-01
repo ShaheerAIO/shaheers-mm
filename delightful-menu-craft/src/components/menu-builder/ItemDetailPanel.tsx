@@ -29,16 +29,18 @@ import {
 } from '@/lib/threePoPricing';
 import {
   VISIBILITY_CHANNELS,
-  defaultVisibility,
   getChannelsByGroup,
   parseGroupSchedules,
   serializeGroupSchedules,
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
   toggleVisibilityChannel,
+  pickVisibility,
+  visibilityDiffers,
   DAYS as SCHEDULE_DAYS,
   type ChannelGroupSchedules,
   type DayKey,
+  type VisibilityChannelKey,
   type VisibilityGroup,
 } from '@/lib/visibility';
 import {
@@ -95,7 +97,7 @@ const parseOptionalCount = (raw: string): number | null => {
   return isNaN(n) ? null : Math.max(0, n);
 };
 
-interface DraftState {
+interface DraftFields {
   itemName: string;
   posDisplayName: string;
   kdsName: string;
@@ -121,17 +123,9 @@ interface DraftState {
   preparationTime: number | null;
   calories: number | null;
   saleCategoryId: number | undefined;
-  visibilityPos: boolean;
-  visibilityKiosk: boolean;
-  visibilityMenuBoard: boolean;
-  visibilityNugget: boolean;
-  visibilityQr: boolean;
-  visibilityWebsite: boolean;
-  visibilityOnline: boolean;
-  visibilityMobileApp: boolean;
-  visibilityDoordash: boolean;
   daySchedulesByGroup: ChannelGroupSchedules;
 }
+type DraftState = DraftFields & Record<VisibilityChannelKey, boolean>;
 
 type ItemImageField = 'itemPicture' | 'kioskItemImage' | 'onlineImage' | 'thirdPartyImage';
 type ItemUploadField = ItemImageField | 'landscapeImage';
@@ -306,16 +300,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     preparationTime: item.preparationTime,
     calories: item.calories,
     saleCategoryId: item.saleCategoryId,
-    ...defaultVisibility(),
-    visibilityPos: item.visibilityPos ?? true,
-    visibilityKiosk: item.visibilityKiosk ?? true,
-    visibilityMenuBoard: item.visibilityMenuBoard ?? true,
-    visibilityNugget: item.visibilityNugget ?? true,
-    visibilityQr: item.visibilityQr ?? true,
-    visibilityWebsite: item.visibilityWebsite ?? true,
-    visibilityOnline: item.visibilityOnline ?? true,
-    visibilityMobileApp: item.visibilityMobileApp ?? true,
-    visibilityDoordash: item.visibilityDoordash ?? true,
+    ...pickVisibility(item),
     daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
   });
 
@@ -412,16 +397,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       preparationTime: item.preparationTime,
       calories: item.calories,
       saleCategoryId: item.saleCategoryId,
-      ...defaultVisibility(),
-      visibilityPos: item.visibilityPos ?? true,
-      visibilityKiosk: item.visibilityKiosk ?? true,
-      visibilityMenuBoard: item.visibilityMenuBoard ?? true,
-      visibilityNugget: item.visibilityNugget ?? true,
-      visibilityQr: item.visibilityQr ?? true,
-      visibilityWebsite: item.visibilityWebsite ?? true,
-      visibilityOnline: item.visibilityOnline ?? true,
-      visibilityMobileApp: item.visibilityMobileApp ?? true,
-      visibilityDoordash: item.visibilityDoordash ?? true,
+      ...pickVisibility(item),
       daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
     });
     setExpandedDay(null);
@@ -547,15 +523,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       draft.preparationTime !== item.preparationTime ||
       draft.calories !== item.calories ||
       draft.saleCategoryId !== item.saleCategoryId ||
-      draft.visibilityPos !== (item.visibilityPos ?? true) ||
-      draft.visibilityKiosk !== (item.visibilityKiosk ?? true) ||
-      draft.visibilityMenuBoard !== (item.visibilityMenuBoard ?? true) ||
-      draft.visibilityNugget !== (item.visibilityNugget ?? true) ||
-      draft.visibilityQr !== (item.visibilityQr ?? true) ||
-      draft.visibilityWebsite !== (item.visibilityWebsite ?? true) ||
-      draft.visibilityOnline !== (item.visibilityOnline ?? true) ||
-      draft.visibilityMobileApp !== (item.visibilityMobileApp ?? true) ||
-      draft.visibilityDoordash !== (item.visibilityDoordash ?? true) ||
+      visibilityDiffers(draft, item) ||
       serializeGroupSchedules(draft.daySchedulesByGroup) !== (item.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
       pendingModifierIds.length > 0 ||
       pendingRemovedModifierIds.length > 0 ||
@@ -621,15 +589,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       saleCategoryId: draftSaleCategory.id,
       stationIds: [...new Set(stationDraft)].sort((a, b) => a - b).join(','),
       addonIds: serializeIds(addonDraft),
-      visibilityPos: draft.visibilityPos,
-      visibilityKiosk: draft.visibilityKiosk,
-      visibilityMenuBoard: draft.visibilityMenuBoard,
-      visibilityNugget: draft.visibilityNugget,
-      visibilityQr: draft.visibilityQr,
-      visibilityWebsite: draft.visibilityWebsite,
-      visibilityOnline: draft.visibilityOnline,
-      visibilityMobileApp: draft.visibilityMobileApp,
-      visibilityDoordash: draft.visibilityDoordash,
+      ...pickVisibility(draft),
       daySchedulesByGroup: serializeGroupSchedules(draft.daySchedulesByGroup),
     });
 
@@ -690,16 +650,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       preparationTime: item.preparationTime,
       calories: item.calories,
       saleCategoryId: item.saleCategoryId,
-      ...defaultVisibility(),
-      visibilityPos: item.visibilityPos ?? true,
-      visibilityKiosk: item.visibilityKiosk ?? true,
-      visibilityMenuBoard: item.visibilityMenuBoard ?? true,
-      visibilityNugget: item.visibilityNugget ?? true,
-      visibilityQr: item.visibilityQr ?? true,
-      visibilityWebsite: item.visibilityWebsite ?? true,
-      visibilityOnline: item.visibilityOnline ?? true,
-      visibilityMobileApp: item.visibilityMobileApp ?? true,
-      visibilityDoordash: item.visibilityDoordash ?? true,
+      ...pickVisibility(item),
       daySchedulesByGroup: parseGroupSchedules(item.daySchedulesByGroup, item.daySchedules),
     });
     setExpandedDay(null);

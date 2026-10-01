@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { parseExcelFile } from '@/lib/excelParser';
 import { exportToExcel } from '@/lib/excelExporter';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
+import { defaultVisibility } from '@/lib/visibility';
 import { toast } from 'sonner';
 import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOpen, LogOut, Check, Loader2, AlertTriangle, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -161,15 +162,7 @@ export function TopBar() {
       posButtonColor: DEFAULT_MENU_COLOR,
       picture: '',
       sortOrder,
-      visibilityPos: true,
-      visibilityKiosk: true,
-      visibilityMenuBoard: true,
-      visibilityNugget: true,
-      visibilityQr: true,
-      visibilityWebsite: true,
-      visibilityOnline: true,
-      visibilityMobileApp: true,
-      visibilityDoordash: true,
+      ...defaultVisibility(),
       daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     });
     setSelectedMenu(id);

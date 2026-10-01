@@ -6,6 +6,7 @@ import { Plus, Upload, LayoutList } from 'lucide-react';
 import type { Category, Item } from '@/types/menu';
 import { RIGHT_PANEL_WIDTH_PX, CATEGORY_PANEL_WIDTH_PX } from '@/lib/rightPanelWidth';
 import { DEFAULT_CATEGORY_COLOR } from '@/lib/posColors';
+import { defaultVisibility } from '@/lib/visibility';
 
 export function CategoryColumns() {
   const {
@@ -102,15 +103,7 @@ export function CategoryColumns() {
       tagIds: '',
       menuIds: selectedMenuId.toString(),
       sortOrder: menuCategories.length,
-      visibilityPos: true,
-      visibilityKiosk: true,
-      visibilityMenuBoard: true,
-      visibilityNugget: true,
-      visibilityQr: true,
-      visibilityWebsite: true,
-      visibilityOnline: true,
-      visibilityMobileApp: true,
-      visibilityDoordash: true,
+      ...defaultVisibility(),
       daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
 

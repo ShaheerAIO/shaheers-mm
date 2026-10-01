@@ -38,9 +38,9 @@ All types live in `src/types/menu.ts` and mirror a multi-sheet Excel workbook:
 
 ## Visibility & scheduling
 
-`src/lib/visibility.ts` is the single source of truth for channel definitions. All 6 channels and their group membership are defined in `VISIBILITY_CHANNELS` — UI labels, groupings, and parse helpers all derive from it. When adding or renaming a channel, edit only this file.
+`src/lib/visibility.ts` is the single source of truth for channel definitions. Every channel and its group membership is defined in `VISIBILITY_CHANNELS` — UI labels, groupings, and parse helpers all derive from it. When adding or renaming a channel, edit only this file; seed edit drafts with `pickVisibility(entity)` and compare them with `visibilityDiffers(draft, entity)` so panels pick up new channels for free.
 
-Channels are grouped into **On-Prem** (POS, Kiosk) and **Off-Prem** (QR Code, Website, Mobile App, DoorDash). `VisibilityGroup = 'On-Prem' | 'Off-Prem'`.
+Channels are grouped into **On-Prem** (POS, Kiosk, Menu Board, MPOS, Nugget, Catering) and **Off-Prem** (QR Code, Website, Online, DoorDash). `VisibilityGroup = 'On-Prem' | 'Off-Prem'`.
 
 Day/time availability is stored per channel-group as `daySchedulesByGroup` — a JSON-encoded `ChannelGroupSchedules` (`Record<VisibilityGroup, DayScheduleMap>`). Each group has its own independent schedule so On-Prem and Off-Prem can have different hours. Use `parseGroupSchedules(raw, fallbackSingle?)` to read (falls back to copying the legacy `daySchedules` string to both groups) and `serializeGroupSchedules()` to write. The old `daySchedules` field is preserved on the entity for backward compat but is not authoritative. The v8 store migration backfills `daySchedulesByGroup` from `daySchedules` for all existing entities.
 
@@ -49,7 +49,7 @@ Day/time availability is stored per channel-group as `daySchedulesByGroup` — a
 - **Import**: `src/lib/excelParser.ts` → `importData()` in the store
 - **Export**: `exportData()` in the store → `src/lib/excelExporter.ts`
 
-The parser handles two visibility formats: a unified JSON array column (`visibility: '["Pos","Kiosk"]'`) and individual boolean columns (`visibilityPos: true`). Legacy column names (`visibilityOnline`, `visibilityThirdParty`) are mapped to canonical keys in `PLATFORM_TO_KEY`.
+The parser handles two visibility formats: a unified JSON array column (`visibility: '["Pos","Kiosk"]'`) and individual boolean columns (`visibilityPos: true`). Legacy column names (`visibilityOnline`, `visibilityThirdParty`) are mapped to canonical keys in `PLATFORM_TO_KEY`. Every sheet must parse it through `parseVisibilityFromRow` — the per-column form alone silently reads real POS files as fully visible, since they only carry the JSON array. On the way out, `serializeVisibility` always lists channels individually and never emits the `OnPrem`/`OffPrem` group tokens, which mean "every channel the POS has" rather than "every channel this app knows about".
 
 ## UI layout
 

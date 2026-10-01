@@ -3,7 +3,12 @@ import { Check, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
-import { toggleVisibilityChannel } from '@/lib/visibility';
+import {
+  toggleVisibilityChannel,
+  defaultVisibility,
+  VISIBILITY_CHANNELS,
+  type VisibilityChannelKey,
+} from '@/lib/visibility';
 import type { Category, Item, Modifier, ModifierOption } from '@/types/menu';
 import { BulkReviewModal, type BulkOp } from './BulkReviewModal';
 import { CategoryImageLibraryModal } from './CategoryImageLibraryModal';
@@ -19,30 +24,10 @@ import {
   serializeThreePoPricing,
 } from '@/lib/threePoPricing';
 
-const VIS_CHANNELS = [
-  { key: 'visibilityPos' as const, label: 'POS' },
-  { key: 'visibilityKiosk' as const, label: 'Kiosk' },
-  { key: 'visibilityMenuBoard' as const, label: 'Menu Board' },
-  { key: 'visibilityMobileApp' as const, label: 'MPOS' },
-  { key: 'visibilityNugget' as const, label: 'Nugget' },
-  { key: 'visibilityQr' as const, label: 'QR' },
-  { key: 'visibilityWebsite' as const, label: 'Website' },
-  { key: 'visibilityOnline' as const, label: 'Online' },
-  { key: 'visibilityDoordash' as const, label: 'DoorDash' },
-];
+const VIS_CHANNELS = VISIBILITY_CHANNELS;
 
-type VisDraft = Record<(typeof VIS_CHANNELS)[number]['key'], boolean>;
-const defaultVisDraft = (): VisDraft => ({
-  visibilityPos: true,
-  visibilityKiosk: true,
-  visibilityMenuBoard: true,
-  visibilityMobileApp: true,
-  visibilityNugget: true,
-  visibilityQr: true,
-  visibilityWebsite: true,
-  visibilityOnline: true,
-  visibilityDoordash: true,
-});
+type VisDraft = Record<VisibilityChannelKey, boolean>;
+const defaultVisDraft = (): VisDraft => defaultVisibility();
 
 // Items expose two image *dimensions* — a 1:1 image that seeds every
 // square/platform field, and a single 16:9 landscape field. Bulk-editing

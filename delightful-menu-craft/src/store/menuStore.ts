@@ -375,7 +375,7 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 21;
+export const STORE_VERSION = 22;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
@@ -796,13 +796,29 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
     });
   }
 
+  if (fromVersion < 22) {
+    // Catering became a real On-Prem channel (it was a POS token we dropped on
+    // import). Existing entities predate the checkbox, so default it visible.
+    const backfillCatering = (arr: unknown) =>
+      Array.isArray(arr)
+        ? (arr as Record<string, unknown>[]).map((e) =>
+            typeof e.visibilityCatering === 'boolean' ? e : { ...e, visibilityCatering: true })
+        : arr;
+    state.menus = backfillCatering(state.menus);
+    state.categories = backfillCatering(state.categories);
+    state.items = backfillCatering(state.items);
+    state.modifiers = backfillCatering(state.modifiers);
+    state.modifierOptions = backfillCatering(state.modifierOptions);
+  }
+
   return persisted as MenuState;
 }
 
 /** Visibility channel + schedule fields copied when an item inherits from its category. */
 const VISIBILITY_FIELDS = [
   'visibilityPos', 'visibilityKiosk', 'visibilityMenuBoard', 'visibilityQr',
-  'visibilityWebsite', 'visibilityOnline', 'visibilityMobileApp', 'visibilityNugget', 'visibilityDoordash',
+  'visibilityWebsite', 'visibilityOnline', 'visibilityMobileApp', 'visibilityNugget',
+  'visibilityCatering', 'visibilityDoordash',
   'daySchedules', 'daySchedulesByGroup',
 ] as const;
 

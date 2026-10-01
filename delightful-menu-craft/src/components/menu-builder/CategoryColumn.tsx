@@ -406,15 +406,7 @@ export function CategoryColumn({
       tagIds: '',
       menuIds: category.menuIds,
       sortOrder: siblings.length,
-      visibilityPos: true,
-      visibilityKiosk: true,
-      visibilityMenuBoard: true,
-      visibilityNugget: true,
-      visibilityQr: true,
-      visibilityWebsite: true,
-      visibilityOnline: true,
-      visibilityMobileApp: true,
-      visibilityDoordash: true,
+      ...defaultVisibility(),
       daySchedules: JSON.stringify({ Mon: { enabled: true, start: '', end: '' }, Tue: { enabled: true, start: '', end: '' }, Wed: { enabled: true, start: '', end: '' }, Thu: { enabled: true, start: '', end: '' }, Fri: { enabled: true, start: '', end: '' }, Sat: { enabled: true, start: '', end: '' }, Sun: { enabled: true, start: '', end: '' } }),
     };
     addCategory(newSubcat);
