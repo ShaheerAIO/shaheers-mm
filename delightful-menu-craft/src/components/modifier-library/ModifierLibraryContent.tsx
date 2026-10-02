@@ -42,6 +42,7 @@ import {
   defaultVisibility,
   getChannelsByGroup,
   toggleVisibilityChannel,
+  pickVisibility,
   type VisibilityChannelKey,
 } from '@/lib/visibility';
 import { Label } from '@/components/ui/label';
@@ -703,7 +704,7 @@ function modifierNamesInitiallyLinked(m: Modifier): boolean {
   return !pos || pos === name;
 }
 
-interface ModifierDraft {
+interface ModifierDraftFields {
   modifierName: string;
   posDisplayName: string;
   prefix: string;
@@ -718,17 +719,9 @@ interface ModifierDraft {
   canGuestSelectMoreModifiers: boolean;
   pizzaSelection: boolean;
   isSizeModifier: boolean;
-  // Channel visibility
-  visibilityPos: boolean;
-  visibilityKiosk: boolean;
-  visibilityMenuBoard: boolean;
-  visibilityNugget: boolean;
-  visibilityQr: boolean;
-  visibilityWebsite: boolean;
-  visibilityOnline: boolean;
-  visibilityMobileApp: boolean;
-  visibilityDoordash: boolean;
 }
+// Plus the channel visibility flags.
+type ModifierDraft = ModifierDraftFields & Record<VisibilityChannelKey, boolean>;
 
 function ModifierDetail({ modifier }: ModifierDetailProps) {
   const {
@@ -797,16 +790,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
     pizzaSelection: modifier.pizzaSelection,
     isSizeModifier: modifier.isSizeModifier,
-    ...defaultVisibility(),
-    visibilityPos: modifier.visibilityPos ?? true,
-    visibilityKiosk: modifier.visibilityKiosk ?? true,
-    visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
-    visibilityNugget: modifier.visibilityNugget ?? true,
-    visibilityQr: modifier.visibilityQr ?? true,
-    visibilityWebsite: modifier.visibilityWebsite ?? true,
-    visibilityOnline: modifier.visibilityOnline ?? true,
-    visibilityMobileApp: modifier.visibilityMobileApp ?? true,
-    visibilityDoordash: modifier.visibilityDoordash ?? true,
+    ...pickVisibility(modifier),
   });
 
   // Reset draft when modifier changes
@@ -826,16 +810,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
-      ...defaultVisibility(),
-      visibilityPos: modifier.visibilityPos ?? true,
-      visibilityKiosk: modifier.visibilityKiosk ?? true,
-      visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
-      visibilityNugget: modifier.visibilityNugget ?? true,
-      visibilityQr: modifier.visibilityQr ?? true,
-      visibilityWebsite: modifier.visibilityWebsite ?? true,
-      visibilityOnline: modifier.visibilityOnline ?? true,
-      visibilityMobileApp: modifier.visibilityMobileApp ?? true,
-      visibilityDoordash: modifier.visibilityDoordash ?? true,
+      ...pickVisibility(modifier),
     });
     setOptionSearch('');
     setExpandedNestedChildIds([]);
@@ -949,15 +924,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
         canGuestSelectMoreModifiers: draft.canGuestSelectMoreModifiers,
         pizzaSelection: draft.pizzaSelection,
         isSizeModifier: draft.isSizeModifier,
-        visibilityPos: draft.visibilityPos,
-        visibilityKiosk: draft.visibilityKiosk,
-        visibilityMenuBoard: draft.visibilityMenuBoard,
-        visibilityNugget: draft.visibilityNugget,
-        visibilityQr: draft.visibilityQr,
-        visibilityWebsite: draft.visibilityWebsite,
-        visibilityOnline: draft.visibilityOnline,
-        visibilityMobileApp: draft.visibilityMobileApp,
-        visibilityDoordash: draft.visibilityDoordash,
+        ...pickVisibility(draft),
       });
     }
     setSelectedModifier(null);
@@ -979,16 +946,7 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       canGuestSelectMoreModifiers: modifier.canGuestSelectMoreModifiers ?? true,
       pizzaSelection: modifier.pizzaSelection,
       isSizeModifier: modifier.isSizeModifier,
-      ...defaultVisibility(),
-      visibilityPos: modifier.visibilityPos ?? true,
-      visibilityKiosk: modifier.visibilityKiosk ?? true,
-      visibilityMenuBoard: modifier.visibilityMenuBoard ?? true,
-      visibilityNugget: modifier.visibilityNugget ?? true,
-      visibilityQr: modifier.visibilityQr ?? true,
-      visibilityWebsite: modifier.visibilityWebsite ?? true,
-      visibilityOnline: modifier.visibilityOnline ?? true,
-      visibilityMobileApp: modifier.visibilityMobileApp ?? true,
-      visibilityDoordash: modifier.visibilityDoordash ?? true,
+      ...pickVisibility(modifier),
     });
     setModifierNameDrivesPos(modifierNamesInitiallyLinked(modifier));
     setTouched({ modifierName: false, posDisplayName: false });
@@ -1557,13 +1515,20 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
       });
     } else if (detectedMode === 'nested') {
       const count = childModifiers.length;
+      // Also unlink modifiers whose parentModifierId still points here but that
+      // aren't in modifierIds — once that list is cleared they'd resolve as children.
+      const snapshot = [...new Set([
+        ...childModifiers.map((c) => c.id),
+        ...modifiers.filter((m) => m.parentModifierId === modifier.id).map((m) => m.id),
+      ])];
       setConfirmState({
         title: 'Switch to Flat Options?',
         description: `This will unlink ${count} nested modifier${count !== 1 ? 's' : ''} from this modifier.`,
         confirmLabel: 'Switch',
         destructive: false,
         onConfirm: () => {
-          updateModifier(modifier.id, { modifierIds: '' });
+          updateModifier(modifier.id, { modifierIds: '', addNested: false });
+          snapshot.forEach((childId) => updateModifier(childId, { parentModifierId: 0, isNested: false }));
           setChosenMode(targetMode);
         },
       });

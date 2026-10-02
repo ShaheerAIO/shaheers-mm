@@ -17,6 +17,8 @@ import {
   buildGroupSchedulesSummary,
   defaultGroupSchedules,
   toggleVisibilityChannel,
+  pickVisibility,
+  visibilityDiffers,
   type ChannelGroupSchedules,
   type DayKey,
   type VisibilityChannelKey,
@@ -139,15 +141,7 @@ export function CategoryDetailPanel({ category }: Props) {
     color: category.color || DEFAULT_CATEGORY_COLOR,
     image: category.image || '',
     kioskImage: category.kioskImage || '',
-    visibilityPos: category.visibilityPos ?? true,
-    visibilityKiosk: category.visibilityKiosk ?? true,
-    visibilityMenuBoard: category.visibilityMenuBoard ?? true,
-    visibilityNugget: category.visibilityNugget ?? true,
-    visibilityQr: category.visibilityQr ?? true,
-    visibilityWebsite: category.visibilityWebsite ?? true,
-    visibilityOnline: category.visibilityOnline ?? true,
-    visibilityMobileApp: category.visibilityMobileApp ?? true,
-    visibilityDoordash: category.visibilityDoordash ?? true,
+    ...pickVisibility(category),
     daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
   }));
 
@@ -211,15 +205,7 @@ export function CategoryDetailPanel({ category }: Props) {
       color: category.color || DEFAULT_CATEGORY_COLOR,
       image: category.image || '',
       kioskImage: category.kioskImage || '',
-      visibilityPos: category.visibilityPos ?? true,
-      visibilityKiosk: category.visibilityKiosk ?? true,
-      visibilityMenuBoard: category.visibilityMenuBoard ?? true,
-      visibilityNugget: category.visibilityNugget ?? true,
-      visibilityQr: category.visibilityQr ?? true,
-      visibilityWebsite: category.visibilityWebsite ?? true,
-      visibilityOnline: category.visibilityOnline ?? true,
-      visibilityMobileApp: category.visibilityMobileApp ?? true,
-      visibilityDoordash: category.visibilityDoordash ?? true,
+      ...pickVisibility(category),
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));
@@ -253,15 +239,7 @@ export function CategoryDetailPanel({ category }: Props) {
     draft.color !== (category.color || DEFAULT_CATEGORY_COLOR) ||
     draft.image !== (category.image || '') ||
     draft.kioskImage !== (category.kioskImage || '') ||
-    draft.visibilityPos !== (category.visibilityPos ?? true) ||
-    draft.visibilityKiosk !== (category.visibilityKiosk ?? true) ||
-    draft.visibilityMenuBoard !== (category.visibilityMenuBoard ?? true) ||
-    draft.visibilityNugget !== (category.visibilityNugget ?? true) ||
-    draft.visibilityQr !== (category.visibilityQr ?? true) ||
-    draft.visibilityWebsite !== (category.visibilityWebsite ?? true) ||
-    draft.visibilityOnline !== (category.visibilityOnline ?? true) ||
-    draft.visibilityMobileApp !== (category.visibilityMobileApp ?? true) ||
-    draft.visibilityDoordash !== (category.visibilityDoordash ?? true) ||
+    visibilityDiffers(draft, category) ||
     serializeGroupSchedules(draft.daySchedulesByGroup) !== (category.daySchedulesByGroup || serializeGroupSchedules(defaultGroupSchedules())) ||
     serializeIds(tagIds) !== serializeIds(new Set(parseIds(category.tagIds))) ||
     serializeIds(allergenIds) !== serializeIds(new Set(parseIds(category.allergenIds))) ||
@@ -290,15 +268,7 @@ export function CategoryDetailPanel({ category }: Props) {
       color: category.color || DEFAULT_CATEGORY_COLOR,
       image: category.image || '',
       kioskImage: category.kioskImage || '',
-      visibilityPos: category.visibilityPos ?? true,
-      visibilityKiosk: category.visibilityKiosk ?? true,
-      visibilityMenuBoard: category.visibilityMenuBoard ?? true,
-      visibilityNugget: category.visibilityNugget ?? true,
-      visibilityQr: category.visibilityQr ?? true,
-      visibilityWebsite: category.visibilityWebsite ?? true,
-      visibilityOnline: category.visibilityOnline ?? true,
-      visibilityMobileApp: category.visibilityMobileApp ?? true,
-      visibilityDoordash: category.visibilityDoordash ?? true,
+      ...pickVisibility(category),
       daySchedulesByGroup: parseGroupSchedules(category.daySchedulesByGroup, category.daySchedules),
     });
     setTagIds(new Set(parseIds(category.tagIds)));

@@ -17,18 +17,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Item } from '@/types/menu';
+import { VISIBILITY_CHANNELS } from '@/lib/visibility';
 
 // ─── Channels (for coverage + issue checks) ──────────────────────────────────
 
-const CHANNELS = [
-  { key: 'visibilityPos' as keyof Item,       label: 'POS' },
-  { key: 'visibilityKiosk' as keyof Item,     label: 'Kiosk' },
-  { key: 'visibilityMenuBoard' as keyof Item, label: 'Menu Board' },
-  { key: 'visibilityQr' as keyof Item,        label: 'QR' },
-  { key: 'visibilityWebsite' as keyof Item,   label: 'Website' },
-  { key: 'visibilityMobileApp' as keyof Item, label: 'MPOS' },
-  { key: 'visibilityDoordash' as keyof Item,  label: 'DoorDash' },
-];
+const CHANNELS: { key: keyof Item; label: string }[] = VISIBILITY_CHANNELS.map(
+  ({ key, label }) => ({ key: key as keyof Item, label }),
+);
 
 // ─── Compact issue list (carried over from the old Stats view) ───────────────
 
