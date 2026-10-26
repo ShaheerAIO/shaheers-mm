@@ -1822,8 +1822,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                         getModTypeBarClasses(modifier),
                       )}
                     >
-                      <div className="flex items-center justify-between w-full pr-2 gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center justify-between w-full min-w-0 pr-2 gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           {isDraggable && (
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0 cursor-grab active:cursor-grabbing" />
                           )}
@@ -1843,7 +1843,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             {getModTypeLabel(modifier)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-0.5">
+                        <div className="flex items-center gap-0.5 shrink-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
