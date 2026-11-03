@@ -97,6 +97,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Static auth value for the no-backend demo build; never touches Supabase. */
+export function DemoAuthProvider({ children }: { children: ReactNode }) {
+  const value: AuthContextValue = {
+    user: { id: 'demo', email: 'demo@example.com' } as User,
+    role: 'member',
+    isAdmin: false,
+    loading: false,
+    signInWithMicrosoft: async () => ({ error: 'Disabled in demo' }),
+    signOut: async () => {},
+  };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within an AuthProvider');

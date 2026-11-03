@@ -296,6 +296,38 @@ export interface Station {
 }
 
 // =============================================================================
+// Demo: modifier presets & per-item option overrides
+// A separate layer over the shared ModifierModifierOption joins — never exported
+// to Excel (the POS doesn't support it). Resolution lives in lib/optionOverrides.ts.
+// =============================================================================
+
+/** One option's override. Absent field = inherit from the layer below. */
+export interface OptionOverride {
+  modifierOptionId: number;
+  hidden?: boolean;   // true = hide, false = explicitly show (beats a preset that hides it)
+  price?: number;     // replaces the join's maxLimit for this option
+}
+
+/** A named, reusable override pattern owned by a modifier (e.g. Size Choice → "Coffee"). */
+export interface ModifierPreset {
+  id: number;
+  modifierId: number;
+  name: string;              // e.g. "Coffee"
+  overrides: OptionOverride[];
+  sortOrder: number;
+}
+
+/** Per (item, modifier) configuration. modifierId may be a top-level attached modifier or a nested child modifier reached through one. */
+export interface ItemModifierConfig {
+  itemId: number;
+  modifierId: number;
+  presetId: number | null;
+  overrides: OptionOverride[];
+}
+
+export type OptionOverridePatch = { hidden?: boolean | null; price?: number | null }; // null = clear back to inherit; undefined = leave unchanged
+
+// =============================================================================
 // UI State Types
 // =============================================================================
 

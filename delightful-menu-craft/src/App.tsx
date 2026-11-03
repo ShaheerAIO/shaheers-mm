@@ -11,7 +11,8 @@ import Login from "./pages/Login";
 import Workspaces from "./pages/Workspaces";
 import Team from "./pages/Team";
 import NotFound from "./pages/NotFound";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, DemoAuthProvider, useAuth } from "@/contexts/AuthContext";
+import { DEMO_MODE } from "@/lib/demo";
 import {
   useWorkspaceSession,
   openWorkspace,
@@ -75,6 +76,17 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          {DEMO_MODE ? (
+            <DemoAuthProvider>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="/workspaces" element={<Navigate to="/" replace />} />
+                <Route path="/team" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </DemoAuthProvider>
+          ) : (
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -110,6 +122,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
+          )}
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>

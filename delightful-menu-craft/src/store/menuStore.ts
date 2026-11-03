@@ -22,6 +22,10 @@ import type {
   TabType,
   ViewMode,
   AiPatch,
+  ModifierPreset,
+  ItemModifierConfig,
+  OptionOverride,
+  OptionOverridePatch,
 } from '@/types/menu';
 import { DEFAULT_MENU_COLOR } from '@/lib/posColors';
 import {
@@ -32,6 +36,17 @@ import {
   resolveSaleCategory,
 } from '@/lib/saleCategories';
 import { resolveOptionPriceScope } from '@/lib/optionPriceScope';
+import { buildModifierNesting } from '@/lib/modifierNesting';
+import {
+  applyOverridePatch,
+  getItemModifierConfig,
+  getModifierDescendantIds,
+  mergeOverrides,
+  normalizeConfigs,
+  normalizeOverrides,
+  stripOptionFromOverrides,
+  upsertItemModifierConfig,
+} from '@/lib/optionOverrides';
 
 // System tags are always present in the store and cannot be deleted.
 export const SYSTEM_TAGS: Tag[] = [
@@ -108,6 +123,10 @@ interface MenuState {
   // Derived / helper data (not part of Excel schema)
   stations: Station[]; // canonical station catalog
   taxRate: number; // restaurant-level tax rate (percentage, e.g. 10 = 10%)
+
+  // Demo: modifier presets & per-item option overrides (never exported to Excel).
+  modifierPresets: ModifierPreset[];
+  itemModifierConfigs: ItemModifierConfig[];
 
   // Actions - UI
   setActiveTab: (tab: TabType) => void;
@@ -276,6 +295,25 @@ interface MenuState {
   bulkAddOptionsToModifiers: (modifierIds: number[], optionIds: number[]) => void;
   bulkRemoveOptionsFromModifiers: (modifierIds: number[], optionIds: number[]) => void;
 
+  // Actions - Demo: modifier presets & per-item option overrides
+  // Actions return 0 instead of an id when nothing was created (read-only / not found).
+  createModifierPreset: (modifierId: number, name: string, overrides?: OptionOverride[]) => number;
+  updateModifierPreset: (id: number, updates: Partial<Pick<ModifierPreset, 'name' | 'overrides' | 'sortOrder'>>) => void;
+  setPresetOptionOverride: (presetId: number, modifierOptionId: number, patch: OptionOverridePatch) => void;
+  /** Items pointing at it get presetId null but keep their own overrides. */
+  deleteModifierPreset: (id: number) => void;
+  /** Copy named "<name> copy", appended to the modifier's presets. */
+  duplicateModifierPreset: (id: number) => number;
+  /** Assigning a (different) preset clears the item's own overrides for that modifier. */
+  setItemModifierPreset: (itemId: number, modifierId: number, presetId: number | null) => void;
+  setItemOptionOverride: (itemId: number, modifierId: number, modifierOptionId: number, patch: OptionOverridePatch) => void;
+  /** Clears the item's own overrides, keeps its preset. */
+  resetItemModifierOverrides: (itemId: number, modifierId: number) => void;
+  /** New preset = current preset's overrides merged with the item's (item wins); assigned to the item. */
+  saveItemModifierAsPreset: (itemId: number, modifierId: number, name: string) => number;
+  /** Bulk assign; attaches the (top-level) modifier to items that don't have it yet. */
+  applyPresetToItems: (presetId: number, itemIds: number[]) => void;
+
   // Helper - Get next ID
   getNextId: (entity: keyof Pick<MenuState, 'menus' | 'categories' | 'items' | 'modifiers' | 'modifierOptions' | 'modifierGroups' | 'allergens' | 'tags' | 'customTaxes'>) => number;
 }
@@ -375,7 +413,7 @@ const expandCategoryDescendants = (rootIds: number[], categories: Category[]): S
 };
 
 /** Current schema version. Bump + add a migration in runMigrations when the data shape changes. */
-export const STORE_VERSION = 23;
+export const STORE_VERSION = 24;
 
 /** The data fields that make up a saved workspace (everything except UI state). */
 export const WORKSPACE_DATA_KEYS = [
@@ -383,6 +421,7 @@ export const WORKSPACE_DATA_KEYS = [
   'categoryModifiers', 'categoryItems', 'itemModifierGroups', 'modifierGroups',
   'modifiers', 'modifierOptions', 'modifierModifierOptions', 'allergens', 'tags',
   'salesCategories', 'customTaxes', 'stations', 'taxRate',
+  'modifierPresets', 'itemModifierConfigs',
 ] as const;
 
 export type WorkspaceData = Pick<MenuState, typeof WORKSPACE_DATA_KEYS[number]>;
@@ -415,6 +454,8 @@ export function createFreshWorkspaceData(): WorkspaceData {
     customTaxes: [],
     stations: [],
     taxRate: 10,
+    modifierPresets: [],
+    itemModifierConfigs: [],
   };
 }
 
@@ -829,6 +870,12 @@ export function runMigrations(persisted: unknown, fromVersion: number): MenuStat
       flatParentIds.has(m.parentModifierId) ? { ...m, parentModifierId: 0, isNested: false } : m);
   }
 
+  if (fromVersion < 24) {
+    // Demo: modifier presets & per-item option overrides start empty.
+    if (!Array.isArray(state.modifierPresets)) state.modifierPresets = [];
+    if (!Array.isArray(state.itemModifierConfigs)) state.itemModifierConfigs = [];
+  }
+
   return persisted as MenuState;
 }
 
@@ -903,6 +950,8 @@ export const useMenuStore = create<MenuState>()(
       customTaxes: [],
       stations: [],
       taxRate: 10,
+      modifierPresets: [],
+      itemModifierConfigs: [],
 
       // UI Actions
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -1011,6 +1060,8 @@ export const useMenuStore = create<MenuState>()(
           items: reconciledItems,
           customTaxes: data.customTaxes ?? [],
           stations,
+          modifierPresets: [],
+          itemModifierConfigs: [],
           isDataLoaded: true,
           selectedMenuId: data.menus.length > 0 ? data.menus[0].id : null,
         });
@@ -1059,6 +1110,9 @@ export const useMenuStore = create<MenuState>()(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (next as any)[key] = (migrated as any)[key];
         }
+        // Demo override layer: tolerate blobs that never carried it.
+        next.modifierPresets = next.modifierPresets ?? [];
+        next.itemModifierConfigs = next.itemModifierConfigs ?? [];
         set({
           ...next,
           isDataLoaded: true,
@@ -1092,6 +1146,8 @@ export const useMenuStore = create<MenuState>()(
         salesCategories: freshSalesCategories(),
         customTaxes: [],
         stations: [],
+        modifierPresets: [],
+        itemModifierConfigs: [],
         isDataLoaded: false,
         selectedMenuId: null,
         selectedCategoryId: null,
@@ -1128,12 +1184,170 @@ export const useMenuStore = create<MenuState>()(
         salesCategories: freshSalesCategories(),
         customTaxes: [],
         stations: [],
+        modifierPresets: [],
+        itemModifierConfigs: [],
         isDataLoaded: true,
         selectedMenuId: 1,
         selectedCategoryId: null,
         selectedItemId: null,
         selectedModifierId: null,
       }); },
+
+      // Demo: modifier presets & per-item option overrides
+      createModifierPreset: (modifierId, name, overrides = []) => {
+        const state = get();
+        if (state.isReadOnly) return 0;
+        const id = getMaxId(state.modifierPresets) + 1;
+        const sortOrder = state.modifierPresets
+          .filter((p) => p.modifierId === modifierId)
+          .reduce((m, p) => Math.max(m, p.sortOrder), -1) + 1;
+        set((s) => ({
+          modifierPresets: [
+            ...s.modifierPresets,
+            { id, modifierId, name, overrides: normalizeOverrides(overrides), sortOrder },
+          ],
+        }));
+        return id;
+      },
+
+      updateModifierPreset: (id, updates) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          return {
+            modifierPresets: state.modifierPresets.map((p) =>
+              p.id === id
+                ? {
+                    ...p,
+                    ...updates,
+                    ...(updates.overrides ? { overrides: normalizeOverrides(updates.overrides) } : {}),
+                  }
+                : p,
+            ),
+          };
+        }),
+
+      setPresetOptionOverride: (presetId, modifierOptionId, patch) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          return {
+            modifierPresets: state.modifierPresets.map((p) =>
+              p.id === presetId
+                ? { ...p, overrides: applyOverridePatch(p.overrides, modifierOptionId, patch) }
+                : p,
+            ),
+          };
+        }),
+
+      deleteModifierPreset: (id) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          return {
+            modifierPresets: state.modifierPresets.filter((p) => p.id !== id),
+            itemModifierConfigs: normalizeConfigs(
+              state.itemModifierConfigs.map((c) => (c.presetId === id ? { ...c, presetId: null } : c)),
+            ),
+          };
+        }),
+
+      duplicateModifierPreset: (id) => {
+        const source = get().modifierPresets.find((p) => p.id === id);
+        if (!source) return 0;
+        return get().createModifierPreset(
+          source.modifierId,
+          `${source.name} copy`,
+          source.overrides.map((o) => ({ ...o })),
+        );
+      },
+
+      setItemModifierPreset: (itemId, modifierId, presetId) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          if (presetId !== null) {
+            const preset = state.modifierPresets.find((p) => p.id === presetId);
+            if (!preset || preset.modifierId !== modifierId) return {};
+          }
+          const current = getItemModifierConfig(state.itemModifierConfigs, itemId, modifierId);
+          // Re-picking the preset already assigned keeps the item's customizations.
+          if ((current?.presetId ?? null) === presetId) return {};
+          return {
+            itemModifierConfigs: upsertItemModifierConfig(
+              state.itemModifierConfigs, itemId, modifierId,
+              // A newly assigned preset is a fresh start; unassigning keeps the item's own overrides.
+              (c) => ({ ...c, presetId, overrides: presetId !== null ? [] : c.overrides }),
+            ),
+          };
+        }),
+
+      setItemOptionOverride: (itemId, modifierId, modifierOptionId, patch) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          return {
+            itemModifierConfigs: upsertItemModifierConfig(
+              state.itemModifierConfigs, itemId, modifierId,
+              (c) => ({ ...c, overrides: applyOverridePatch(c.overrides, modifierOptionId, patch) }),
+            ),
+          };
+        }),
+
+      resetItemModifierOverrides: (itemId, modifierId) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          if (!getItemModifierConfig(state.itemModifierConfigs, itemId, modifierId)) return {};
+          return {
+            itemModifierConfigs: upsertItemModifierConfig(
+              state.itemModifierConfigs, itemId, modifierId,
+              (c) => ({ ...c, overrides: [] }),
+            ),
+          };
+        }),
+
+      saveItemModifierAsPreset: (itemId, modifierId, name) => {
+        const state = get();
+        if (state.isReadOnly) return 0;
+        const config = getItemModifierConfig(state.itemModifierConfigs, itemId, modifierId);
+        const currentPreset = config?.presetId != null
+          ? state.modifierPresets.find((p) => p.id === config.presetId && p.modifierId === modifierId)
+          : undefined;
+        const overrides = mergeOverrides(currentPreset?.overrides ?? [], config?.overrides ?? []);
+        const presetId = get().createModifierPreset(modifierId, name, overrides);
+        set((s) => ({
+          itemModifierConfigs: upsertItemModifierConfig(
+            s.itemModifierConfigs, itemId, modifierId,
+            (c) => ({ ...c, presetId, overrides: [] }),
+          ),
+        }));
+        return presetId;
+      },
+
+      applyPresetToItems: (presetId, itemIds) =>
+        set((state) => {
+          if (state.isReadOnly) return {};
+          const preset = state.modifierPresets.find((p) => p.id === presetId);
+          if (!preset) return {};
+          const { modifierId } = preset;
+          // Nested children can't be linked to items directly (POS rule) — they're
+          // reached through their parent, so only top-level modifiers get attached.
+          const isNested = buildModifierNesting(state.modifiers).nestedIds.has(modifierId);
+          const itemIdSet = new Set(state.items.map((i) => i.id));
+
+          let itemModifiers = state.itemModifiers;
+          let itemModifierConfigs = state.itemModifierConfigs;
+          for (const itemId of new Set(itemIds)) {
+            if (!itemIdSet.has(itemId)) continue;
+            const mine = itemModifiers.filter((im) => im.itemId === itemId);
+            if (!isNested && !mine.some((im) => im.modifierId === modifierId)) {
+              const sortOrder = mine.reduce((m, im) => Math.max(m, im.sortOrder), -1) + 1;
+              itemModifiers = [...itemModifiers, { itemId, modifierId, sortOrder }];
+            }
+            const current = getItemModifierConfig(itemModifierConfigs, itemId, modifierId);
+            if (current?.presetId === presetId) continue; // already on it — keep customizations
+            itemModifierConfigs = upsertItemModifierConfig(
+              itemModifierConfigs, itemId, modifierId,
+              (c) => ({ ...c, presetId, overrides: [] }),
+            );
+          }
+          return { itemModifiers, itemModifierConfigs };
+        }),
 
       // Helper - Get next ID
       getNextId: (entity) => {
@@ -1264,6 +1478,7 @@ export const useMenuStore = create<MenuState>()(
         items: state.items.filter((i) => i.id !== id),
         itemModifiers: state.itemModifiers.filter((im) => im.itemId !== id),
         categoryItems: state.categoryItems.filter((ci) => ci.itemId !== id),
+        itemModifierConfigs: state.itemModifierConfigs.filter((c) => c.itemId !== id),
       })),
       duplicateItem: (itemId) => {
         const state = get();
@@ -1301,10 +1516,16 @@ export const useMenuStore = create<MenuState>()(
             return { ...ci, id: nextCatItemId++, itemId: newItemId, sortOrder: maxSort + 1 };
           });
 
+        // Demo override layer: the copy starts with the source's presets/overrides.
+        const newConfigs: ItemModifierConfig[] = state.itemModifierConfigs
+          .filter((c) => c.itemId === itemId)
+          .map((c) => ({ ...c, itemId: newItemId, overrides: c.overrides.map((o) => ({ ...o })) }));
+
         set((s) => ({
           items: [...s.items, newItem],
           itemModifiers: [...s.itemModifiers, ...newItemModifiers],
           categoryItems: [...s.categoryItems, ...newCategoryItems],
+          itemModifierConfigs: [...s.itemModifierConfigs, ...newConfigs],
         }));
         return newItemId;
       },
@@ -1341,6 +1562,8 @@ export const useMenuStore = create<MenuState>()(
             ),
             itemModifierGroups: state.itemModifierGroups.filter((g) => g.modifierId !== id),
             categoryModifiers: state.categoryModifiers.filter((cm) => cm.modifierId !== id),
+            modifierPresets: state.modifierPresets.filter((p) => p.modifierId !== id),
+            itemModifierConfigs: state.itemModifierConfigs.filter((c) => c.modifierId !== id),
             modifierGroups: state.modifierGroups.map((mg) => ({
               ...mg,
               modifierIds: strip(mg.modifierIds),
@@ -1389,6 +1612,14 @@ export const useMenuStore = create<MenuState>()(
       deleteModifierOption: (id) => set((state) => ({
         modifierOptions: state.modifierOptions.filter((o) => o.id !== id),
         modifierModifierOptions: state.modifierModifierOptions.filter((mmo) => mmo.modifierOptionId !== id),
+        modifierPresets: state.modifierPresets.map((p) => {
+          const overrides = stripOptionFromOverrides(p.overrides, id);
+          return overrides === p.overrides ? p : { ...p, overrides };
+        }),
+        itemModifierConfigs: normalizeConfigs(state.itemModifierConfigs.map((c) => {
+          const overrides = stripOptionFromOverrides(c.overrides, id);
+          return overrides === c.overrides ? c : { ...c, overrides };
+        })),
       })),
 
       setOptionPriceEverywhere: (optionId, price) =>
@@ -1495,11 +1726,26 @@ export const useMenuStore = create<MenuState>()(
       addItemModifier: (itemModifier) => set((state) => ({ 
         itemModifiers: [...state.itemModifiers, itemModifier] 
       })),
-      removeItemModifier: (modifierId, itemId) => set((state) => ({
-        itemModifiers: state.itemModifiers.filter(
+      removeItemModifier: (modifierId, itemId) => set((state) => {
+        const itemModifiers = state.itemModifiers.filter(
           (im) => !(im.modifierId === modifierId && im.itemId === itemId)
-        ),
-      })),
+        );
+        // Demo override layer: drop configs for this modifier and the children
+        // reached through it — unless another attached modifier still reaches them.
+        const stillReachable = new Set<number>();
+        for (const im of itemModifiers) {
+          if (im.itemId !== itemId) continue;
+          stillReachable.add(im.modifierId);
+          getModifierDescendantIds(state.modifiers, im.modifierId).forEach((id) => stillReachable.add(id));
+        }
+        const dropped = new Set([modifierId, ...getModifierDescendantIds(state.modifiers, modifierId)]);
+        return {
+          itemModifiers,
+          itemModifierConfigs: state.itemModifierConfigs.filter(
+            (c) => !(c.itemId === itemId && dropped.has(c.modifierId) && !stillReachable.has(c.modifierId)),
+          ),
+        };
+      }),
       reorderItemModifiers: (itemId, fromModifierId, toModifierId) =>
         set((state) => {
           if (state.isReadOnly) return {};
@@ -1552,6 +1798,16 @@ export const useMenuStore = create<MenuState>()(
         modifierModifierOptions: state.modifierModifierOptions.filter(
           (mmo) => !(mmo.modifierId === modifierId && mmo.modifierOptionId === optionId)
         ),
+        modifierPresets: state.modifierPresets.map((p) => {
+          if (p.modifierId !== modifierId) return p;
+          const overrides = stripOptionFromOverrides(p.overrides, optionId);
+          return overrides === p.overrides ? p : { ...p, overrides };
+        }),
+        itemModifierConfigs: normalizeConfigs(state.itemModifierConfigs.map((c) => {
+          if (c.modifierId !== modifierId) return c;
+          const overrides = stripOptionFromOverrides(c.overrides, optionId);
+          return overrides === c.overrides ? c : { ...c, overrides };
+        })),
       })),
       reorderModifierOptions: (modifierId, fromIndex, toIndex) =>
         set((state) => {

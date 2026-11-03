@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { DEMO_MODE } from '@/lib/demo';
 import { uploadCategoryImage } from '@/lib/categoryImageUpload';
 import {
   Dialog,
@@ -72,7 +73,7 @@ export function CategoryImageLibraryModal({
               className="hidden"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
-            <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
+            <button type="button" disabled={uploading || DEMO_MODE} title={DEMO_MODE ? 'Not available in demo' : undefined} onClick={() => fileInputRef.current?.click()} className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted">
               {file ? 'Choose another file' : 'Choose file'}
             </button>
             {file && <p className="mt-2 text-xs text-muted-foreground">{file.name}</p>}

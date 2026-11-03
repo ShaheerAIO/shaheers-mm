@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Item } from '@/types/menu';
-import { effectiveUnitPrice } from '@/lib/posPricing';
+import { itemUnitPrice } from '../pos-preview/ModifierPanel';
 import { KioskMenuScreen } from './KioskMenuScreen';
 import { KioskCustomizeScreen } from './KioskCustomizeScreen';
 import { KioskCartScreen } from './KioskCartScreen';
@@ -34,7 +34,7 @@ type Screen = 'menu' | 'customize' | 'cart' | 'checkout' | 'confirmation';
  * POSPreview's local-state model; reuses the shared size-aware pricing math.
  */
 export function KioskPreview() {
-  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, modifiers, modifierModifierOptions } =
+  const { menus, selectedMenuId, setSelectedMenu, isDataLoaded, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs } =
     useMenuStore();
 
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
@@ -59,10 +59,15 @@ export function KioskPreview() {
     () =>
       cartLines.reduce(
         (s, l) =>
-          s + effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions) * l.qty,
+          s + itemUnitPrice(l.item.id, l.item.itemPrice, l.selectedOptions, modifiers, {
+            modifierModifierOptions,
+            modifierOptions,
+            modifierPresets,
+            itemModifierConfigs,
+          }) * l.qty,
         0,
       ),
-    [cartLines, modifiers, modifierModifierOptions],
+    [cartLines, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs],
   );
   const cartCount = useMemo(() => cartLines.reduce((n, l) => n + l.qty, 0), [cartLines]);
 

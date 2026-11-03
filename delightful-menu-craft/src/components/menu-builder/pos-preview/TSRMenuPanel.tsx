@@ -31,6 +31,8 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
     modifiers,
     modifierModifierOptions,
     modifierOptions,
+    modifierPresets,
+    itemModifierConfigs,
   } = useMenuStore();
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -217,6 +219,7 @@ export function TSRMenuPanel({ onAddToTicket, onTicketBlockChange, searchQuery =
         modifiers,
         modifierModifierOptions,
         modifierOptions,
+        { modifierPresets, itemModifierConfigs },
       )
     ) {
       onAddToTicket(item, {}, 1);

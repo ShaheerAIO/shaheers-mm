@@ -3,7 +3,7 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, Minus, Plus, UtensilsCrossed } from 'lucide-react';
 import type { Item } from '@/types/menu';
-import { effectiveUnitPrice } from '@/lib/posPricing';
+import { itemUnitPrice } from '../pos-preview/ModifierPanel';
 import type { CartLine } from './KioskPreview';
 
 interface KioskCartScreenProps {
@@ -28,7 +28,7 @@ export function KioskCartScreen({
   onClear,
   onCheckout,
 }: KioskCartScreenProps) {
-  const { modifiers, modifierOptions, modifierModifierOptions } = useMenuStore();
+  const { modifiers, modifierOptions, modifierModifierOptions, modifierPresets, itemModifierConfigs } = useMenuStore();
 
   /** Dot-joined option names for a line ("Medium · Warm it up"). */
   const optionSummary = (line: CartLine): string =>
@@ -74,12 +74,12 @@ export function KioskCartScreen({
         ) : (
           <div className="space-y-3">
             {lines.map((line) => {
-              const unit = effectiveUnitPrice(
-                line.item.itemPrice,
-                line.selectedOptions,
-                modifiers,
+              const unit = itemUnitPrice(line.item.id, line.item.itemPrice, line.selectedOptions, modifiers, {
                 modifierModifierOptions,
-              );
+                modifierOptions,
+                modifierPresets,
+                itemModifierConfigs,
+              });
               const lineTotal = unit * line.qty;
               const summary = optionSummary(line);
               return (

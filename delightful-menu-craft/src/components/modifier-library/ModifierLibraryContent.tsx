@@ -55,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ModifierPresetsSection } from './ModifierPresetsSection';
 import { CreateOptionModal } from './CreateOptionModal';
 import { OptionsLibraryModal } from './OptionsLibraryModal';
 import {
@@ -2272,6 +2273,8 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
               </div>
             </div>
           </div>}
+
+          <ModifierPresetsSection modifierId={modifier.id} isNoCharge={isNoCharge} isNested={!!modifier.isNested} />
 
           {/* Channel Visibility — On-Prem / Off-Prem split into two columns */}
           <div className="space-y-2 p-4 bg-muted/30 rounded-lg">

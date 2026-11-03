@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useMenuStore } from '@/store/menuStore';
 import { useAuth } from '@/contexts/AuthContext';
+import { DEMO_MODE } from '@/lib/demo';
 import { closeWorkspace } from '@/lib/workspaceSync';
 import type { TabType } from '@/types/menu';
 import { cn } from '@/lib/utils';
@@ -62,7 +63,7 @@ export function LeftSidebar() {
         ))}
       </nav>
 
-      {isAdmin && (
+      {isAdmin && !DEMO_MODE && (
         <button onClick={() => navigate('/team')} className="sidebar-tab" title="Team">
           <Users className="sidebar-tab-icon" />
           <span className="sidebar-tab-label">Team</span>

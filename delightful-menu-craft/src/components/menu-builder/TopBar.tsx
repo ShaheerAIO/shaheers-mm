@@ -10,6 +10,7 @@ import { Upload, Download, FilePlus, Plus, Trash2, Pencil, ChevronDown, FolderOp
 import { useTheme } from 'next-themes';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaceSession, closeWorkspace, useIsReadOnly, renameWorkspace } from '@/lib/workspaceSync';
+import { DEMO_MODE } from '@/lib/demo';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye } from 'lucide-react';
 import {
@@ -221,7 +222,7 @@ export function TopBar() {
     >
       <div className="flex items-center gap-3 flex-shrink-0">
         {/* Current workspace + save status + switch */}
-        {isRenamingProject ? (
+        {DEMO_MODE ? null : isRenamingProject ? (
           <div className="flex items-center gap-1">
             <input
               autoFocus
@@ -260,7 +261,7 @@ export function TopBar() {
             )}
           </div>
         )}
-        {isReadOnly ? (
+        {DEMO_MODE ? null : isReadOnly ? (
           <span className="aio-chip warn">
             <Eye className="w-3 h-3" /> View only
           </span>
@@ -273,7 +274,7 @@ export function TopBar() {
           </span>
         )}
 
-        <div className="w-px h-5 bg-[var(--aio-rule)]" />
+        {!DEMO_MODE && <div className="w-px h-5 bg-[var(--aio-rule)]" />}
 
         {/* File Dropdown (New / Import / Export) */}
         <div ref={fileDropdownRef} className="relative">
@@ -454,14 +455,16 @@ export function TopBar() {
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          title="Sign out"
-          className={cn(APPBAR_ICON, 'hover:border-danger-edge hover:text-danger')}
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        {!DEMO_MODE && (
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            title="Sign out"
+            className={cn(APPBAR_ICON, 'hover:border-danger-edge hover:text-danger')}
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Delete current menu */}

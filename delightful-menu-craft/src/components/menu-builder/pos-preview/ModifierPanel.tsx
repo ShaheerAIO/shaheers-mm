@@ -9,7 +9,63 @@ import type {
   ModifierModifierOption,
   ItemModifier,
 } from '@/types/menu';
+import { effectiveUnitPrice } from '@/lib/posPricing';
 import { POS_TILE_FRAME } from './posTileStyles';
+import {
+  resolveItemModifierOptions,
+  visibleItemModifierOptions,
+  type OverrideData,
+} from '@/lib/optionOverrides';
+
+/** Item-aware per-unit price: resolved option prices (hidden/repriced per item) feed `effectiveUnitPrice`. */
+export function itemUnitPrice(
+  itemId: number,
+  itemPrice: number,
+  selectedOptions: Record<number, number[]>,
+  modifiers: Pick<Modifier, 'id' | 'isSizeModifier'>[],
+  data: OverrideData,
+): number {
+  return effectiveUnitPrice(itemPrice, selectedOptions, modifiers, itemPricedJoins(data, itemId));
+}
+
+/** Per-item option customization state (presets + item configs) needed to resolve options. */
+export type ItemOverrideState = Pick<OverrideData, 'modifierPresets' | 'itemModifierConfigs'>;
+
+/**
+ * Join entries for a modifier as seen by one item: hidden options removed and
+ * `maxLimit` replaced by the item-effective price. Same shape as the raw joins.
+ */
+export function itemVisibleJoins(
+  data: OverrideData,
+  itemId: number,
+  modifierId: number,
+): ModifierModifierOption[] {
+  return visibleItemModifierOptions(data, itemId, modifierId).map((r) => ({
+    ...r.mmo,
+    maxLimit: r.price,
+  }));
+}
+
+/**
+ * The global join list with `maxLimit` swapped for the item-effective price on every
+ * modifier this item customizes. Feed to `effectiveUnitPrice` for item-aware pricing.
+ */
+export function itemPricedJoins(data: OverrideData, itemId: number): ModifierModifierOption[] {
+  const customized = new Set(
+    data.itemModifierConfigs.filter((c) => c.itemId === itemId).map((c) => c.modifierId),
+  );
+  if (customized.size === 0) return data.modifierModifierOptions;
+  const priced = new Map<string, number>();
+  customized.forEach((modId) => {
+    resolveItemModifierOptions(data, itemId, modId).forEach((r) =>
+      priced.set(`${modId}:${r.mmo.modifierOptionId}`, r.price),
+    );
+  });
+  return data.modifierModifierOptions.map((m) => {
+    const price = priced.get(`${m.modifierId}:${m.modifierOptionId}`);
+    return price === undefined ? m : { ...m, maxLimit: price };
+  });
+}
 
 /** Canonical modifier behavior type. Checks modType first, falls back to isOptional string for legacy data. */
 export function getEffectiveModType(mod: Modifier): 'Required' | 'Push Optional' | 'Optional' {
@@ -88,8 +144,15 @@ export function itemHasPopupModifiers(
   modifiers: Modifier[],
   modifierModifierOptions: ModifierModifierOption[],
   modifierOptions: ModifierOption[],
+  overrides?: ItemOverrideState,
 ): boolean {
   const optionCountForModifier = (modifierId: number): number => {
+    if (overrides) {
+      const data = { modifierModifierOptions, modifierOptions, ...overrides };
+      if (modifierModifierOptions.some((mmo) => mmo.modifierId === modifierId)) {
+        return visibleItemModifierOptions(data, itemId, modifierId).length;
+      }
+    }
     const joinCount = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId).length;
     if (joinCount > 0) return joinCount;
     return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
@@ -151,11 +214,15 @@ export function buildInitialModifierState(
   modifiers: Modifier[],
   modifierModifierOptions: ModifierModifierOption[],
   modifierOptions: ModifierOption[],
+  overrides?: ItemOverrideState,
 ): { selectedOptions: Record<number, number[]>; pizzaSides: Record<number, PizzaSide> } {
   const defaults: Record<number, number[]> = {};
   const seedDefaults = (modId: number) => {
-    const defaultOpts = modifierModifierOptions
-      .filter((mmo) => mmo.modifierId === modId && mmo.isDefaultSelected)
+    const joins = overrides
+      ? itemVisibleJoins({ modifierModifierOptions, modifierOptions, ...overrides }, item.id, modId)
+      : modifierModifierOptions.filter((mmo) => mmo.modifierId === modId);
+    const defaultOpts = joins
+      .filter((mmo) => mmo.isDefaultSelected)
       .map((mmo) => mmo.modifierOptionId);
     if (defaultOpts.length > 0) defaults[modId] = defaultOpts;
     const mod = modifiers.find((m) => m.id === modId);
@@ -236,7 +303,9 @@ export function ModifierPanel({
   initialQty,
   onTicketBlockChange,
 }: ModifierPanelProps) {
-  const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions } = useMenuStore();
+  const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs } =
+    useMenuStore();
+  const overrideData = { modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs };
 
   const attachedModifiers = useMemo(() => {
     const raw = itemModifiers
@@ -260,6 +329,7 @@ export function ModifierPanel({
       modifiers,
       modifierModifierOptions,
       modifierOptions,
+      { modifierPresets, itemModifierConfigs },
     ),
   );
   const [selectedOptions, setSelectedOptions] = useState(() => initialBundle.selectedOptions);
@@ -277,11 +347,11 @@ export function ModifierPanel({
     : true;
 
   const getOptions = (modifierId: number) => {
-    const joinEntries = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId);
+    const joinEntries = itemVisibleJoins(overrideData, item.id, modifierId);
 
     const parentLinked = modifierOptions.filter((o) => o.parentModifierId === modifierId);
 
-    if (joinEntries.length > 0) {
+    if (modifierModifierOptions.some((mmo) => mmo.modifierId === modifierId)) {
       // Primary path: options linked via join table
       return joinEntries
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -435,11 +505,7 @@ export function ModifierPanel({
     if (attachedModifiers.length === 0) return true;
     if (sizeModifier && !sizeIsSelected) return false;
 
-    const optionCountForModifier = (modifierId: number) => {
-      const joinEntries = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId);
-      if (joinEntries.length > 0) return joinEntries.length;
-      return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
-    };
+    const optionCountForModifier = (modifierId: number) => getOptions(modifierId).length;
 
     const checkModifier = (mod: Modifier, isChild = false): boolean => {
       // POS contract (verified against android-pos: TsrModifierManagerImpl.
@@ -492,6 +558,8 @@ export function ModifierPanel({
     modifiers,
     modifierModifierOptions,
     modifierOptions,
+    modifierPresets,
+    itemModifierConfigs,
   ]);
 
   useEffect(() => {

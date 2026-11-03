@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useMenuStore } from '@/store/menuStore';
 import { ChevronLeft, CheckCircle2 } from 'lucide-react';
-import { effectiveUnitPrice } from '@/lib/posPricing';
+import { itemUnitPrice } from '../pos-preview/ModifierPanel';
 import { effectiveItemTaxRate } from '@/lib/tax';
 import type { CartLine } from './KioskPreview';
 
@@ -18,17 +18,23 @@ interface KioskCheckoutScreenProps {
  * from store settings). Tip is intentionally omitted (no menu-data backing).
  */
 export function KioskCheckoutScreen({ lines, subtotal, onBack, onPlaceOrder }: KioskCheckoutScreenProps) {
-  const { modifiers, modifierModifierOptions, customTaxes, taxRate } = useMenuStore();
+  const { modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs, customTaxes, taxRate } =
+    useMenuStore();
 
   const tax = useMemo(() => {
     const raw = lines.reduce((s, l) => {
-      const unit = effectiveUnitPrice(l.item.itemPrice, l.selectedOptions, modifiers, modifierModifierOptions);
+      const unit = itemUnitPrice(l.item.id, l.item.itemPrice, l.selectedOptions, modifiers, {
+        modifierModifierOptions,
+        modifierOptions,
+        modifierPresets,
+        itemModifierConfigs,
+      });
       const base = unit * l.qty;
       const rate = effectiveItemTaxRate(l.item, customTaxes, taxRate);
       return s + base * (rate / 100);
     }, 0);
     return Math.round(raw * 100) / 100;
-  }, [lines, modifiers, modifierModifierOptions, customTaxes, taxRate]);
+  }, [lines, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs, customTaxes, taxRate]);
 
   const total = Math.round((subtotal + tax) * 100) / 100;
 

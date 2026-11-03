@@ -58,6 +58,15 @@ import { resolveOptionPriceScope, countLabel, type OptionPriceScope } from '@/li
 import { DeferredPriceInput } from '@/components/ui/deferred-price-input';
 import { OptionPriceScopeDialog } from '@/components/menu-builder/OptionPriceScopeDialog';
 import { OptionThreePoPricingDialog } from '@/components/modifier-library/OptionThreePoPricingDialog';
+import {
+  HiddenOptionsToggle,
+  ItemModifierCustomizeBar,
+  ItemModifierPresetChip,
+  OptionHiddenToggle,
+  OptionPriceSourceMarker,
+  buildItemOverrideView,
+  dropUnsavedItemModifierConfigs,
+} from '@/components/menu-builder/ItemModifierPresetControls';
 import { cn } from '@/lib/utils';
 
 interface ItemDetailPanelProps {
@@ -193,6 +202,8 @@ interface PendingOptionPrice {
   currentPrice: number;
   nextPrice: number;
   scope: OptionPriceScope;
+  /** False while the attachment is unsaved — an item-only price has nowhere to live yet. */
+  canOverride: boolean;
 }
 
 export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
@@ -226,7 +237,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setModifierOptionOrder,
     setItemModifierOrder,
     setOptionPriceEverywhere,
-    forkOptionPriceForItem,
+    modifierPresets,
+    itemModifierConfigs,
+    setItemOptionOverride,
     taxRate,
     customTaxes,
     salesCategories,
@@ -312,6 +325,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const [bulkStart, setBulkStart] = useState('');
   const [bulkEnd, setBulkEnd] = useState('');
   const [expandedNestedChildIds, setExpandedNestedChildIds] = useState<number[]>([]);
+  // Modifiers (top-level or nested) whose hidden-on-this-item options are expanded.
+  const [expandedHiddenModifierIds, setExpandedHiddenModifierIds] = useState<number[]>([]);
   
   const [priceInput, setPriceInput] = useState(item.itemPrice.toFixed(2));
   // Per-platform Pickup/Delivery input buffers, keyed by `${platform}-${kind}`.
@@ -415,6 +430,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
         .map((im) => im.modifierId)
     );
     setExpandedNestedChildIds([]);
+    setExpandedHiddenModifierIds([]);
     setStationDraft(
       item.stationIds
         ? item.stationIds.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
@@ -427,6 +443,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setImageModalTarget(null);
     setImagesOpen(false);
     setTouched({ itemName: false, posDisplayName: false, kdsName: false });
+  }, [item.id]);
+
+  // Demo override layer: presets/overrides on a pending (unsaved) attachment are
+  // written to the store right away. If the attachment is never saved — the panel
+  // switches item or closes with it still pending — drop them again. The ref is
+  // updated after commit, so the cleanup below still sees the outgoing item's list.
+  const pendingModifierIdsRef = useRef<number[]>(pendingModifierIds);
+  useEffect(() => {
+    pendingModifierIdsRef.current = pendingModifierIds;
+  });
+  useEffect(() => {
+    const itemId = item.id;
+    return () => dropUnsavedItemModifierConfigs(itemId, pendingModifierIdsRef.current);
   }, [item.id]);
 
   // Keep "item name drives POS/KDS" in sync with saved data after save; reset when switching items
@@ -625,6 +654,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   };
 
   const handleDiscard = () => {
+    dropUnsavedItemModifierConfigs(item.id, pendingModifierIds);
     setDraft({
       itemName: item.itemName,
       posDisplayName: item.posDisplayName,
@@ -801,6 +831,13 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const handleAddModifier = (modifierId: string) => {
     const id = parseInt(modifierId);
     if (isNaN(id)) return;
+
+    // Re-adding a modifier that's pending removal just cancels the removal (and
+    // keeps its preset/overrides) — otherwise Save would add it and then remove it.
+    if (pendingRemovedModifierIds.includes(id)) {
+      setPendingRemovedModifierIds((prev) => prev.filter((x) => x !== id));
+      return;
+    }
     
     // Add to pending list instead of immediately saving
     if (!pendingModifierIds.includes(id) && !attachedModifierIds.includes(id)) {
@@ -816,10 +853,16 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setGroupPickerSearch('');
     const group = modifierGroups.find((g) => g.id === groupId);
     if (!group?.modifierIds) return;
-    const idsToAdd = group.modifierIds
+    let idsToAdd = group.modifierIds
       .split(',')
       .map((s) => parseInt(s.trim(), 10))
       .filter((id) => !isNaN(id) && id > 0 && !allAttachedModifierIds.includes(id));
+    // Same as handleAddModifier: a modifier pending removal is restored, not re-added.
+    const restored = idsToAdd.filter((id) => pendingRemovedModifierIds.includes(id));
+    if (restored.length > 0) {
+      setPendingRemovedModifierIds((prev) => prev.filter((id) => !restored.includes(id)));
+      idsToAdd = idsToAdd.filter((id) => !restored.includes(id));
+    }
     setPendingModifierIds((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
     setModifierOrder((prev) => [...prev, ...idsToAdd.filter((id) => !prev.includes(id))]);
   };
@@ -827,6 +870,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
   const handleRemoveModifier = (modifierId: number) => {
     // If it's a pending addition, just remove from pending
     if (pendingModifierIds.includes(modifierId)) {
+      dropUnsavedItemModifierConfigs(item.id, [modifierId]);
       setPendingModifierIds(pendingModifierIds.filter(id => id !== modifierId));
       setModifierOrder((prev) => prev.filter((id) => id !== modifierId));
     } else {
@@ -848,11 +892,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
     setSortMenuOpen(false);
   };
 
+  // Demo override layer: resolved per-item state for one modifier's options.
+  const overrideData = { modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs };
+  const getOverrideView = (modifierId: number) => buildItemOverrideView(overrideData, item.id, modifierId);
+  const toggleHiddenExpanded = (modifierId: number) =>
+    setExpandedHiddenModifierIds((prev) =>
+      prev.includes(modifierId) ? prev.filter((id) => id !== modifierId) : [...prev, modifierId],
+    );
+
   /**
    * Commit an option-price edit. A modifier option carries a single price in the
    * POS, so an edit that would also move other modifiers or items has to be
-   * resolved explicitly — apply it everywhere, or fork the shared rows so this
-   * item gets its own priced copy.
+   * resolved explicitly — apply it everywhere, or set an item-only price override
+   * (demo layer; the shared modifier is never cloned).
    */
   const handleCommitOptionPrice = (
     modifier: { id: number; modifierName: string },
@@ -863,9 +915,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       option?: { optionName: string };
     },
     nextPrice: number,
+    view: ReturnType<typeof getOverrideView>,
+    canOverride: boolean,
   ) => {
-    const currentPrice = opt.maxLimit > 0 ? opt.maxLimit : 0;
+    const resolved = view.resolved.get(opt.modifierOptionId);
+    const currentPrice = resolved ? resolved.price : opt.maxLimit > 0 ? opt.maxLimit : 0;
     if (nextPrice === currentPrice) return;
+
+    // Already priced for this item (its own override or its preset's) — the edit
+    // stays scoped to this item; the shared price isn't what's on screen.
+    if (resolved && resolved.priceSource !== 'base' && canOverride) {
+      setItemOptionOverride(item.id, modifier.id, opt.modifierOptionId, view.pricePatch(resolved, nextPrice));
+      return;
+    }
 
     const scope = resolveOptionPriceScope({
       itemId: item.id,
@@ -893,6 +955,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       currentPrice,
       nextPrice,
       scope,
+      canOverride,
     });
   };
 
@@ -904,24 +967,9 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
 
   const applyPendingPriceForItem = () => {
     if (!pendingOptionPrice) return;
-    const { modifierId, optionId, nextPrice } = pendingOptionPrice;
-    const forked = forkOptionPriceForItem({
-      itemId: item.id,
-      modifierId,
-      optionId,
-      price: nextPrice,
-    });
-    // A forked modifier replaces the original for this item: keep its slot in the
-    // display order, and swap it into the pending set when the attachment hasn't
-    // been saved yet (the store can only re-point rows that already exist).
-    if (forked.modifierId !== modifierId) {
-      setModifierOrder((prev) => prev.map((id) => (id === modifierId ? forked.modifierId : id)));
-      setPendingModifierIds((prev) =>
-        prev.includes(modifierId)
-          ? prev.map((id) => (id === modifierId ? forked.modifierId : id))
-          : prev,
-      );
-    }
+    const { modifierId, optionId, nextPrice, canOverride } = pendingOptionPrice;
+    // Demo: an item-only price is an override on the shared modifier — no fork.
+    if (canOverride) setItemOptionOverride(item.id, modifierId, optionId, { price: nextPrice });
     setPendingOptionPrice(null);
   };
 
@@ -1794,6 +1842,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                 const isPending = pendingModifierIds.includes(modifier.id);
                 const isPendingRemoval = pendingRemovedModifierIds.includes(modifier.id);
                 const isDraggable = !isPendingRemoval;
+                // A pending addition can be customized right away (discard cleans up);
+                // a pending removal drops its configs on save, so it's locked.
+                const canOverride = !isPendingRemoval;
+                const overrideHint = isPendingRemoval ? 'Removed on save' : null;
+                const overrideView = getOverrideView(modifier.id);
                 return (
                   <div
                     key={modifier.id}
@@ -1818,12 +1871,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                   >
                     <AccordionTrigger
                       className={cn(
-                        "px-3 py-2 text-sm hover:no-underline transition-colors",
+                        "px-3 py-2 text-sm hover:no-underline transition-colors min-w-0",
                         getModTypeBarClasses(modifier),
                       )}
                     >
                       <div className="flex items-center justify-between w-full min-w-0 pr-2 gap-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                           {isDraggable && (
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0 cursor-grab active:cursor-grabbing" />
                           )}
@@ -1833,6 +1886,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             </span>
                             <span className="text-xs text-muted-foreground/60 font-normal shrink-0">#{modifier.id}</span>
                           </span>
+                          <ItemModifierPresetChip itemId={item.id} modifierId={modifier.id} />
                           {isPending && (
                             <span className="text-xs bg-ok-bg text-ok px-1.5 py-0.5 rounded shrink-0">
                               New
@@ -1930,7 +1984,15 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             </div>
                           )}
                         </div>
-                        {options.map((opt, optIdx) => (
+                        <ItemModifierCustomizeBar itemId={item.id} modifier={modifier} disabledHint={overrideHint} />
+                        {(() => {
+                          // Hidden-on-this-item rows are collapsed behind one toggle row. Every
+                          // row keeps its index in the full list, so drag/drop between whatever
+                          // is rendered still maps onto the shared order correctly.
+                          const renderOptionRow = (opt: (typeof options)[number], optIdx: number) => {
+                          const resolved = overrideView.resolved.get(opt.modifierOptionId);
+                          const isHidden = !!resolved?.hidden;
+                          return (
                           <div
                             key={opt.modifierOptionId}
                             draggable
@@ -1946,8 +2008,18 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             )}
                           >
                             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 cursor-grab active:cursor-grabbing shrink-0" />
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className="truncate">{opt.option?.optionName || opt.optionDisplayName}</span>
+                            {resolved && (
+                              <OptionHiddenToggle
+                                hidden={isHidden}
+                                optionLabel={opt.option?.optionName || opt.optionDisplayName}
+                                onToggle={() =>
+                                  setItemOptionOverride(item.id, modifier.id, opt.modifierOptionId, overrideView.hiddenPatch(resolved))
+                                }
+                                disabled={!canOverride}
+                              />
+                            )}
+                            <div className={cn("flex items-center gap-2 flex-1 min-w-0", isHidden && "opacity-50")}>
+                              <span className={cn("truncate", isHidden && "line-through")}>{opt.option?.optionName || opt.optionDisplayName}</span>
                               {opt.isDefaultSelected && (
                                 <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded shrink-0">
                                   Default
@@ -1957,6 +2029,8 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                             {(() => {
                               const priceType = modifier.modifierOptionPriceType ?? 'NoCharge';
                               const committed = opt.maxLimit > 0 ? opt.maxLimit : 0;
+                              // What this item actually charges (item override → preset → shared).
+                              const effective = resolved ? resolved.price : committed;
                               const optionLabel = opt.option?.optionName || opt.optionDisplayName;
                               const hasOverride = hasThreePoOverride(opt.option?.threePoPricing);
                               // NoCharge pins every option to 0 and Group prices them
@@ -1969,11 +2043,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                     className="text-xs text-muted-foreground"
                                     title="Set by the modifier's group price"
                                   >
-                                    ${committed.toFixed(2)} · group
+                                    ${effective.toFixed(2)} · group
                                   </span>
                                 ) : (
                                   <div
-                                    className="flex items-center gap-1"
+                                    className="flex flex-col items-end"
                                     // The row itself is draggable, so a press inside
                                     // the input would start a reorder drag instead of
                                     // placing the caret. Cancel the native drag and
@@ -1984,24 +2058,39 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                       e.stopPropagation();
                                     }}
                                   >
-                                    <DeferredPriceInput
-                                      value={committed}
-                                      onCommit={(price) => handleCommitOptionPrice(modifier, opt, price)}
-                                      placeholder="0.00"
-                                      prefix={<span className="text-muted-foreground text-xs">$</span>}
-                                      wrapperClassName="w-20 h-7"
-                                      className="text-xs"
-                                      aria-label={`Price for ${optionLabel}`}
-                                    />
+                                    <div className="relative">
+                                      {resolved && (
+                                        <OptionPriceSourceMarker
+                                          source={resolved.priceSource}
+                                          presetName={overrideView.preset?.name}
+                                          inheritedPrice={overrideView.inheritedPrice(resolved)}
+                                          optionLabel={optionLabel}
+                                          onReset={() =>
+                                            setItemOptionOverride(item.id, modifier.id, opt.modifierOptionId, { price: null })
+                                          }
+                                          disabled={!canOverride}
+                                          className="absolute -top-1.5 -left-1.5 z-10"
+                                        />
+                                      )}
+                                      <DeferredPriceInput
+                                        value={effective}
+                                        onCommit={(price) => handleCommitOptionPrice(modifier, opt, price, overrideView, canOverride)}
+                                        placeholder="0.00"
+                                        prefix={<span className="text-muted-foreground text-xs">$</span>}
+                                        wrapperClassName="w-20 h-7"
+                                        className="text-xs"
+                                        aria-label={`Price for ${optionLabel}`}
+                                      />
+                                    </div>
                                     {modifier.isSizeModifier && effectiveTaxRate > 0 && (
-                                      <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
-                                        (${(committed * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax)
+                                      <span className="text-[10px] leading-tight text-muted-foreground/70 whitespace-nowrap mt-0.5">
+                                        ${(effective * (1 + effectiveTaxRate / 100)).toFixed(2)} w/ tax
                                       </span>
                                     )}
                                   </div>
                                 );
                               return (
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className={cn("flex items-center gap-1.5 shrink-0", isHidden && "opacity-50")}>
                                   {priceCell}
                                   <button
                                     type="button"
@@ -2031,7 +2120,25 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               );
                             })()}
                           </div>
-                        ))}
+                          );
+                          };
+                          const isRowHidden = (opt: (typeof options)[number]) =>
+                            !!overrideView.resolved.get(opt.modifierOptionId)?.hidden;
+                          const hiddenCount = options.filter(isRowHidden).length;
+                          const showHidden = expandedHiddenModifierIds.includes(modifier.id);
+                          return (
+                            <>
+                              {options.map((opt, optIdx) => (isRowHidden(opt) ? null : renderOptionRow(opt, optIdx)))}
+                              <HiddenOptionsToggle
+                                count={hiddenCount}
+                                expanded={showHidden}
+                                onToggle={() => toggleHiddenExpanded(modifier.id)}
+                              />
+                              {showHidden &&
+                                options.map((opt, optIdx) => (isRowHidden(opt) ? renderOptionRow(opt, optIdx) : null))}
+                            </>
+                          );
+                        })()}
                         {/* Nested modifiers */}
                         {(() => {
                           const nested = getNestedModifiers(modifier.id);
@@ -2081,6 +2188,12 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                               {nested.map(child => {
                                 const childOpts = getChildModifierOptions(child.id);
                                 const isExpanded = expandedNestedChildIds.includes(child.id);
+                                // Configs for a nested child are keyed (item, child) and follow the parent's attachment.
+                                const childView = getOverrideView(child.id);
+                                const childHiddenCount = childOpts.filter(
+                                  (o) => childView.resolved.get(o.modifierOptionId)?.hidden,
+                                ).length;
+                                const childPriceType = child.modifierOptionPriceType ?? 'NoCharge';
                                 return (
                                   <div key={child.id} className="rounded border border-border/60 overflow-hidden">
                                     <button
@@ -2102,8 +2215,11 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                       <span className="font-medium text-foreground flex-1 text-left">
                                         {child.posDisplayName || child.modifierName}
                                       </span>
+                                      <ItemModifierPresetChip itemId={item.id} modifierId={child.id} />
                                       <span className="text-muted-foreground">
-                                        {childOpts.length} options
+                                        {childHiddenCount > 0
+                                          ? `${childOpts.length - childHiddenCount} of ${childOpts.length} options`
+                                          : `${childOpts.length} options`}
                                       </span>
                                     </button>
                                     {isExpanded && (
@@ -2159,29 +2275,92 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
                                             </div>
                                           </div>
                                         )}
+                                        <ItemModifierCustomizeBar itemId={item.id} modifier={child} disabledHint={overrideHint} />
                                         {childOpts.length === 0 ? (
                                           <p className="text-xs text-muted-foreground py-0.5">No options defined</p>
                                         ) : (
-                                          childOpts.map(opt => (
+                                          (() => {
+                                          const renderChildOptionRow = (opt: (typeof childOpts)[number]) => {
+                                            const resolved = childView.resolved.get(opt.modifierOptionId);
+                                            const isHidden = !!resolved?.hidden;
+                                            const childOptionLabel =
+                                              opt.option?.posDisplayName || opt.option?.optionName || opt.optionDisplayName;
+                                            const childPrice = resolved ? resolved.price : opt.maxLimit > 0 ? opt.maxLimit : 0;
+                                            return (
                                             <div
                                               key={opt.modifierOptionId}
-                                              className="flex items-center justify-between text-xs py-0.5 border-b border-border/40 last:border-0"
+                                              className="flex items-center justify-between gap-1.5 text-xs py-0.5 border-b border-border/40 last:border-0"
                                             >
-                                              <div className="flex items-center gap-1.5">
-                                                <span className="text-foreground">
-                                                  {opt.option?.posDisplayName || opt.option?.optionName || opt.optionDisplayName}
+                                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                {resolved && (
+                                                  <OptionHiddenToggle
+                                                    hidden={isHidden}
+                                                    optionLabel={childOptionLabel}
+                                                    onToggle={() =>
+                                                      setItemOptionOverride(item.id, child.id, opt.modifierOptionId, childView.hiddenPatch(resolved))
+                                                    }
+                                                    disabled={!canOverride}
+                                                  />
+                                                )}
+                                                <span className={cn("text-foreground truncate", isHidden && "opacity-50 line-through")}>
+                                                  {childOptionLabel}
                                                 </span>
                                                 {opt.isDefaultSelected && (
-                                                  <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">
+                                                  <span className={cn("text-[10px] bg-primary/10 text-primary px-1 rounded", isHidden && "opacity-50")}>
                                                     Default
                                                   </span>
                                                 )}
                                               </div>
-                                              <span className="text-muted-foreground tabular-nums">
-                                                {opt.maxLimit > 0 ? `+$${opt.maxLimit.toFixed(2)}` : '$0.00'}
-                                              </span>
+                                              {resolved && childPriceType !== 'NoCharge' && childPriceType !== 'Group' ? (
+                                                // Item-only: the shared price of a nested option isn't edited from the item panel.
+                                                <div className={cn("relative shrink-0", isHidden && "opacity-50")}>
+                                                  <OptionPriceSourceMarker
+                                                    source={resolved.priceSource}
+                                                    presetName={childView.preset?.name}
+                                                    inheritedPrice={childView.inheritedPrice(resolved)}
+                                                    optionLabel={childOptionLabel}
+                                                    onReset={() =>
+                                                      setItemOptionOverride(item.id, child.id, opt.modifierOptionId, { price: null })
+                                                    }
+                                                    disabled={!canOverride}
+                                                    className="absolute -top-1.5 -left-1.5 z-10"
+                                                  />
+                                                  <DeferredPriceInput
+                                                    value={childPrice}
+                                                    onCommit={(price) =>
+                                                      setItemOptionOverride(item.id, child.id, opt.modifierOptionId, childView.pricePatch(resolved, price))
+                                                    }
+                                                    disabled={!canOverride}
+                                                    placeholder="0.00"
+                                                    prefix={<span className="text-muted-foreground text-xs">$</span>}
+                                                    wrapperClassName="w-20 h-6"
+                                                    className="text-xs"
+                                                    aria-label={`Price for ${childOptionLabel} on this item`}
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <span className={cn("text-muted-foreground tabular-nums shrink-0", isHidden && "opacity-50")}>
+                                                  {childPrice > 0 ? `+$${childPrice.toFixed(2)}` : '$0.00'}
+                                                </span>
+                                              )}
                                             </div>
-                                          ))
+                                            );
+                                          };
+                                          const isChildRowHidden = (opt: (typeof childOpts)[number]) =>
+                                            !!childView.resolved.get(opt.modifierOptionId)?.hidden;
+                                          const showChildHidden = expandedHiddenModifierIds.includes(child.id);
+                                          return (
+                                            <>
+                                              {childOpts.filter((o) => !isChildRowHidden(o)).map(renderChildOptionRow)}
+                                              <HiddenOptionsToggle
+                                                count={childHiddenCount}
+                                                expanded={showChildHidden}
+                                                onToggle={() => toggleHiddenExpanded(child.id)}
+                                              />
+                                              {showChildHidden && childOpts.filter(isChildRowHidden).map(renderChildOptionRow)}
+                                            </>
+                                          );
+                                          })()
                                         )}
                                       </div>
                                     )}
@@ -2988,7 +3167,7 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
       />
 
       {pendingOptionPrice && (() => {
-        const { optionName, modifierName, currentPrice, nextPrice, scope } = pendingOptionPrice;
+        const { optionName, modifierName, currentPrice, nextPrice, scope, canOverride } = pendingOptionPrice;
         const sharedBits: string[] = [];
         if (scope.otherModifierIds.length > 0) {
           sharedBits.push(
@@ -3001,10 +3180,6 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
           );
         }
         const forksModifier = scope.otherItemIds.length > 0;
-        // Inheritance only blocks the item-only path when the modifier itself has
-        // to be forked — re-pointing the item's own attachment would leave the
-        // inherited copy, at the old price, still applying to it.
-        const blockedByInheritance = scope.alsoInheritedByItem && forksModifier;
         return (
           <OptionPriceScopeDialog
             open
@@ -3023,21 +3198,19 @@ export function ItemDetailPanel({ item }: ItemDetailPanelProps) {
             }
             scopedLabel={`Only for “${item.itemName}”`}
             scopedDescription={
-              blockedByInheritance ? (
+              canOverride ? (
                 <>
-                  Not available — “{modifierName}” also reaches this item through its
-                  category, so the price has to change at the category level, or
-                  inheritance has to be turned off first.
+                  Sets ${nextPrice.toFixed(2)} on this item only. “{modifierName}” stays
+                  shared — nothing is copied, and everything else keeps ${currentPrice.toFixed(2)}.
                 </>
               ) : (
                 <>
-                  Creates a ${nextPrice.toFixed(2)} copy of the option
-                  {forksModifier ? ` and a copy of “${modifierName}” for this item` : ''}. Guests
-                  still see “{optionName}”; everything else keeps ${currentPrice.toFixed(2)}.
+                  Not available yet — save “{modifierName}” on this item first, then set an
+                  item-only price.
                 </>
               )
             }
-            scopedDisabled={blockedByInheritance}
+            scopedDisabled={!canOverride}
             onEverywhere={applyPendingPriceEverywhere}
             onScoped={applyPendingPriceForItem}
             onCancel={() => setPendingOptionPrice(null)}

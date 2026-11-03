@@ -3,12 +3,13 @@ import { useMenuStore } from '@/store/menuStore';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, Minus, Plus, UtensilsCrossed } from 'lucide-react';
 import type { Item, Modifier } from '@/types/menu';
-import { effectiveUnitPrice } from '@/lib/posPricing';
 import {
   getEffectiveModType,
   buildInitialModifierState,
   getChildModifiersForInit,
   filterRootItemModifiers,
+  itemVisibleJoins,
+  itemUnitPrice,
 } from '../pos-preview/ModifierPanel';
 
 interface KioskCustomizeScreenProps {
@@ -55,7 +56,9 @@ export function KioskCustomizeScreen({
   onViewCart,
   onBack,
 }: KioskCustomizeScreenProps) {
-  const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions } = useMenuStore();
+  const { itemModifiers, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs } =
+    useMenuStore();
+  const overrideData = { modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs };
   const [imgError, setImgError] = useState(false);
 
   const attachedModifiers = useMemo(() => {
@@ -75,6 +78,7 @@ export function KioskCustomizeScreen({
       modifiers,
       modifierModifierOptions,
       modifierOptions,
+      { modifierPresets, itemModifierConfigs },
     ),
   );
   const [selectedOptions, setSelectedOptions] = useState(seededSelections);
@@ -87,8 +91,8 @@ export function KioskCustomizeScreen({
 
   /** Options for a modifier: primary join-table path, fallback to parentModifierId. */
   const getOptions = (modifierId: number) => {
-    const joinEntries = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId);
-    if (joinEntries.length > 0) {
+    const joinEntries = itemVisibleJoins(overrideData, item.id, modifierId);
+    if (modifierModifierOptions.some((mmo) => mmo.modifierId === modifierId)) {
       return joinEntries
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map((mmo) => ({ ...mmo, option: modifierOptions.find((o) => o.id === mmo.modifierOptionId) }))
@@ -174,11 +178,7 @@ export function KioskCustomizeScreen({
     if (attachedModifiers.length === 0) return true;
     if (sizeModifier && !sizeIsSelected) return false;
 
-    const optionCount = (modifierId: number) => {
-      const join = modifierModifierOptions.filter((mmo) => mmo.modifierId === modifierId);
-      if (join.length > 0) return join.length;
-      return modifierOptions.filter((o) => o.parentModifierId === modifierId).length;
-    };
+    const optionCount = (modifierId: number) => getOptions(modifierId).length;
 
     const check = (mod: Modifier, isChild = false): boolean => {
       // POS contract (verified against android-pos: TsrModifierManagerImpl.
@@ -217,9 +217,9 @@ export function KioskCustomizeScreen({
 
     return attachedModifiers.every((mod) => check(mod));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attachedModifiers, selectedOptions, sizeModifier, sizeIsSelected, modifiers, modifierModifierOptions, modifierOptions]);
+  }, [attachedModifiers, selectedOptions, sizeModifier, sizeIsSelected, modifiers, modifierModifierOptions, modifierOptions, modifierPresets, itemModifierConfigs]);
 
-  const unitPrice = effectiveUnitPrice(item.itemPrice, selectedOptions, attachedModifiers, modifierModifierOptions);
+  const unitPrice = itemUnitPrice(item.id, item.itemPrice, selectedOptions, attachedModifiers, overrideData);
   const linePrice = unitPrice * qty;
   const showImage = item.kioskItemImage && !imgError;
 
