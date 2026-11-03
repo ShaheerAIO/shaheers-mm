@@ -1063,14 +1063,13 @@ function ModifierDetail({ modifier }: ModifierDetailProps) {
     for (const id of bulkLibrarySelection) {
       const option = modifierOptions.find((o) => o.id === id);
       if (!option) continue;
-      const count = useMenuStore
-        .getState()
-        .modifierModifierOptions.filter((m) => m.modifierId === modifier.id).length;
+      const joins = useMenuStore.getState().modifierModifierOptions;
+      const count = joins.filter((m) => m.modifierId === modifier.id).length;
       useMenuStore.getState().addModifierModifierOption({
         modifierId: modifier.id,
         modifierOptionId: id,
         isDefaultSelected: false,
-        maxLimit: 0,
+        maxLimit: resolveOptionPrice(option, joins),
         optionDisplayName: option.optionName,
         sortOrder: count,
         maxQtyPerOption: 1,

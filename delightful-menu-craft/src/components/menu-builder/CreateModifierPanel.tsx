@@ -289,7 +289,7 @@ export function CreateModifierPanel({ itemId }: CreateModifierPanelProps) {
         existingOptionId: id,
         optionName: option.optionName,
         posDisplayName: option.posDisplayName,
-        price: 0,
+        price: resolveOptionPrice(option, modifierModifierOptions),
         isDefaultSelected: false,
         maxQtyPerOption: 1,
         threePoPricing: option.threePoPricing,

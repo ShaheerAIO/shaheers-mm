@@ -393,7 +393,7 @@ export function createFreshWorkspaceData(): WorkspaceData {
     menus: [{
       id: 1,
       menuName: 'Main Menu',
-      posDisplayName: 'Main',
+      posDisplayName: 'Main Menu',
       posButtonColor: DEFAULT_MENU_COLOR,
       picture: '',
       sortOrder: 1,
@@ -1106,7 +1106,7 @@ export const useMenuStore = create<MenuState>()(
         menus: [{
           id: 1,
           menuName: 'Main Menu',
-          posDisplayName: 'Main',
+          posDisplayName: 'Main Menu',
           posButtonColor: DEFAULT_MENU_COLOR,
           picture: '',
           sortOrder: 1,
